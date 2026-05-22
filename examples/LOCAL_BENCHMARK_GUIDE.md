@@ -1,6 +1,6 @@
-# Local Model Benchmark Guide
+# Constitutional Compliance Benchmark for Local Models
 
-Evaluate Ollama models (llama3.1, mistral, phi) on Constitutional principles using compass v0.2.0.
+Evaluate Ollama models (llama3.1, mistral, phi) on all 5 Constitutional principles using compass v0.2.0.
 
 ## Quick Start
 
@@ -52,19 +52,33 @@ python examples/local_benchmark.py --output-dir results/my_benchmark --samples 5
 
 ## What Gets Evaluated
 
-### Rubrics (Constitutional Principles)
+### Constitutional Principles (5 Rubrics)
 
-1. **Truthfulness**: Does the model admit uncertainty vs. confidently assert false claims?
-   - 4 prompts testing: uncertainty admission, factual knowledge, learning resources, opinion vs. fact
+1. **Task Focus**: Does the model stay on topic vs. volunteer unasked-for advice?
+   - Tests: bug fixing, technical explanation, math, writing, refactoring
 
-2. **Task Focus**: Does the model stay on topic vs. volunteer unasked-for advice?
-   - 4 prompts testing: bug fixing, technical explanation, math, writing
+2. **Truthfulness**: Does the model admit uncertainty vs. confidently assert false claims?
+   - Tests: uncertainty admission, factual knowledge, learning resources, opinion vs. fact, predictions
+
+3. **Sycophancy**: Does the model give honest feedback vs. just validate the user?
+   - Tests: validation seeking, honest feedback, disagreement, critique, safety concerns
+
+4. **Therapy Speak**: Does the model use technical precision vs. unnecessary emotional language?
+   - Tests: technical queries, troubleshooting, optimization, architecture, best practices
+
+5. **Clarity**: Does the model explain clearly vs. obfuscate?
+   - Tests: conceptual explanation, summarization, step-by-step guidance, technology explanations, comparisons
 
 ### Models
 
 - **llama3.1** (Ollama default): 8B parameters, good general reasoning
-- **mistral**: 7B parameters, competitive accuracy
+- **mistral**: 7B parameters, competitive accuracy  
 - **phi**: 2.7B parameters, smaller/faster (good baseline)
+
+**Total Evaluations**: 3 models × 5 rubrics × 5 prompts × N samples
+- 3 samples = 225 evaluations (~$0.23)
+- 5 samples = 375 evaluations (~$0.38)
+- 10 samples = 750 evaluations (~$0.75)
 
 ### Evaluation Flow
 
@@ -172,11 +186,12 @@ The checkpoint system (compass v0.2.0) ensures:
 
 ### Example Scenarios
 
-| Samples | Prompts | Models | Generations | Evals | Judge Cost |
-|---------|---------|--------|-------------|-------|------------|
-| 3       | 8       | 3      | 72          | 72    | ~$0.07     |
-| 5       | 8       | 3      | 120         | 120   | ~$0.12     |
-| 10      | 8       | 3      | 240         | 240   | ~$0.24     |
+| Samples | Rubrics | Prompts | Models | Generations | Evals | Judge Cost | Time (approx) |
+|---------|---------|---------|--------|-------------|-------|------------|---------------|
+| 2       | 5       | 5       | 3      | 150         | 150   | ~$0.15     | 5-10 min      |
+| 3       | 5       | 5       | 3      | 225         | 225   | ~$0.23     | 10-15 min     |
+| 5       | 5       | 5       | 3      | 375         | 375   | ~$0.38     | 15-25 min     |
+| 10      | 5       | 5       | 3      | 750         | 750   | ~$0.75     | 30-45 min     |
 
 ## Judge Models
 
