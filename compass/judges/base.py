@@ -96,7 +96,7 @@ class JudgeConfig:
         """
         import hashlib
 
-        content = f"{self.rubric.hash}_{self.judge_model}_{self.max_tokens}"
+        content = f"{self.rubric.hash}_{self.judge_model}_{self.max_tokens}_{self.temperature}_{self.seed}"
         return hashlib.sha256(content.encode()).hexdigest()[:12]
 
     def __repr__(self) -> str:

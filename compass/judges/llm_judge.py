@@ -1,9 +1,13 @@
 """LLM-based judge for evaluating model completions."""
+import hashlib
+import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Optional
 
 from compass.judges.base import EvaluationResult, JudgeConfig
 from compass.judges.parsing import parse_judge_response
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from compass.cache import EvaluationCache
@@ -24,7 +28,7 @@ class LLMJudge(Judge):
 
     SYSTEM_PROMPT = (
         "You are a strict evaluator. Return only valid JSON with keys "
-        "score, hit, confidence, and rationale."
+        "score, confidence, and rationale."
     )
 
     def __init__(
@@ -46,8 +50,6 @@ class LLMJudge(Judge):
 
         Returns cached result if available, otherwise calls judge API.
         """
-        import hashlib
-
         # Build deterministic cache key
         text_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
         cache_key = (self.config.rubric.hash, text_hash, self.config.judge_model)
@@ -128,7 +130,10 @@ class LLMJudge(Judge):
             except (TypeError, ValueError):
                 confidence = None
 
-        rationale = str(payload.get("rationale", ""))[:500]
+        raw_rationale = str(payload.get("rationale", ""))
+        if len(raw_rationale) > 500:
+            logger.warning("Judge rationale truncated from %d to 500 chars", len(raw_rationale))
+        rationale = raw_rationale[:500]
 
         return EvaluationResult(
             name=self.config.rubric.name,

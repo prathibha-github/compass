@@ -24,6 +24,7 @@ setup(
     extras_require={
         "openai": ["openai>=1.0"],
         "anthropic": ["anthropic>=0.7"],
+        "google": ["google-genai>=0.1.0"],
         "dev": [
             "pytest>=7.0",
             "black>=23.0",

@@ -6,6 +6,21 @@ from compass.clients.base import CompletionClient, CompletionResponse
 
 logger = logging.getLogger(__name__)
 
+# Approximate prices per 1M tokens (as of May 2026). Matched on model prefix.
+_PRICING = {
+    "claude-haiku": (0.80, 4.00),      # input, output $/1M tokens
+    "claude-sonnet": (3.00, 15.00),
+    "claude-opus": (15.00, 75.00),
+}
+_PRICING_DEFAULT = (3.00, 15.00)  # fall back to Sonnet pricing if unknown
+
+
+def _price_per_token(model: str) -> tuple:
+    for prefix, prices in _PRICING.items():
+        if prefix in model:
+            return prices
+    return _PRICING_DEFAULT
+
 
 class AnthropicClient(CompletionClient):
     """Client for Anthropic API (Claude models).
@@ -46,11 +61,12 @@ class AnthropicClient(CompletionClient):
 
     @property
     def total_cost_usd(self) -> float:
-        """Total cost in USD (estimated based on token counts)."""
-        # Approximate costs for Claude (as of May 2026)
-        input_cost = self._input_tokens * 0.0003 / 1000  # $0.30 per 1M tokens
-        output_cost = self._output_tokens * 0.0015 / 1000  # $1.50 per 1M tokens
-        return input_cost + output_cost
+        """Total cost in USD (estimated based on token counts and model pricing)."""
+        input_price, output_price = _price_per_token(self.model)
+        return (
+            self._input_tokens * input_price / 1_000_000
+            + self._output_tokens * output_price / 1_000_000
+        )
 
     def complete(
         self,
@@ -93,14 +109,17 @@ class AnthropicClient(CompletionClient):
             self._input_tokens += input_tokens
             self._output_tokens += output_tokens
 
+            input_price, output_price = _price_per_token(self.model)
             return CompletionResponse(
                 completion=completion,
                 tokens_used={
                     "input": input_tokens,
                     "output": output_tokens,
                 },
-                cost_usd=float(input_tokens) * 0.0003 / 1000
-                + float(output_tokens) * 0.0015 / 1000,
+                cost_usd=(
+                    input_tokens * input_price / 1_000_000
+                    + output_tokens * output_price / 1_000_000
+                ),
             )
 
         except Exception as e:

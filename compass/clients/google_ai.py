@@ -114,9 +114,16 @@ class GoogleAIClient(CompletionClient):
 
             completion = response.text if response.text else ""
 
-            # Estimate tokens (google-genai may not always provide exact counts)
-            input_tokens = len(full_prompt.split())
-            output_tokens = len(completion.split())
+            # Use actual token counts from usage_metadata when available
+            usage = getattr(response, "usage_metadata", None)
+            if usage is not None:
+                input_tokens = getattr(usage, "prompt_token_count", None) or 0
+                output_tokens = getattr(usage, "candidates_token_count", None) or 0
+            else:
+                # Fall back to word-count estimate if SDK doesn't return usage
+                logger.debug("usage_metadata unavailable; estimating token counts from word count")
+                input_tokens = len(full_prompt.split())
+                output_tokens = len(completion.split())
 
             self._input_tokens += input_tokens
             self._output_tokens += output_tokens

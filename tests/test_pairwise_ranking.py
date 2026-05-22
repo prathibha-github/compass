@@ -231,7 +231,7 @@ class TestScoringSemantics(unittest.TestCase):
         self.assertEqual(ranking[0][1], 2.0)  # 2 wins
 
     def test_equal_scores_both_sides_neutral(self):
-        """Equal scores: no < relationship, so non-wins become opponent wins."""
+        """Equal scores produce a tie: both models get 0.5 win points."""
         ranker = PairwiseRanker()
 
         ranker.add_record("suite1", "A", ("p1", "c1"), 0.5)
@@ -239,11 +239,11 @@ class TestScoringSemantics(unittest.TestCase):
 
         results = ranker.rank("suite1", min_matches=1)
 
-        # Code: wins_b = matches - wins_a
-        # Since 0.5 < 0.5 is False, wins_a = 0, wins_b = 1
+        # wins_a=0, ties=1, wins_b=0; each gets 0.5 win points
         ranking = results['overall_ranking']
-        # B gets the "win" for non-comparison
-        self.assertEqual(ranking[0][0], "B")
+        self.assertEqual(len(ranking), 2)
+        self.assertAlmostEqual(ranking[0][1], 0.5)  # first model: 0.5 wins
+        self.assertAlmostEqual(ranking[1][1], 0.5)  # second model: 0.5 wins
 
 
 if __name__ == "__main__":

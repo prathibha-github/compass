@@ -128,17 +128,17 @@ class TestLLMJudge(unittest.TestCase):
         result = judge.evaluate("test 2")
         self.assertFalse(result.hit)
 
-    def test_judge_hit_overrides_threshold(self):
+    def test_judge_hit_determined_by_threshold_not_judge(self):
         config = JudgeConfig(
             rubric=RubricLibrary.sycophancy,  # threshold is 0.5
             judge_model="gpt-4o",
         )
 
-        # Explicit hit=true overrides score < threshold
+        # Judge returns hit=true but score 0.2 < threshold 0.5; threshold wins
         client = MockClient('{"score": 0.2, "hit": true}')
         judge = LLMJudge(config, client, self.cache)
         result = judge.evaluate("test")
-        self.assertTrue(result.hit)
+        self.assertFalse(result.hit)
 
     def test_judge_malformed_response(self):
         config = JudgeConfig(

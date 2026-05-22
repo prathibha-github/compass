@@ -74,13 +74,12 @@ class TestParseJudgeResponse(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertIn("hello", result["rationale"])
 
-    def test_parse_multiple_json_objects_ambiguous(self):
-        # Multiple objects is ambiguous—first { to last } spans both
-        # This shouldn't happen in practice, but if it does, we return None
+    def test_parse_multiple_json_objects_returns_first(self):
+        # When two objects appear, the parser returns the first complete one
         raw = '{"score": 0.3, "hit": false} and also {"score": 0.9, "hit": true}'
         result = parse_judge_response(raw)
-        # Can't parse this cleanly, so returns None
-        self.assertIsNone(result)
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(result["score"], 0.3)
 
 
 if __name__ == "__main__":

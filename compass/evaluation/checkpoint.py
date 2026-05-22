@@ -138,7 +138,7 @@ class CheckpointManager:
 
     def is_sample_complete(
         self,
-        completed: Set[Tuple[str, str, str, str, str, int]],
+        completed: Set[Tuple],
         model: str,
         suite: str,
         detector_names: list,

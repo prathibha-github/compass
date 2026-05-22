@@ -68,8 +68,12 @@ class EvaluationCache:
         self.memory[key] = result
 
         cache_file = self.cache_dir / f"{key}.json"
-        with open(cache_file, "w") as f:
-            json.dump(result.to_dict(), f, indent=2)
+        try:
+            with open(cache_file, "w") as f:
+                json.dump(result.to_dict(), f, indent=2)
+        except OSError as e:
+            import logging
+            logging.getLogger(__name__).warning("Cache write failed for %s: %s", key, e)
 
     def stats(self) -> Dict[str, int]:
         """Return cache statistics."""
