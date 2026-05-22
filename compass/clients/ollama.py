@@ -4,13 +4,6 @@ from typing import Optional
 
 from compass.clients.base import CompletionClient, CompletionResponse
 
-try:
-    from ollama import Client as OllamaAPIClient
-except ImportError:
-    raise ImportError(
-        "ollama package required. Install with: pip install ollama"
-    )
-
 logger = logging.getLogger(__name__)
 
 
@@ -43,6 +36,14 @@ class OllamaClient(CompletionClient):
         Raises:
             ImportError: If ollama package is not installed
         """
+        try:
+            from ollama import Client as OllamaAPIClient
+        except ImportError as e:
+            raise ImportError(
+                "ollama package required for local model inference. "
+                "Install with: pip install ollama"
+            ) from e
+
         self.api_client = OllamaAPIClient(host=host)
         self.model = model
         self.host = host

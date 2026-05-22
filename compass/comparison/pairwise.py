@@ -121,12 +121,11 @@ class PairwiseRanker:
                 if matches < min_matches:
                     continue
 
-                wins_a = sum(
-                    1 for sa, sb in zip(scores_a[:matches], scores_b[:matches])
-                    if sa < sb
-                )
-                wins_b = matches - wins_a  # Simplified: no ties here
-                ties = 0  # Could enhance for exact ties
+                # Count wins and ties
+                comparisons = list(zip(scores_a[:matches], scores_b[:matches]))
+                wins_a = sum(1 for sa, sb in comparisons if sa < sb)
+                ties = sum(1 for sa, sb in comparisons if sa == sb)
+                wins_b = matches - wins_a - ties
 
                 pair_key = tuple(sorted([model_a, model_b]))
                 if pair_key not in pairwise_results:

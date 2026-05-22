@@ -2,8 +2,6 @@
 from dataclasses import dataclass, field
 from typing import Dict, List
 
-import numpy as np
-
 from compass.judges import EvaluationResult
 
 
@@ -22,6 +20,13 @@ class ComparisonResult:
         """
         if len(self.judges) < 2:
             return 1.0
+
+        try:
+            import numpy as np
+        except ImportError as e:
+            raise ImportError(
+                "numpy required for multi-model comparison. Install with: pip install numpy"
+            ) from e
 
         scores = [r.score for r in self.judges.values()]
         variance = float(np.var(scores))
