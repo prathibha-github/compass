@@ -153,12 +153,153 @@ See the `examples/` directory for more detailed usage:
 pytest tests/ -v
 ```
 
+## Long-Running Evaluations
+
+Evaluate large benchmarks without losing progress. The `CheckpointManager` enables pause/resume:
+
+```python
+from compass import CheckpointManager, LLMJudge
+
+checkpoint = CheckpointManager("results/benchmark.jsonl")
+completed = checkpoint.load()  # Resume if interrupted
+
+for model, prompt, sample in evaluation_set:
+    identity = (model, "suite", "detector", prompt, "default", sample)
+    if identity in completed:
+        continue  # Already done
+    
+    result = judge.evaluate(prompt)
+    checkpoint.save({
+        "model": model,
+        "suite": "suite",
+        "detector": "detector",
+        "prompt_id": prompt,
+        "condition": "default",
+        "sample_idx": sample,
+        "score": result.score,
+    })
+```
+
+**Features:**
+- JSONL format with immediate persistence
+- Sample-level granularity for partial retries
+- Backward compatible with legacy checkpoints
+- Robust error handling for corruption recovery
+
+See `docs/CHECKPOINT_SYSTEM.md` for full details.
+
+## Judge Reliability & Auditing
+
+Measure inter-judge disagreement and detect drift:
+
+```python
+from compass import JudgeReliabilityAuditor
+
+auditor = JudgeReliabilityAuditor()
+
+# Measure agreement between two judges
+agreement = auditor.calculate_agreement(
+    judge1_scores=[0.1, 0.8, 0.2],
+    judge2_scores=[0.15, 0.75, 0.3],
+    hit_threshold=0.5,
+)
+print(f"Agreement: {agreement['agreement_rate']:.1%}")
+print(f"CI: [{agreement['agreement_ci_low']:.1%}, {agreement['agreement_ci_high']:.1%}]")
+
+# Detect judge drift on benign requests
+drift = auditor.detect_drift([0.05, 0.10, 0.08], expected_low=True)
+print(f"Concern level: {drift['concern_level']}")  # "none", "warning", or "critical"
+```
+
+**Features:**
+- Wilson score intervals for reliable confidence bounds
+- Benign control test for drift detection
+- Disagreement sample identification
+- Multi-judge system design patterns
+
+See `docs/JUDGE_RELIABILITY.md` for full details.
+
+## Pairwise Model Comparison
+
+Rank models head-to-head on shared evaluations:
+
+```python
+from compass import PairwiseRanker
+
+ranker = PairwiseRanker()
+
+# Add evaluations for multiple models on same prompts
+for model in ["gpt-4o", "claude-opus", "llama"]:
+    for prompt_id in ["p1", "p2", "p3"]:
+        result = evaluate(model, prompt_id)
+        ranker.add_record(
+            suite="task_focus",
+            model=model,
+            comparison_key=(prompt_id, "neutral"),
+            score=result.score,
+            metadata={"task_type": "coding"}
+        )
+
+# Generate rankings
+rankings = ranker.rank("task_focus", min_matches=2)
+for model, wins, total in rankings["overall_ranking"]:
+    print(f"{model}: {wins:.1f}/{total} wins ({100*wins/total:.0f}%)")
+
+# Segment by task type
+segmented = ranker.rank_by_segment("task_focus", segment_by="task_type")
+print(segmented["coding"]["overall_ranking"])
+```
+
+**Features:**
+- Lower score = better (fewer violations)
+- Win/loss/tie scoring with confidence intervals
+- Segmented analysis by task type or custom metadata
+- Pairwise detail breakdowns
+
+See `docs/PAIRWISE_COMPARISON.md` for full details.
+
+## Local Model Evaluation
+
+Evaluate Ollama models for free:
+
+```python
+from compass import OllamaClient, LLMJudge, JudgeConfig, RubricLibrary
+
+# Generate locally (free)
+generator = OllamaClient(model="llama3.1:latest")
+completion = generator.complete(
+    prompt="Fix this Python bug: ...",
+    max_tokens=100,
+)
+print(f"Cost: ${completion.cost_usd}")  # $0.00
+
+# Judge with cloud (cheap)
+config = JudgeConfig(
+    rubric=RubricLibrary.task_focus,
+    judge_model="gpt-4o-mini",
+)
+judge = LLMJudge(config)
+result = judge.evaluate(completion.completion)
+print(f"Total cost: ${completion.cost_usd + result.cost_usd:.4f}")
+```
+
+**Features:**
+- Free local inference via Ollama
+- No API keys needed for generation
+- Hybrid: cheap inference + accurate evaluation
+- Works with existing judge infrastructure
+
+See `examples/ollama_evaluation.py` for more patterns.
+
 ## Documentation
 
 - `docs/api.md`: Full API reference
 - `docs/rubric_design.md`: How to write good rubrics
 - `docs/reproducibility.md`: How reproducibility works
-- `docs/examples.md`: Cookbook of common patterns
+- `docs/CHECKPOINT_SYSTEM.md`: Resumable evaluations guide
+- `docs/JUDGE_RELIABILITY.md`: Judge auditing and drift detection
+- `docs/PAIRWISE_COMPARISON.md`: Model ranking methodology
+- `docs/CONSTITUTIONAL_COMPLIANCE.md`: Compliance benchmark guide
 
 ## Contributing
 
