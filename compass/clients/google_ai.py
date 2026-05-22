@@ -49,10 +49,16 @@ class GoogleAIClient(CompletionClient):
         self._request_interval = request_interval
         self._last_call_at: float = 0.0
 
-        logger.warning(
-            f"Using {model} on free tier. Rate limits are ~1 request/min. "
-            "For faster benchmarking, use local Ollama models instead."
-        )
+        if "2.5" in model:
+            logger.warning(
+                f"Using {model} on free tier. This model has reasoning mode enabled by default. "
+                "Consider using gemini-2.0-flash for benchmarking instead."
+            )
+        else:
+            logger.warning(
+                f"Using {model} on free tier. Rate limits are ~1 request/min. "
+                "For faster benchmarking, use local Ollama models instead."
+            )
 
     @property
     def total_tokens(self) -> dict:
@@ -101,12 +107,22 @@ class GoogleAIClient(CompletionClient):
         self._last_call_at = time.monotonic()
 
         try:
+            # Build generation config
+            gen_config = {
+                "max_output_tokens": max_tokens,
+                "temperature": temperature,
+            }
+
+            # For gemini-2.5 models with reasoning, limit thinking tokens
+            if "2.5" in self.model:
+                gen_config["thinking"] = {
+                    "type": "ENABLED",
+                    "budget_tokens": 100,  # Limit thinking to 100 tokens
+                }
+
             response = self.client.generate_content(
                 prompt,
-                generation_config={
-                    "max_output_tokens": max_tokens,
-                    "temperature": temperature,
-                },
+                generation_config=gen_config,
                 safety_settings=[
                     {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
                     {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -115,7 +131,12 @@ class GoogleAIClient(CompletionClient):
                 ],
             )
 
-            completion = response.text if response.text else ""
+            # Handle empty response (finish_reason=2)
+            if not response.text:
+                logger.warning(f"Gemini returned empty response (finish_reason={getattr(response, 'finish_reason', 'unknown')})")
+                completion = ""
+            else:
+                completion = response.text
 
             # Estimate tokens
             input_tokens = len(prompt.split())
