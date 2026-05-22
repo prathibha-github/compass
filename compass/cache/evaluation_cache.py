@@ -20,7 +20,12 @@ class EvaluationCache:
         self.memory: Dict[str, EvaluationResult] = {}  # In-memory cache for this session
 
     def _cache_key(self, rubric_hash: str, text_hash: str, judge_model: str) -> str:
-        """Deterministic cache key from inputs."""
+        """Deterministic cache key from inputs.
+
+        Truncates SHA256 to 12 characters. Balances collision resistance (12 chars = ~2^48
+        theoretical space) with reasonable filename length. For ~10k evaluations, collision
+        risk is negligible.
+        """
         key_str = f"{rubric_hash}_{text_hash}_{judge_model}"
         return hashlib.sha256(key_str.encode()).hexdigest()[:12]
 

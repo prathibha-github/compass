@@ -162,13 +162,4 @@ pytest tests/ -v
 
 ## Contributing
 
-Contributions welcome! Please:
-
-1. Write tests for new features
-2. Follow code style with `black` and `isort`
-3. Add docstrings and type hints
-4. Update relevant documentation
-
-## License
-
-MIT
+For development setup and contribution guidelines, see `CONTRIBUTING.md`.

@@ -26,8 +26,8 @@ class ComparisonResult:
         scores = [r.score for r in self.judges.values()]
         variance = float(np.var(scores))
 
-        # Normalize: variance ranges from 0 (all same) to 0.25 (0 vs 1)
-        # Return 1 - normalized_variance, so 1.0 = perfect agreement
+        # Normalize variance: theoretical max is 0.25 (when half judges score 0.0, half score 1.0).
+        # This normalization maps [0, 0.25] → [1, 0], so 1.0 = perfect agreement, 0.0 = max disagreement.
         normalized = variance / 0.25
         return max(0.0, 1.0 - normalized)
 

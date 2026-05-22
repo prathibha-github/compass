@@ -1,6 +1,6 @@
 """Base abstractions for LLM judges."""
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from compass.rubrics.base import Rubric
@@ -43,7 +43,7 @@ class EvaluationResult:
     rubric_hash: str = ""  # Hash of the rubric that was used
     judge_model: str = ""  # Model that did the judging
     prompt_version: str = "1.0"  # Version of the prompt template
-    timestamp: str = ""  # ISO timestamp of evaluation
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO timestamp of evaluation
     cache_hit: bool = False  # Whether this came from cache
 
     # Resource tracking
@@ -85,7 +85,11 @@ class JudgeConfig:
 
     @property
     def config_hash(self) -> str:
-        """Hash of this configuration for caching."""
+        """Hash of this configuration for caching.
+
+        Truncates to 12 characters for readability. With 12 chars (~2^48 space),
+        collision risk is negligible for typical use cases.
+        """
         import hashlib
 
         content = f"{self.rubric.hash}_{self.judge_model}_{self.max_tokens}"
