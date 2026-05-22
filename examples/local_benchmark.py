@@ -270,7 +270,11 @@ def test_ollama_connection(model: str) -> bool:
 def generate_completions(
     models: list, prompts_by_rubric: dict, samples: int, output_dir: Path
 ) -> Path:
-    """Generate completions from local models and save to checkpoint."""
+    """Generate completions from LOCAL OLLAMA MODELS (FREE - no API calls).
+
+    All generation uses OllamaClient which runs models locally.
+    No cloud API calls during generation phase.
+    """
     checkpoint_path = output_dir / "generations.jsonl"
     checkpoint = CheckpointManager(str(checkpoint_path))
 
@@ -339,7 +343,11 @@ def generate_completions(
 def evaluate_completions(
     generations_path: Path, judge_model: str, output_dir: Path
 ) -> Path:
-    """Evaluate generated completions using judge model."""
+    """Evaluate LOCAL COMPLETIONS using CLOUD JUDGE (OpenAI/Anthropic).
+
+    Completions: generated locally (already done, free)
+    Judge: runs on cloud (uses API calls, ~$0.001 per evaluation)
+    """
     checkpoint_path = output_dir / "evaluations.jsonl"
     checkpoint = CheckpointManager(str(checkpoint_path))
 
@@ -539,15 +547,17 @@ def main():
     logger.info("=" * 100)
     logger.info("LOCAL MODEL BENCHMARK: Constitutional Compliance Suite")
     logger.info("=" * 100)
-    logger.info(f"Models: {', '.join(args.models)}")
+    logger.info(f"Generation (LOCAL - FREE): {', '.join(args.models)}")
+    logger.info(f"Judge (CLOUD): {args.judge_model}")
     logger.info(f"Rubrics: task_focus, truthfulness, sycophancy, therapy_speak, clarity")
     logger.info(f"Samples per prompt: {args.samples}")
-    logger.info(f"Judge model: {args.judge_model}")
     logger.info(f"Output directory: {args.output_dir}")
 
     # Calculate total evaluations
     total_evals = len(args.models) * len(PROMPTS) * args.samples * 5  # 5 rubrics
-    logger.info(f"Total evaluations: {total_evals} (~${total_evals * 0.001:.2f} judge cost)")
+    judge_cost = total_evals * 0.001  # gpt-4o-mini ~$0.001/eval
+    logger.info(f"Total evaluations: {total_evals}")
+    logger.info(f"Cost: ${judge_cost:.2f} (judge only, generation is free)")
     logger.info("")
 
     # Setup
