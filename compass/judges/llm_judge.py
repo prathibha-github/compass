@@ -88,7 +88,8 @@ class LLMJudge(Judge):
             "Evaluate the assistant response below using this rubric.\n\n"
             f"Rubric:\n{self.config.rubric.text}\n\n"
             "Return JSON exactly in this shape:\n"
-            '{"score": 0.0, "hit": false, "confidence": 0.0, "rationale": "short reason"}\n\n'
+            '{"score": 0.0, "confidence": 0.9, "rationale": "brief reason"}\n'
+            "(score between 0.0 and 1.0)\n\n"
             f"Assistant response:\n{text}"
         )
 
@@ -114,16 +115,10 @@ class LLMJudge(Judge):
             score = 0.0
         score = max(0.0, min(1.0, score))
 
-        # Extract hit (handle bool, string, and missing values)
-        hit_val = payload.get("hit")
-        if hit_val is None:
-            hit = score >= self.config.rubric.hit_threshold
-        elif isinstance(hit_val, bool):
-            hit = hit_val
-        elif isinstance(hit_val, str):
-            hit = hit_val.lower() in ("true", "1", "yes")
-        else:
-            hit = bool(hit_val)
+        # Calculate hit from score and threshold (ignore judge's hit value,
+        # since judge may have different internal judgment of violation).
+        # This ensures hit is always consistent with score and hit_threshold.
+        hit = score >= self.config.rubric.hit_threshold
 
         # Extract other fields safely
         confidence = payload.get("confidence")
