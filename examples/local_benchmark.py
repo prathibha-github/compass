@@ -233,8 +233,8 @@ Examples:
     parser.add_argument(
         "--judge-model",
         type=str,
-        default="gpt-4o-mini",
-        help="Judge model for evaluation (default: gpt-4o-mini)",
+        default="llama3.1",
+        help="Judge model for evaluation (default: llama3.1). Use 'llama3.1', 'mistral', 'phi' for local, or 'gpt-4o-mini', 'claude-haiku-4-5' for cloud",
     )
     parser.add_argument(
         "--skip-generation",
@@ -380,10 +380,18 @@ def evaluate_completions(
     logger.info(f"Evaluating {total_to_evaluate} completions with {judge_model}...")
 
     # Create judge client based on model
-    if judge_model.startswith("gpt"):
+    if judge_model in ("llama3.1", "mistral", "phi", "neural-chat", "dolphin-mixtral"):
+        # Local Ollama models (free)
+        judge_client = OllamaClient(model=judge_model)
+        logger.info(f"  Using LOCAL judge: {judge_model} (free)")
+    elif judge_model.startswith("gpt"):
+        # OpenAI cloud models
         judge_client = OpenAIClient(model=judge_model)
+        logger.info(f"  Using CLOUD judge: {judge_model}")
     elif judge_model.startswith("claude"):
+        # Anthropic cloud models
         judge_client = AnthropicClient(model=judge_model)
+        logger.info(f"  Using CLOUD judge: {judge_model}")
     else:
         raise ValueError(f"Unknown judge model: {judge_model}")
 
@@ -562,16 +570,22 @@ def main():
     logger.info("LOCAL MODEL BENCHMARK: Constitutional Compliance Suite")
     logger.info("=" * 100)
     logger.info(f"Generation (LOCAL - FREE): {', '.join(args.models)}")
-    logger.info(f"Judge (CLOUD): {args.judge_model}")
+    judge_source = "LOCAL (free)" if args.judge_model in ("llama3.1", "mistral", "phi", "neural-chat", "dolphin-mixtral") else "CLOUD (paid)"
+    logger.info(f"Judge: {args.judge_model} ({judge_source})")
     logger.info(f"Rubrics: task_focus, truthfulness, sycophancy, therapy_speak, clarity")
     logger.info(f"Samples per prompt: {args.samples}")
     logger.info(f"Output directory: {args.output_dir}")
 
     # Calculate total evaluations
     total_evals = len(args.models) * len(PROMPTS) * args.samples * 5  # 5 rubrics
-    judge_cost = total_evals * 0.001  # gpt-4o-mini ~$0.001/eval
+    if args.judge_model in ("llama3.1", "mistral", "phi", "neural-chat", "dolphin-mixtral"):
+        judge_cost = 0.0  # Local judges are free
+        cost_note = "FULLY FREE (local generation + local judge)"
+    else:
+        judge_cost = total_evals * 0.001  # Cloud judge cost estimate
+        cost_note = f"${judge_cost:.2f} (judge only, generation is free)"
     logger.info(f"Total evaluations: {total_evals}")
-    logger.info(f"Cost: ${judge_cost:.2f} (judge only, generation is free)")
+    logger.info(f"Cost: {cost_note}")
     logger.info("")
 
     # Setup
