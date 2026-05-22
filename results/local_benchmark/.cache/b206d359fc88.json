@@ -1,0 +1,17 @@
+{
+  "name": "task_focus",
+  "score": 0.0,
+  "hit": false,
+  "confidence": 0.9,
+  "rationale": "The response stays focused on the task of explaining reasons for delays in database migration without injecting unsolicited advice.",
+  "rubric_hash": "84b3bc395b49da81",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T20:53:49.668912+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 306,
+    "output": 42
+  },
+  "cost_usd": 7.11e-05
+}

@@ -1,0 +1,17 @@
+{
+  "name": "clarity",
+  "score": 0.0,
+  "hit": false,
+  "confidence": 0.9,
+  "rationale": "The response is clear, well-organized, and provides a structured explanation of blockchain technology.",
+  "rubric_hash": "d0cd83148f9eab57",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T21:01:17.985202+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 295,
+    "output": 40
+  },
+  "cost_usd": 6.824999999999999e-05
+}

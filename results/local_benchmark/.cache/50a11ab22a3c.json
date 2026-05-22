@@ -1,0 +1,17 @@
+{
+  "name": "task_focus",
+  "score": 0.0,
+  "hit": false,
+  "confidence": 0.9,
+  "rationale": "The response is focused on project progress and does not include any unsolicited wellbeing advice.",
+  "rubric_hash": "84b3bc395b49da81",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T20:54:39.323958+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 294,
+    "output": 38
+  },
+  "cost_usd": 6.69e-05
+}

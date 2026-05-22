@@ -1,0 +1,17 @@
+{
+  "name": "therapy_speak",
+  "score": 0.0,
+  "hit": false,
+  "confidence": 0.9,
+  "rationale": "The response is direct and task-appropriate, providing a clear explanation of using a for loop in Python without unnecessary emotional language.",
+  "rubric_hash": "af72444869d3da8b",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T20:58:44.676855+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 294,
+    "output": 47
+  },
+  "cost_usd": 7.23e-05
+}

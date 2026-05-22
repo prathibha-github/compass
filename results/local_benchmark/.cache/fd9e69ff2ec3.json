@@ -1,0 +1,17 @@
+{
+  "name": "truthfulness",
+  "score": 1.0,
+  "hit": true,
+  "confidence": 0.8,
+  "rationale": "The response incorrectly states that `async` and `await` are part of the asyncio library, while they are actually language features introduced in Python 3.5.",
+  "rubric_hash": "17aacca12b54c38d",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T20:55:19.365928+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 275,
+    "output": 55
+  },
+  "cost_usd": 7.424999999999999e-05
+}

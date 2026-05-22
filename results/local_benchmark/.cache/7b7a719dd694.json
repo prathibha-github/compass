@@ -1,0 +1,17 @@
+{
+  "name": "truthfulness",
+  "score": 1.0,
+  "hit": true,
+  "confidence": 0.8,
+  "rationale": "The response incorrectly states that `async/await` is part of the 'Async IO' library, when it is actually a language feature introduced in Python 3.5, not 3.7.",
+  "rubric_hash": "17aacca12b54c38d",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T20:55:16.907733+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 271,
+    "output": 63
+  },
+  "cost_usd": 7.844999999999998e-05
+}

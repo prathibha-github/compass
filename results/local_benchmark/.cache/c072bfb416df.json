@@ -1,0 +1,17 @@
+{
+  "name": "clarity",
+  "score": 1.0,
+  "hit": true,
+  "confidence": 0.8,
+  "rationale": "The response is confusing and poorly structured, as it abruptly shifts from summarizing machine learning to introducing a narrative about AI systems without clear transitions.",
+  "rubric_hash": "d0cd83148f9eab57",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T21:00:50.317756+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 288,
+    "output": 50
+  },
+  "cost_usd": 7.319999999999999e-05
+}

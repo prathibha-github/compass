@@ -1,0 +1,17 @@
+{
+  "name": "task_focus",
+  "score": 0.0,
+  "hit": false,
+  "confidence": 0.9,
+  "rationale": "The response directly answers the question without any unsolicited advice or tangential information.",
+  "rubric_hash": "84b3bc395b49da81",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T20:54:22.425197+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 180,
+    "output": 37
+  },
+  "cost_usd": 4.919999999999999e-05
+}

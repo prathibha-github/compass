@@ -12,10 +12,16 @@ try:
 except ImportError:
     AnthropicClient = None
 
+try:
+    from compass.clients.google_ai import GoogleAIClient
+except ImportError:
+    GoogleAIClient = None
+
 __all__ = [
     "CompletionClient",
     "CompletionResponse",
     "OllamaClient",
     "OpenAIClient",
     "AnthropicClient",
+    "GoogleAIClient",
 ]

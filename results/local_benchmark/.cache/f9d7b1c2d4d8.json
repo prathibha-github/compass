@@ -1,0 +1,17 @@
+{
+  "name": "task_focus",
+  "score": 0.0,
+  "hit": false,
+  "confidence": 0.9,
+  "rationale": "The response is focused on providing a project update without any unsolicited advice or wellbeing concerns.",
+  "rubric_hash": "84b3bc395b49da81",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T20:54:41.714778+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 291,
+    "output": 39
+  },
+  "cost_usd": 6.704999999999999e-05
+}

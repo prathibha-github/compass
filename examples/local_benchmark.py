@@ -40,7 +40,7 @@ from compass import (
     PairwiseRanker,
     RubricLibrary,
 )
-from compass.clients import OpenAIClient, AnthropicClient
+from compass.clients import OpenAIClient, AnthropicClient, GoogleAIClient
 
 logging.basicConfig(
     level=logging.INFO,
@@ -216,7 +216,7 @@ Examples:
         "--models",
         nargs="+",
         default=["llama3.1", "mistral", "phi"],
-        help="Models to evaluate (default: llama3.1 mistral phi)",
+        help="Models to evaluate. Local: llama3.1, mistral, phi (Ollama). Cloud: gemini-1.5-flash, gemini-1.5-pro (Google AI free tier)",
     )
     parser.add_argument(
         "--samples",
@@ -256,10 +256,14 @@ def setup_output_dir(output_dir: str) -> Path:
     return path
 
 
-def test_ollama_connection(model: str) -> bool:
-    """Test if Ollama model is available."""
+def test_model_connection(model: str) -> bool:
+    """Test if model is available (Ollama or cloud)."""
     try:
-        client = OllamaClient(model=model)
+        if model.startswith("gemini"):
+            client = GoogleAIClient(model=model)
+        else:
+            client = OllamaClient(model=model)
+
         response = client.complete("test", max_tokens=10)
         logger.info(f"✓ {model} available (test: {response.tokens_used})")
         return True
@@ -271,10 +275,11 @@ def test_ollama_connection(model: str) -> bool:
 def generate_completions(
     models: list, prompts_by_rubric: dict, samples: int, output_dir: Path
 ) -> Path:
-    """Generate completions from LOCAL OLLAMA MODELS (FREE - no API calls).
+    """Generate completions from models (Ollama local or cloud).
 
-    All generation uses OllamaClient which runs models locally.
-    No cloud API calls during generation phase.
+    Supports:
+    - Local: llama3.1, mistral, phi (via Ollama, FREE)
+    - Cloud: gemini-* models (via Google AI API, FREE tier available)
     """
     checkpoint_path = output_dir / "generations.jsonl"
     checkpoint = CheckpointManager(str(checkpoint_path))
@@ -302,7 +307,13 @@ def generate_completions(
     for rubric, prompts in prompts_by_rubric.items():
         for prompt in prompts:
             for model in models:
-                client = OllamaClient(model=model)
+                # Create appropriate client based on model type
+                if model.startswith("gemini"):
+                    client = GoogleAIClient(model=model)
+                    logger.info(f"  Using Gemini: {model} (may be slow, free tier)")
+                else:
+                    # Default to Ollama for local models
+                    client = OllamaClient(model=model)
 
                 for sample_idx in range(samples):
                     identity = (model, rubric, prompt["id"], sample_idx)
@@ -384,6 +395,10 @@ def evaluate_completions(
         # Local Ollama models (free)
         judge_client = OllamaClient(model=judge_model)
         logger.info(f"  Using LOCAL judge: {judge_model} (free)")
+    elif judge_model.startswith("gemini"):
+        # Google Gemini (free tier available)
+        judge_client = GoogleAIClient(model=judge_model)
+        logger.info(f"  Using CLOUD judge: {judge_model} (free tier)")
     elif judge_model.startswith("gpt"):
         # OpenAI cloud models
         judge_client = OpenAIClient(model=judge_model)
@@ -567,10 +582,13 @@ def main():
     args = parser.parse_args()
 
     logger.info("=" * 100)
-    logger.info("LOCAL MODEL BENCHMARK: Constitutional Compliance Suite")
+    logger.info("CONSTITUTIONAL COMPLIANCE BENCHMARK")
     logger.info("=" * 100)
-    logger.info(f"Generation (LOCAL - FREE): {', '.join(args.models)}")
-    judge_source = "LOCAL (free)" if args.judge_model in ("llama3.1", "mistral", "phi", "neural-chat", "dolphin-mixtral") else "CLOUD (paid)"
+    gen_source = "LOCAL (Ollama)" if args.models[0] not in [m for m in args.models if m.startswith("gemini")] else "CLOUD (Google AI)"
+    logger.info(f"Generation: {', '.join(args.models)} ({gen_source})")
+    if any(m.startswith("gemini") for m in args.models):
+        logger.info(f"  (Gemini free tier - may be slow due to rate limits)")
+    judge_source = "LOCAL (free)" if args.judge_model in ("llama3.1", "mistral", "phi", "neural-chat", "dolphin-mixtral") else ("CLOUD (free tier)" if args.judge_model.startswith("gemini") else "CLOUD (paid)")
     logger.info(f"Judge: {args.judge_model} ({judge_source})")
     logger.info(f"Rubrics: task_focus, truthfulness, sycophancy, therapy_speak, clarity")
     logger.info(f"Samples per prompt: {args.samples}")
@@ -591,12 +609,12 @@ def main():
     # Setup
     output_dir = setup_output_dir(args.output_dir)
 
-    # Check Ollama availability
-    logger.info("Checking Ollama models...")
-    available_models = [m for m in args.models if test_ollama_connection(m)]
+    # Check model availability
+    logger.info("Checking model availability...")
+    available_models = [m for m in args.models if test_model_connection(m)]
 
     if not available_models:
-        logger.error("No Ollama models available. Start ollama serve first.")
+        logger.error("No models available. Check Ollama is running or API keys are set.")
         sys.exit(1)
 
     logger.info("")

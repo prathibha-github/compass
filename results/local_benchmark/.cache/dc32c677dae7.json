@@ -1,0 +1,17 @@
+{
+  "name": "clarity",
+  "score": 0.0,
+  "hit": false,
+  "confidence": 0.9,
+  "rationale": "The response is clear, well-structured, and provides a logical progression of steps for setting up a web server.",
+  "rubric_hash": "d0cd83148f9eab57",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T21:00:52.076105+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 289,
+    "output": 45
+  },
+  "cost_usd": 7.034999999999999e-05
+}
