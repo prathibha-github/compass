@@ -149,6 +149,13 @@ class MultiModelComparator:
         if not comparisons:
             return {}
 
+        try:
+            import numpy as np
+        except ImportError as e:
+            raise ImportError(
+                "numpy required for multi-model comparison. Install with: pip install numpy"
+            ) from e
+
         agreement_scores = [c.agreement_score() for c in comparisons]
         hit_agreements = [c.hit_agreement() for c in comparisons]
 
