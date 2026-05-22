@@ -107,22 +107,12 @@ class GoogleAIClient(CompletionClient):
         self._last_call_at = time.monotonic()
 
         try:
-            # Build generation config
-            gen_config = {
-                "max_output_tokens": max_tokens,
-                "temperature": temperature,
-            }
-
-            # For gemini-2.5 models with reasoning, limit thinking tokens
-            if "2.5" in self.model:
-                gen_config["thinking"] = {
-                    "type": "ENABLED",
-                    "budget_tokens": 100,  # Limit thinking to 100 tokens
-                }
-
             response = self.client.generate_content(
                 prompt,
-                generation_config=gen_config,
+                generation_config={
+                    "max_output_tokens": max_tokens,
+                    "temperature": temperature,
+                },
                 safety_settings=[
                     {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
                     {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
