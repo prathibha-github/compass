@@ -39,6 +39,7 @@ class LLMJudge(Judge):
         self.client = client
         if cache is None:
             from compass.cache import EvaluationCache
+
             cache = EvaluationCache()
         self.cache = cache
 
@@ -74,9 +75,9 @@ class LLMJudge(Judge):
         result = self._parse_response(response.completion)
 
         # Track tokens if available
-        if hasattr(response, 'tokens_used'):
+        if hasattr(response, "tokens_used"):
             result.tokens_used = response.tokens_used
-        if hasattr(response, 'cost_usd'):
+        if hasattr(response, "cost_usd"):
             result.cost_usd = response.cost_usd
 
         # Cache result

@@ -43,11 +43,15 @@ class EvaluationResult:
     rubric_hash: str = ""  # Hash of the rubric that was used
     judge_model: str = ""  # Model that did the judging
     prompt_version: str = "1.0"  # Version of the prompt template
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())  # ISO timestamp of evaluation
+    timestamp: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )  # ISO timestamp of evaluation
     cache_hit: bool = False  # Whether this came from cache
 
     # Resource tracking
-    tokens_used: Dict[str, int] = field(default_factory=dict)  # {"input": X, "output": Y}
+    tokens_used: Dict[str, int] = field(
+        default_factory=dict
+    )  # {"input": X, "output": Y}
     cost_usd: float = 0.0
 
     def to_dict(self) -> dict:

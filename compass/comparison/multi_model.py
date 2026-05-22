@@ -61,12 +61,18 @@ class ComparisonResult:
     def summary(self) -> str:
         """Human-readable comparison summary."""
         lines = [f"Rubric: {self.rubric_name}"]
-        lines.append(f"Text: {self.text[:80]}..." if len(self.text) > 80 else f"Text: {self.text}")
+        lines.append(
+            f"Text: {self.text[:80]}..."
+            if len(self.text) > 80
+            else f"Text: {self.text}"
+        )
         lines.append("")
 
         for model, result in self.judges.items():
             hit_indicator = "✓" if result.hit else "✗"
-            lines.append(f"  {model:<25} {result.score:.2f}  {hit_indicator}  {result.rationale[:50]}")
+            lines.append(
+                f"  {model:<25} {result.score:.2f}  {hit_indicator}  {result.rationale[:50]}"
+            )
 
         lines.append("")
         lines.append(f"  Agreement score: {self.agreement_score():.2f}")

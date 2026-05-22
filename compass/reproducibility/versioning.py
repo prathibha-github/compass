@@ -24,7 +24,9 @@ class EvaluationMetadata:
     prompt_version: str = "1.0"
 
     @classmethod
-    def from_result(cls, result: EvaluationResult, compass_version: str) -> "EvaluationMetadata":
+    def from_result(
+        cls, result: EvaluationResult, compass_version: str
+    ) -> "EvaluationMetadata":
         """Create metadata from an evaluation result."""
         return cls(
             compass_version=compass_version,
@@ -114,12 +116,16 @@ def reproducibility_report(
     if results:
         cache_hits = sum(1 for r in results if r.cache_hit)
         lines.append("Cache Performance:")
-        lines.append(f"  Cache hits:       {cache_hits}/{len(results)} ({100*cache_hits//len(results)}%)")
+        lines.append(
+            f"  Cache hits:       {cache_hits}/{len(results)} ({100*cache_hits//len(results)}%)"
+        )
         lines.append("")
 
     lines.append("To Reproduce:")
     if results:
-        lines.append(f"  1. Use compass version {metadata.compass_version if metadata else '?'}")
+        lines.append(
+            f"  1. Use compass version {metadata.compass_version if metadata else '?'}"
+        )
         lines.append(f"  2. Load rubric with hash: {sample.rubric_hash}")
         lines.append(f"  3. Initialize judge: {sample.judge_model}")
         lines.append(f"  4. Set seed to 42 (deterministic)")

@@ -5,6 +5,7 @@ Caching makes re-runs nearly instant. This shows the speed difference
 between a fresh evaluation and a cached hit, plus how the cache persists.
 """
 import time
+
 from anthropic import Anthropic
 
 from compass import EvaluationCache, JudgeConfig, LLMJudge, RubricLibrary

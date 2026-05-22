@@ -106,5 +106,7 @@ class RubricLibrary:
         """Get a rubric by name."""
         rubrics = cls.all_rubrics()
         if name not in rubrics:
-            raise ValueError(f"Unknown rubric: {name}. Available: {list(rubrics.keys())}")
+            raise ValueError(
+                f"Unknown rubric: {name}. Available: {list(rubrics.keys())}"
+            )
         return rubrics[name]

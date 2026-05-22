@@ -6,7 +6,7 @@ Custom rubrics are immutable and versioned, just like built-in ones.
 """
 from anthropic import Anthropic
 
-from compass import Rubric, JudgeConfig, LLMJudge, EvaluationCache
+from compass import EvaluationCache, JudgeConfig, LLMJudge, Rubric
 
 client = Anthropic()
 cache = EvaluationCache()

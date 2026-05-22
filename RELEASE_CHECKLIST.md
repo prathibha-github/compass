@@ -2,7 +2,7 @@
 
 ## Code Quality
 
-- [x] All tests pass (89 tests)
+- [x] All tests pass (177 tests)
 - [x] No unused imports
 - [x] Clean module exports in `__all__`
 - [x] Docstrings on all public classes and methods

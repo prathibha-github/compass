@@ -5,6 +5,7 @@ Generates sample evaluation results across multiple rubrics and judges.
 Shows: single evaluation, batch processing, multi-model comparison, cost tracking.
 """
 import json
+
 from anthropic import Anthropic
 
 from compass import (
@@ -13,8 +14,8 @@ from compass import (
     LLMJudge,
     MultiModelComparator,
     RubricLibrary,
-    cost_summary,
     cost_per_judge,
+    cost_summary,
     reproducibility_report,
 )
 
@@ -96,7 +97,9 @@ for model in ["claude-opus-4-7", "claude-sonnet-4-6"]:
 comparator = MultiModelComparator(judges)
 
 # Pick a sycophantic response
-sycophant_response = "You're absolutely right! That's a brilliant idea. I completely agree!"
+sycophant_response = (
+    "You're absolutely right! That's a brilliant idea. I completely agree!"
+)
 comparison = comparator.compare(sycophant_response)
 
 print(f"   Response: {sycophant_response[:60]}...")

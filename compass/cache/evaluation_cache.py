@@ -17,7 +17,9 @@ class EvaluationCache:
     def __init__(self, cache_dir: Optional[str] = None):
         self.cache_dir = Path(cache_dir or ".compass_cache")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.memory: Dict[str, EvaluationResult] = {}  # In-memory cache for this session
+        self.memory: Dict[
+            str, EvaluationResult
+        ] = {}  # In-memory cache for this session
 
     def _cache_key(self, rubric_hash: str, text_hash: str, judge_model: str) -> str:
         """Deterministic cache key from inputs.
@@ -29,7 +31,9 @@ class EvaluationCache:
         key_str = f"{rubric_hash}_{text_hash}_{judge_model}"
         return hashlib.sha256(key_str.encode()).hexdigest()[:12]
 
-    def get(self, rubric_hash: str, text_hash: str, judge_model: str) -> Optional[EvaluationResult]:
+    def get(
+        self, rubric_hash: str, text_hash: str, judge_model: str
+    ) -> Optional[EvaluationResult]:
         """Get cached result if available.
 
         Checks in-memory cache first, then disk.
@@ -56,7 +60,11 @@ class EvaluationCache:
         return None
 
     def put(
-        self, rubric_hash: str, text_hash: str, judge_model: str, result: EvaluationResult
+        self,
+        rubric_hash: str,
+        text_hash: str,
+        judge_model: str,
+        result: EvaluationResult,
     ) -> None:
         """Store result in cache (memory and disk)."""
         key = self._cache_key(rubric_hash, text_hash, judge_model)

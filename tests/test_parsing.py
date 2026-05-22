@@ -50,20 +50,20 @@ class TestParseJudgeResponse(unittest.TestCase):
         self.assertIsNone(result)
 
     def test_parse_empty_object(self):
-        raw = '{}'
+        raw = "{}"
         result = parse_judge_response(raw)
         self.assertIsNotNone(result)
         self.assertEqual(result, {})
 
     def test_parse_with_newlines(self):
-        raw = '''
+        raw = """
         {
             "score": 0.8,
             "hit": true,
             "confidence": 0.9,
             "rationale": "good"
         }
-        '''
+        """
         result = parse_judge_response(raw)
         self.assertIsNotNone(result)
         self.assertEqual(result["score"], 0.8)
