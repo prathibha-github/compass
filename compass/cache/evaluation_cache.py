@@ -44,20 +44,17 @@ class EvaluationCache:
         if key in self.memory:
             return self.memory[key]
 
-        # Check disk
+        # Check disk (EAFP: attempt read directly, handle if missing)
         cache_file = self.cache_dir / f"{key}.json"
-        if cache_file.exists():
-            try:
-                with open(cache_file) as f:
-                    data = json.load(f)
-                    result = EvaluationResult(**data)
-                    self.memory[key] = result
-                    return result
-            except (json.JSONDecodeError, TypeError):
-                # Corrupted cache file, skip
-                return None
-
-        return None
+        try:
+            with open(cache_file) as f:
+                data = json.load(f)
+                result = EvaluationResult(**data)
+                self.memory[key] = result
+                return result
+        except (FileNotFoundError, json.JSONDecodeError, TypeError):
+            # Missing or corrupted cache file, skip
+            return None
 
     def put(
         self,

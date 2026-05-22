@@ -25,7 +25,11 @@ def wilson_interval(hits: int, total: int, confidence: float = 0.95) -> Tuple[fl
         return (0.0, 1.0)
 
     p = hits / total
-    z = 1.96 if confidence == 0.95 else 1.645  # z-score for 95% and 90% CI
+    try:
+        from scipy.stats import norm
+        z = norm.ppf((1 + confidence) / 2)
+    except ImportError:
+        z = 1.96 if confidence == 0.95 else 1.645
 
     denominator = 1 + z * z / total
     centre_adjusted_p = (p + z * z / (2 * total)) / denominator

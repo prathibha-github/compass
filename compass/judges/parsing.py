@@ -26,14 +26,44 @@ def parse_judge_response(raw: str) -> Optional[dict]:
 
 
 def _extract_json_object(raw: str) -> Optional[dict]:
-    """Find and parse {...} within a string."""
+    """Find and parse the first complete {...} within a string.
+
+    Uses brace counting to find the matching closing brace, avoiding
+    the greedy issue of .rfind("}") which would grab the last brace
+    even if it belongs to a different object.
+    """
     start = raw.find("{")
-    end = raw.rfind("}")
-
-    if start < 0 or end <= start:
+    if start < 0:
         return None
 
-    try:
-        return json.loads(raw[start : end + 1])
-    except json.JSONDecodeError:
-        return None
+    brace_count = 0
+    in_string = False
+    escape_next = False
+
+    for i in range(start, len(raw)):
+        ch = raw[i]
+
+        if escape_next:
+            escape_next = False
+            continue
+
+        if ch == "\\" and in_string:
+            escape_next = True
+            continue
+
+        if ch == '"':
+            in_string = not in_string
+            continue
+
+        if not in_string:
+            if ch == "{":
+                brace_count += 1
+            elif ch == "}":
+                brace_count -= 1
+                if brace_count == 0:
+                    try:
+                        return json.loads(raw[start : i + 1])
+                    except json.JSONDecodeError:
+                        return None
+
+    return None

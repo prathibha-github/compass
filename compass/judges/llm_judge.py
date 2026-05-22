@@ -7,8 +7,6 @@ from compass.judges.parsing import parse_judge_response
 
 if TYPE_CHECKING:
     from compass.cache import EvaluationCache
-
-if TYPE_CHECKING:
     from compass.clients.base import CompletionClient
 
 
@@ -116,8 +114,16 @@ class LLMJudge(Judge):
             score = 0.0
         score = max(0.0, min(1.0, score))
 
-        # Extract hit (override with threshold comparison if not provided)
-        hit = bool(payload.get("hit", score >= self.config.rubric.hit_threshold))
+        # Extract hit (handle bool, string, and missing values)
+        hit_val = payload.get("hit")
+        if hit_val is None:
+            hit = score >= self.config.rubric.hit_threshold
+        elif isinstance(hit_val, bool):
+            hit = hit_val
+        elif isinstance(hit_val, str):
+            hit = hit_val.lower() in ("true", "1", "yes")
+        else:
+            hit = bool(hit_val)
 
         # Extract other fields safely
         confidence = payload.get("confidence")
