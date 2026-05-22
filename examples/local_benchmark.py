@@ -40,6 +40,7 @@ from compass import (
     PairwiseRanker,
     RubricLibrary,
 )
+from compass.clients import OpenAIClient, AnthropicClient
 
 logging.basicConfig(
     level=logging.INFO,
@@ -378,26 +379,39 @@ def evaluate_completions(
 
     logger.info(f"Evaluating {total_to_evaluate} completions with {judge_model}...")
 
+    # Create judge client based on model
+    if judge_model.startswith("gpt"):
+        judge_client = OpenAIClient(model=judge_model)
+    elif judge_model.startswith("claude"):
+        judge_client = AnthropicClient(model=judge_model)
+    else:
+        raise ValueError(f"Unknown judge model: {judge_model}")
+
     # Create judges for each rubric
     judges = {
         "task_focus": LLMJudge(
             JudgeConfig(rubric=RubricLibrary.task_focus, judge_model=judge_model),
+            client=judge_client,
             cache=cache,
         ),
         "truthfulness": LLMJudge(
             JudgeConfig(rubric=RubricLibrary.truthfulness, judge_model=judge_model),
+            client=judge_client,
             cache=cache,
         ),
         "sycophancy": LLMJudge(
             JudgeConfig(rubric=RubricLibrary.sycophancy, judge_model=judge_model),
+            client=judge_client,
             cache=cache,
         ),
         "therapy_speak": LLMJudge(
             JudgeConfig(rubric=RubricLibrary.therapy_speak, judge_model=judge_model),
+            client=judge_client,
             cache=cache,
         ),
         "clarity": LLMJudge(
             JudgeConfig(rubric=RubricLibrary.clarity, judge_model=judge_model),
+            client=judge_client,
             cache=cache,
         ),
     }

@@ -39,70 +39,61 @@ class CheckpointManager:
         self.checkpoint_path = Path(checkpoint_path)
         self.checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def load(self) -> Set[Tuple[str, str, str, str, str, int]]:
+    def load(self) -> Set[Tuple]:
         """
         Load completed evaluation identities from checkpoint.
 
-        Returns set of (model, suite, detector, prompt_id, condition, sample_idx)
-        tuples representing completed work. Checkpoints written before sample_idx
-        existed default to sample_idx=0 for backward compatibility.
+        Returns set of tuples representing completed work. Supports multiple
+        record formats:
+        - (model, suite, detector, prompt_id, condition, sample_idx) — old format
+        - (model, rubric, prompt_id, sample_idx) — new benchmark format
 
         Returns:
-            Set of completed identity tuples
+            Set of completed identity tuples (format varies by checkpoint)
 
         Logs:
             - Warning for each malformed JSON line
             - Warning for each invalid record (missing required fields)
-            - Warning for legacy records without sample_idx
         """
         completed = set()
         if not self.checkpoint_path.exists():
             return completed
 
-        legacy_records = 0
         with open(self.checkpoint_path) as f:
             for line_num, line in enumerate(f, 1):
                 if not line.strip():
                     continue
                 try:
                     result = json.loads(line)
-
-                    # Extract sample_idx with backward compatibility
                     sample_idx = result.get("sample_idx", 0)
-                    missing_sample_idx = "sample_idx" not in result
-
-                    # Handle legacy string serialization
                     if not isinstance(sample_idx, int):
                         sample_idx = int(sample_idx)
 
-                    if missing_sample_idx:
-                        legacy_records += 1
-
-                    # Build identity tuple
-                    key = (
-                        result["model"],
-                        result["suite"],
-                        result["detector"],
-                        result["prompt_id"],
-                        result["condition"],
-                        sample_idx,
-                    )
-                    completed.add(key)
+                    # Try new benchmark format first (model, rubric, prompt_id, sample_idx)
+                    if "model" in result and "rubric" in result and "prompt_id" in result:
+                        key = (result["model"], result["rubric"], result["prompt_id"], sample_idx)
+                        completed.add(key)
+                    # Fall back to old format (model, suite, detector, prompt_id, condition, sample_idx)
+                    elif all(k in result for k in ["model", "suite", "detector", "prompt_id", "condition"]):
+                        key = (
+                            result["model"],
+                            result["suite"],
+                            result["detector"],
+                            result["prompt_id"],
+                            result["condition"],
+                            sample_idx,
+                        )
+                        completed.add(key)
+                    else:
+                        logger.warning(f"Skipping record at checkpoint line {line_num}: unknown format")
+                        continue
 
                 except json.JSONDecodeError:
                     logger.warning(f"Skipping malformed JSON at checkpoint line {line_num}")
                     continue
-                except (KeyError, TypeError, ValueError):
-                    logger.warning(f"Skipping invalid checkpoint record at line {line_num}")
+                except (TypeError, ValueError) as e:
+                    logger.warning(f"Skipping invalid checkpoint record at line {line_num}: {e}")
                     continue
-
-        if legacy_records:
-            logger.warning(
-                "Loaded %d legacy checkpoint records without sample_idx; "
-                "defaulted them to sample_idx=0. This may collapse multi-sample runs "
-                "if you resume without explicitly tracking samples.",
-                legacy_records,
-            )
 
         return completed
 
