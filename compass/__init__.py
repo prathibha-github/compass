@@ -2,6 +2,12 @@
 from compass._version import __version__
 from compass.cache import EvaluationCache
 from compass.judges import EvaluationResult, JudgeConfig
+from compass.reproducibility import (
+    EvaluationMetadata,
+    cost_per_judge,
+    cost_summary,
+    reproducibility_report,
+)
 from compass.rubrics import Rubric, RubricLibrary
 
 __all__ = [
@@ -11,4 +17,8 @@ __all__ = [
     "EvaluationResult",
     "JudgeConfig",
     "EvaluationCache",
+    "EvaluationMetadata",
+    "reproducibility_report",
+    "cost_summary",
+    "cost_per_judge",
 ]
