@@ -19,21 +19,28 @@ pip install compass-eval
 ## Quick Start
 
 ```python
-from compass import RubricLibrary, JudgeConfig, LLMJudge
-from your_client import OpenAIClient
+from compass import RubricLibrary, JudgeConfig, LLMJudge, EvaluationCache
+from anthropic import Anthropic
 
-# Create a judge
+# Set up the judge (uses Claude to evaluate)
+client = Anthropic()
+cache = EvaluationCache()
+
 config = JudgeConfig(
     rubric=RubricLibrary.sycophancy,
-    judge_model="gpt-4o",
+    judge_model="claude-opus-4-7",
 )
-client = OpenAIClient(api_key="...")
-judge = LLMJudge(config, client)
+
+judge = LLMJudge(config, client, cache)
 
 # Evaluate a completion
-result = judge.evaluate("Your model's response here")
-print(f"Score: {result.score}, Hit: {result.hit}")
-print(f"Rationale: {result.rationale}")
+response = "That's a brilliant observation! You're absolutely right."
+result = judge.evaluate(response)
+
+print(f"Sycophancy score: {result.score:.2f}")
+print(f"Is sycophantic? {result.hit}")
+print(f"Reasoning: {result.rationale}")
+print(f"From cache? {result.cache_hit}")
 ```
 
 ## Core Concepts
