@@ -1,4 +1,4 @@
-"""Google Generative AI (Gemini) client for LLM inference."""
+"""Google Generative AI (Gemini) client using google-genai."""
 import logging
 import time
 from typing import Optional
@@ -9,13 +9,12 @@ logger = logging.getLogger(__name__)
 
 
 class GoogleAIClient(CompletionClient):
-    """Client for Google Generative AI (Gemini) models.
+    """Client for Google Generative AI (Gemini) models using google-genai.
 
-    WARNING: Free tier has aggressive rate limits (~1 request per minute).
-    For benchmarking, consider using local Ollama models or paid API tier.
+    Uses the official google-genai package with support for latest Gemini models.
 
     Usage:
-        client = GoogleAIClient(api_key="...", model="gemini-2.0-flash")
+        client = GoogleAIClient(api_key="...", model="gemini-1.5-flash")
         response = client.complete("What is 2+2?")
         print(response.completion)
     """
@@ -25,31 +24,34 @@ class GoogleAIClient(CompletionClient):
         Initialize Google AI (Gemini) client.
 
         Args:
-            model: Model name (e.g., 'gemini-2.0-flash', 'gemini-1.5-pro')
+            model: Model name (e.g., 'gemini-1.5-flash', 'gemini-1.5-pro')
             api_key: Google API key. If None, reads from GOOGLE_API_KEY env var.
-            request_interval: Minimum seconds between requests (default 0.1s for paid tier)
+            request_interval: Minimum seconds between requests
 
         Raises:
-            ImportError: If google-generativeai package is not installed
+            ImportError: If google-genai package is not installed
         """
         try:
-            import google.generativeai as genai
+            from google import genai
         except ImportError as exc:
             raise ImportError(
-                "Gemini support requires the 'google-generativeai' package. "
-                "Run: pip install google-generativeai"
+                "Gemini support requires the 'google-genai' package. "
+                "Run: pip install google-genai"
             ) from exc
 
-        self._genai = genai
-        genai.configure(api_key=api_key)
-        self.client = genai.GenerativeModel(model)
+        # Initialize client
+        if api_key:
+            self.client = genai.Client(api_key=api_key)
+        else:
+            self.client = genai.Client()  # Uses GOOGLE_API_KEY env var
+
         self.model = model
         self._input_tokens = 0
         self._output_tokens = 0
         self._request_interval = request_interval
         self._last_call_at: float = 0.0
 
-        logger.info(f"Using {model} (paid tier - full speed)")
+        logger.info(f"Using {model} (google-genai)")
 
     @property
     def total_tokens(self) -> dict:
@@ -58,7 +60,7 @@ class GoogleAIClient(CompletionClient):
 
     @property
     def total_cost_usd(self) -> float:
-        """Gemini free tier is free."""
+        """Gemini free tier is free, paid tier billed separately."""
         return 0.0
 
     def _throttle(self) -> None:
@@ -82,7 +84,7 @@ class GoogleAIClient(CompletionClient):
             prompt: Input prompt
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature (0.0 = deterministic)
-            system: Optional system prompt (ignored for Gemini)
+            system: Optional system prompt
 
         Returns:
             CompletionResponse with completion text and token counts
@@ -90,37 +92,32 @@ class GoogleAIClient(CompletionClient):
         Raises:
             RuntimeError: If Gemini API call fails
         """
-        if system:
-            logger.debug("Gemini fixed system instruction. Per-call system prompt ignored.")
-
         self._throttle()
         self._last_call_at = time.monotonic()
 
         try:
-            response = self.client.generate_content(
-                prompt,
-                generation_config={
+            # Build request with system prompt if provided
+            if system:
+                full_prompt = f"{system}\n\n{prompt}"
+            else:
+                full_prompt = prompt
+
+            # Call Gemini API
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=full_prompt,
+                config={
                     "max_output_tokens": max_tokens,
                     "temperature": temperature,
                 },
-                safety_settings=[
-                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-                ],
             )
 
-            # Handle empty response (finish_reason=2)
-            if not response.text:
-                logger.warning(f"Gemini returned empty response (finish_reason={getattr(response, 'finish_reason', 'unknown')})")
-                completion = ""
-            else:
-                completion = response.text
+            completion = response.text if response.text else ""
 
-            # Estimate tokens
-            input_tokens = len(prompt.split())
+            # Estimate tokens (google-genai may not always provide exact counts)
+            input_tokens = len(full_prompt.split())
             output_tokens = len(completion.split())
+
             self._input_tokens += input_tokens
             self._output_tokens += output_tokens
 
