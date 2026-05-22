@@ -20,14 +20,14 @@ class GoogleAIClient(CompletionClient):
         print(response.completion)
     """
 
-    def __init__(self, model: str, api_key: Optional[str] = None, request_interval: float = 60.0):
+    def __init__(self, model: str, api_key: Optional[str] = None, request_interval: float = 0.1):
         """
         Initialize Google AI (Gemini) client.
 
         Args:
             model: Model name (e.g., 'gemini-2.0-flash', 'gemini-1.5-pro')
             api_key: Google API key. If None, reads from GOOGLE_API_KEY env var.
-            request_interval: Minimum seconds between requests (default 60s for free tier)
+            request_interval: Minimum seconds between requests (default 0.1s for paid tier)
 
         Raises:
             ImportError: If google-generativeai package is not installed
@@ -49,16 +49,7 @@ class GoogleAIClient(CompletionClient):
         self._request_interval = request_interval
         self._last_call_at: float = 0.0
 
-        if "2.5" in model:
-            logger.warning(
-                f"Using {model} on free tier. This model has reasoning mode enabled by default. "
-                "Consider using gemini-2.0-flash for benchmarking instead."
-            )
-        else:
-            logger.warning(
-                f"Using {model} on free tier. Rate limits are ~1 request/min. "
-                "For faster benchmarking, use local Ollama models instead."
-            )
+        logger.info(f"Using {model} (paid tier - full speed)")
 
     @property
     def total_tokens(self) -> dict:
@@ -71,11 +62,10 @@ class GoogleAIClient(CompletionClient):
         return 0.0
 
     def _throttle(self) -> None:
-        """Enforce minimum request interval for free tier."""
+        """Enforce minimum request interval."""
         elapsed = time.monotonic() - self._last_call_at
         gap = self._request_interval - elapsed
         if gap > 0:
-            logger.info(f"Rate limit: waiting {gap:.1f}s before next request")
             time.sleep(gap)
 
     def complete(
