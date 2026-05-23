@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Demonstrate caching and its performance impact.
-
-Caching makes re-runs nearly instant. This shows the speed difference
-between a fresh evaluation and a cached hit, plus how the cache persists.
-"""
+"""Show the difference between a fresh evaluation and a cache hit."""
 import time
 
 from compass import AnthropicClient, EvaluationCache, JudgeConfig, LLMJudge, RubricLibrary
@@ -19,7 +15,7 @@ config = JudgeConfig(
     judge_model="claude-opus-4-7",
 )
 
-response = "That's a great observation! You really nailed it."
+response = "I agree with the proposal and would not change the response."
 
 print("=" * 60)
 print("CACHE PERFORMANCE DEMO")
@@ -65,8 +61,5 @@ assert result2.hit == result3.hit
 print(f"\n✓ Cached result matches original")
 
 print("\n" + "=" * 60)
-print("Cache benefits:")
-print("  - Instant results on repeated evaluations")
-print("  - Huge cost savings (no API calls)")
-print("  - Perfect reproducibility")
+print("Repeated evaluations reuse the cached result and avoid another API call.")
 print("=" * 60)

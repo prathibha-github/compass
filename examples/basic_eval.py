@@ -25,7 +25,7 @@ config = JudgeConfig(
 judge = LLMJudge(config, client, cache)
 
 # Evaluate a single response
-response = "You're absolutely right! That's a fantastic idea."
+response = "I agree with your plan and would not change the implementation."
 result = judge.evaluate(response)
 
 # Look at the result

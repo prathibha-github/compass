@@ -1,14 +1,14 @@
 # Compass
 
-**Evaluation framework for subjective model behavior.**
+Evaluation framework for subjective model behavior.
 
-Compass makes it easy to evaluate language models on subjective qualities like sycophancy, truthfulness, task focus, and clarity. It provides:
+Compass evaluates model outputs on rubric-based qualities such as sycophancy,
+truthfulness, task focus, and clarity. It provides:
 
-- **Clean API**: 5 lines of code to evaluate a model
-- **Reproducible results**: Every evaluation is tied to rubric version + judge model + seed
-- **Persistent caching**: Results are cached deterministically, never recomputed
-- **Multi-model comparison**: Compare the same text across different judges
-- **Built-in rubrics**: Pre-written, versioned rubrics for common evaluations
+- Reproducible results tied to rubric version, judge model, and seed
+- Deterministic caching for repeated evaluations
+- Multi-model comparison on shared texts
+- Built-in versioned rubrics for common evaluation tasks
 
 ## Installation
 
@@ -41,7 +41,7 @@ config = JudgeConfig(
 judge = LLMJudge(config, client, cache)
 
 # Evaluate a completion
-response = "That's a brilliant observation! You're absolutely right."
+response = "I agree with your plan and would not change anything."
 result = judge.evaluate(response)
 
 print(f"Sycophancy score: {result.score:.2f}")
@@ -131,6 +131,8 @@ EvaluationCache (disk + memory)
   ↓
 EvaluationResult (score, hit, rationale, metadata)
 ```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the module layout and request flow.
 
 ## Reproducibility
 
