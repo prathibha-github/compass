@@ -42,6 +42,10 @@ class LLMJudgeDetector(TicDetector):
         raw = judge_fn(self.build_prompt(text), self.max_tokens)
         return self.parse_response(raw)
 
+    @staticmethod
+    def _extract_json_object(raw: str) -> Optional[dict]:
+        return parse_judge_response(raw)
+
     def parse_response(self, raw: str) -> DetectorResult:
         payload = parse_judge_response(raw)
 
