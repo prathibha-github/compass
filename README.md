@@ -16,14 +16,21 @@ Compass makes it easy to evaluate language models on subjective qualities like s
 pip install compass-eval
 ```
 
+Install provider SDKs as needed:
+
+```bash
+pip install "compass-eval[anthropic]"
+pip install "compass-eval[openai]"
+pip install "compass-eval[google]"
+```
+
 ## Quick Start
 
 ```python
-from compass import RubricLibrary, JudgeConfig, LLMJudge, EvaluationCache
-from anthropic import Anthropic
+from compass import AnthropicClient, EvaluationCache, JudgeConfig, LLMJudge, RubricLibrary
 
 # Set up the judge (uses Claude to evaluate)
-client = Anthropic()
+client = AnthropicClient(model="claude-opus-4-7")
 cache = EvaluationCache()
 
 config = JudgeConfig(
@@ -263,7 +270,7 @@ See `docs/PAIRWISE_COMPARISON.md` for full details.
 Evaluate Ollama models for free:
 
 ```python
-from compass import OllamaClient, LLMJudge, JudgeConfig, RubricLibrary
+from compass import OllamaClient, OpenAIClient, LLMJudge, JudgeConfig, RubricLibrary
 
 # Generate locally (free)
 generator = OllamaClient(model="llama3.1:latest")
@@ -278,7 +285,8 @@ config = JudgeConfig(
     rubric=RubricLibrary.task_focus,
     judge_model="gpt-4o-mini",
 )
-judge = LLMJudge(config)
+judge_client = OpenAIClient(model="gpt-4o-mini")
+judge = LLMJudge(config, judge_client)
 result = judge.evaluate(completion.completion)
 print(f"Total cost: ${completion.cost_usd + result.cost_usd:.4f}")
 ```
@@ -289,7 +297,7 @@ print(f"Total cost: ${completion.cost_usd + result.cost_usd:.4f}")
 - Hybrid: cheap inference + accurate evaluation
 - Works with existing judge infrastructure
 
-See `examples/ollama_evaluation.py` for more patterns.
+See `examples/constitutional_compliance_benchmark.py` for a larger local-vs-cloud setup.
 
 ## Documentation
 

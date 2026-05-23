@@ -1,8 +1,13 @@
 """Compass: Evaluation framework for subjective model behavior."""
 from compass._version import __version__
 from compass.cache import EvaluationCache
-from compass.clients import AnthropicClient, GoogleAIClient, OllamaClient, OpenAIClient
-from compass.clients.openai_responses import OpenAIResponsesClient
+from compass.clients import (
+    AnthropicClient,
+    GoogleAIClient,
+    OllamaClient,
+    OpenAIClient,
+    OpenAIResponsesClient,
+)
 from compass.comparison import ComparisonResult, MultiModelComparator, PairwiseRanker
 from compass.evaluation import CheckpointManager
 from compass.judges import EvaluationResult, JudgeConfig, JudgeReliabilityAuditor, LLMJudge

@@ -1,4 +1,6 @@
 """Tests for new client features: pricing integration, throttle, retry helpers."""
+import builtins
+import importlib
 import time
 import unittest
 from unittest.mock import MagicMock, patch
@@ -167,6 +169,32 @@ class TestThrottleLogic(unittest.TestCase):
             self.assertLessEqual(sleep_duration, 5.0)
 
 
+class TestOllamaThrottleLogic(unittest.TestCase):
+
+    def test_no_sleep_when_interval_zero(self):
+        ollama_mock = MagicMock()
+        with patch.dict("sys.modules", {"ollama": ollama_mock}):
+            from compass.clients.ollama import OllamaClient
+            client = OllamaClient(model="llama3.1:latest", request_interval=0.0)
+        client._last_call_at = time.monotonic()
+        with patch("time.sleep") as mock_sleep:
+            client._throttle()
+            mock_sleep.assert_not_called()
+
+    def test_sleeps_when_interval_positive(self):
+        ollama_mock = MagicMock()
+        with patch.dict("sys.modules", {"ollama": ollama_mock}):
+            from compass.clients.ollama import OllamaClient
+            client = OllamaClient(model="llama3.1:latest", request_interval=5.0)
+        client._last_call_at = time.monotonic()
+        with patch("time.sleep") as mock_sleep:
+            client._throttle()
+            mock_sleep.assert_called_once()
+            sleep_duration = mock_sleep.call_args[0][0]
+            self.assertGreater(sleep_duration, 0)
+            self.assertLessEqual(sleep_duration, 5.0)
+
+
 # ── _wait_from_429_headers ────────────────────────────────────────────────────
 
 class TestWaitFrom429Headers(unittest.TestCase):
@@ -250,6 +278,52 @@ class TestOpenAIResponsesClientBasics(unittest.TestCase):
         with patch("time.sleep"):
             client.complete("prompt", max_tokens=20)
         self.assertEqual(captured["max_output_tokens"], 20)
+
+
+class TestOptionalClientExports(unittest.TestCase):
+
+    def test_missing_openai_dependency_raises_clear_error(self):
+        import compass.clients as clients_module
+
+        real_import = builtins.__import__
+
+        def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if name in {
+                "compass.clients.openai",
+                "compass.clients.openai_responses",
+            }:
+                raise ImportError("missing openai")
+            return real_import(name, globals, locals, fromlist, level)
+
+        with patch("builtins.__import__", side_effect=fake_import):
+            reloaded = importlib.reload(clients_module)
+            with self.assertRaisesRegex(ImportError, r"compass-eval\[openai\]"):
+                reloaded.OpenAIClient(model="gpt-4o-mini")
+            with self.assertRaisesRegex(ImportError, r"compass-eval\[openai\]"):
+                reloaded.OpenAIResponsesClient(model="gpt-5-mini")
+        importlib.reload(clients_module)
+
+    def test_top_level_import_survives_missing_openai_dependency(self):
+        import compass as compass_module
+        import compass.clients as clients_module
+
+        real_import = builtins.__import__
+
+        def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if name in {
+                "compass.clients.openai",
+                "compass.clients.openai_responses",
+            }:
+                raise ImportError("missing openai")
+            return real_import(name, globals, locals, fromlist, level)
+
+        with patch("builtins.__import__", side_effect=fake_import):
+            importlib.reload(clients_module)
+            reloaded = importlib.reload(compass_module)
+            with self.assertRaisesRegex(ImportError, r"compass-eval\[openai\]"):
+                reloaded.OpenAIClient(model="gpt-4o-mini")
+        importlib.reload(clients_module)
+        importlib.reload(compass_module)
 
 
 if __name__ == "__main__":

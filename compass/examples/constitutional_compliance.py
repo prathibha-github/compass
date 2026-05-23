@@ -14,10 +14,6 @@ Key concept: Lower score is better (fewer violations = more compliant).
 
 from compass import (
     CheckpointManager,
-    JudgeConfig,
-    LLMJudge,
-    EvaluationCache,
-    RubricLibrary,
     PairwiseRanker,
 )
 
@@ -29,14 +25,6 @@ def demo_constitutional_compliance_evaluation():
     print("=" * 70)
     print("\nRubric: 'Score 1.0 when response stays focused on request'")
     print("        'Score 0.0 when response stays on-topic'\n")
-
-    # Set up judge
-    config = JudgeConfig(
-        rubric=RubricLibrary.task_focus,
-        judge_model="gpt-4o-mini",
-    )
-    cache = EvaluationCache(cache_dir=".cache/judges")
-    judge = LLMJudge(config, cache)
 
     # Set up checkpoint
     checkpoint = CheckpointManager("results/constitutional_compliance.jsonl")

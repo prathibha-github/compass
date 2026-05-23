@@ -1,5 +1,6 @@
 """Ollama client for local LLM inference."""
 import logging
+import time
 from typing import Optional
 
 from compass.clients.base import CompletionClient, CompletionResponse
@@ -50,6 +51,7 @@ class OllamaClient(CompletionClient):
         self._input_tokens = 0
         self._output_tokens = 0
         self._request_interval = request_interval
+        self._last_call_at: float = 0.0
 
     @property
     def total_tokens(self) -> dict:
@@ -60,6 +62,13 @@ class OllamaClient(CompletionClient):
     def total_cost_usd(self) -> float:
         """Local models are free."""
         return 0.0
+
+    def _throttle(self) -> None:
+        """Enforce the configured minimum interval between local requests."""
+        elapsed = time.monotonic() - self._last_call_at
+        gap = self._request_interval - elapsed
+        if gap > 0:
+            time.sleep(gap)
 
     def complete(
         self,
@@ -83,6 +92,9 @@ class OllamaClient(CompletionClient):
         Raises:
             RuntimeError: If Ollama API call fails (e.g., model not loaded)
         """
+        self._throttle()
+        self._last_call_at = time.monotonic()
+
         # Build full prompt with system message if provided
         full_prompt = prompt
         if system:

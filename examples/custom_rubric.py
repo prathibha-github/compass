@@ -4,11 +4,9 @@
 Shows how to create a rubric for something not in the standard library.
 Custom rubrics are immutable and versioned, just like built-in ones.
 """
-from anthropic import Anthropic
+from compass import AnthropicClient, EvaluationCache, JudgeConfig, LLMJudge, Rubric
 
-from compass import EvaluationCache, JudgeConfig, LLMJudge, Rubric
-
-client = Anthropic()
+client = AnthropicClient(model="claude-opus-4-7")
 cache = EvaluationCache()
 
 # Define a custom rubric for code quality

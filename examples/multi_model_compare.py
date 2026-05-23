@@ -4,9 +4,8 @@
 Useful for understanding judge disagreement, finding weak cases,
 or choosing which judge is most reliable for your rubric.
 """
-from anthropic import Anthropic
-
 from compass import (
+    AnthropicClient,
     EvaluationCache,
     JudgeConfig,
     LLMJudge,
@@ -14,7 +13,7 @@ from compass import (
     RubricLibrary,
 )
 
-client = Anthropic()
+client = AnthropicClient(model="claude-opus-4-7")
 cache = EvaluationCache()
 
 # Set up three judges with different models

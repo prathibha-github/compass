@@ -13,7 +13,14 @@ Prerequisites:
     3. Start server: ollama serve
 """
 
-from compass import OllamaClient, JudgeConfig, LLMJudge, EvaluationCache, RubricLibrary
+from compass import (
+    EvaluationCache,
+    JudgeConfig,
+    LLMJudge,
+    OllamaClient,
+    OpenAIClient,
+    RubricLibrary,
+)
 
 
 def demo_ollama_client_basic():
@@ -167,7 +174,8 @@ def demo_ollama_with_judge():
             judge_model="gpt-4o-mini",
         )
         cache = EvaluationCache(cache_dir=".cache/judges")
-        judge = LLMJudge(config, cache)
+        judge_client = OpenAIClient(model="gpt-4o-mini")
+        judge = LLMJudge(config, judge_client, cache)
 
         result = judge.evaluate(response.completion)
         print(f"\nJudge evaluation:")

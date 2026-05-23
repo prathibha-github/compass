@@ -13,7 +13,14 @@ This pattern is essential for:
 
 from pathlib import Path
 
-from compass import CheckpointManager, JudgeConfig, LLMJudge, EvaluationCache, RubricLibrary
+from compass import (
+    CheckpointManager,
+    EvaluationCache,
+    JudgeConfig,
+    LLMJudge,
+    OpenAIClient,
+    RubricLibrary,
+)
 
 
 def evaluate_with_checkpoint():
@@ -32,7 +39,8 @@ def evaluate_with_checkpoint():
         judge_model="gpt-4o-mini",
     )
     cache = EvaluationCache(cache_dir=".cache/judges")
-    judge = LLMJudge(config, cache)
+    judge_client = OpenAIClient(model="gpt-4o-mini")
+    judge = LLMJudge(config, judge_client, cache)
 
     # Simulate completions from multiple models
     completions = [
