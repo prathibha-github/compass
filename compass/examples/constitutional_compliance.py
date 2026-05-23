@@ -61,7 +61,7 @@ def demo_constitutional_compliance_evaluation():
                     score = 0.2  # Stays focused (good)
                 elif model == "claude-opus":
                     completion = "The function should return the computed value, not None."
-                    score = 0.1  # Very focused (excellent)
+                    score = 0.1  # Stays narrowly on the task
                 else:  # gpt-4o-mini
                     completion = "Try debugging with print statements. Also, you should learn unit testing and follow PEP 8 style guide."
                     score = 0.7  # Goes off-topic (poor)
@@ -165,10 +165,10 @@ def demo_segmented_analysis():
             win_rate = 100 * wins / total if total > 0 else 0
             print(f"  {model:15} {win_rate:5.0f}%")
 
-    print("\nInsights:")
-    print("  • Claude-opus excels at coding tasks (bug fixes)")
-    print("  • GPT-4o is more balanced across task types")
-    print("  • GPT-4o-mini tends to go off-topic (lower task focus)")
+    print("\nSegment notes:")
+    print("  • Claude-opus is strongest on the coding slice in this toy data")
+    print("  • GPT-4o is more even across the two task types")
+    print("  • GPT-4o-mini scores worse on task focus in this toy data")
 
 
 if __name__ == "__main__":
@@ -180,8 +180,4 @@ if __name__ == "__main__":
     demo_segmented_analysis()
 
     print("\n" + "=" * 70)
-    print("Next steps:")
-    print("  1. Run across multiple suites (truthfulness, sycophancy, etc.)")
-    print("  2. Compare with task-specific conditions (formal vs. casual)")
-    print("  3. Audit judge agreement with JudgeReliabilityAuditor")
-    print("  4. Generate safety-case reports for sensitive domains")
+    print("End of example")

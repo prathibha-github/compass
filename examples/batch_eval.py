@@ -58,4 +58,4 @@ for i, completion in enumerate(completions, 1):
 for r1, r2 in zip(results, results2):
     assert r1.score == r2.score
     assert r1.hit == r2.hit
-print("\nAll results matched cache perfectly!")
+print("\nCached rerun matched the original results.")
