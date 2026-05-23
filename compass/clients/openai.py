@@ -118,6 +118,8 @@ class OpenAIClient(CompletionClient):
         max_tokens: int = 180,
         temperature: float = 0.0,
         system: Optional[str] = None,
+        logprobs: bool = False,
+        top_logprobs: int = 0,
     ) -> CompletionResponse:
         """
         Generate completion via OpenAI Chat Completions API with retry/backoff on 429.
@@ -129,6 +131,8 @@ class OpenAIClient(CompletionClient):
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature (0.0 = deterministic; ignored for gpt-5/o4)
             system: Optional system prompt
+            logprobs: Whether to request top-token log probabilities for the first token
+            top_logprobs: Number of top-token log probabilities to request
 
         Returns:
             CompletionResponse with completion text and token counts
@@ -153,6 +157,9 @@ class OpenAIClient(CompletionClient):
             max_completion_tokens=max_tokens,
             temperature=actual_temperature,
         )
+        if logprobs:
+            kwargs["logprobs"] = True
+            kwargs["top_logprobs"] = top_logprobs
 
         max_attempts = 10
         for attempt in range(max_attempts):
@@ -170,6 +177,12 @@ class OpenAIClient(CompletionClient):
                 if not completion:
                     raise RuntimeError(f"Empty response from {self.model}")
 
+                raw_logprobs = None
+                if logprobs:
+                    choice_lp = resp.choices[0].logprobs
+                    if choice_lp and choice_lp.content:
+                        raw_logprobs = choice_lp.content[0].top_logprobs
+
                 usage = resp.usage
                 input_tokens = usage.prompt_tokens if usage else 0
                 output_tokens = usage.completion_tokens if usage else 0
@@ -185,6 +198,7 @@ class OpenAIClient(CompletionClient):
                         input_tokens * self._pricing.input_cost_per_million / 1_000_000
                         + output_tokens * self._pricing.output_cost_per_million / 1_000_000
                     ),
+                    logprobs=raw_logprobs,
                 )
 
             except self._openai.RateLimitError as exc:
