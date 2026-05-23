@@ -4,62 +4,59 @@ import time
 
 from compass import AnthropicClient, EvaluationCache, JudgeConfig, LLMJudge, RubricLibrary
 
-client = AnthropicClient(model="claude-opus-4-7")
+def main():
+    client = AnthropicClient(model="claude-opus-4-7")
+    fresh_cache = EvaluationCache(cache_dir=".compass_cache_fresh")
+    persistent_cache = EvaluationCache(cache_dir=".compass_cache_persistent")
+    config = JudgeConfig(
+        rubric=RubricLibrary.sycophancy,
+        judge_model="claude-opus-4-7",
+    )
+    response = "I agree with the proposal and would not change the response."
 
-# Create two caches to show the difference
-fresh_cache = EvaluationCache(cache_dir=".compass_cache_fresh")
-persistent_cache = EvaluationCache(cache_dir=".compass_cache_persistent")
+    print("=" * 60)
+    print("CACHE PERFORMANCE DEMO")
+    print("=" * 60)
 
-config = JudgeConfig(
-    rubric=RubricLibrary.sycophancy,
-    judge_model="claude-opus-4-7",
-)
+    print("\n1. FRESH CACHE (no prior evaluations)")
+    judge_fresh = LLMJudge(config, client, fresh_cache)
 
-response = "I agree with the proposal and would not change the response."
+    start = time.time()
+    result1 = judge_fresh.evaluate(response)
+    elapsed_fresh = time.time() - start
 
-print("=" * 60)
-print("CACHE PERFORMANCE DEMO")
-print("=" * 60)
+    print(f"   Time: {elapsed_fresh:.2f}s")
+    print(f"   From cache: {result1.cache_hit}")
+    print(f"   Score: {result1.score:.2f}")
 
-# Fresh cache - everything is a miss
-print("\n1. FRESH CACHE (no prior evaluations)")
-judge_fresh = LLMJudge(config, client, fresh_cache)
+    print("\n2. PERSISTENT CACHE (first evaluation)")
+    judge_persistent = LLMJudge(config, client, persistent_cache)
 
-start = time.time()
-result1 = judge_fresh.evaluate(response)
-elapsed_fresh = time.time() - start
+    start = time.time()
+    result2 = judge_persistent.evaluate(response)
+    elapsed_first = time.time() - start
 
-print(f"   Time: {elapsed_fresh:.2f}s")
-print(f"   From cache: {result1.cache_hit}")
-print(f"   Score: {result1.score:.2f}")
+    print(f"   Time: {elapsed_first:.2f}s")
+    print(f"   From cache: {result2.cache_hit}")
 
-# Persistent cache - first run is a miss
-print("\n2. PERSISTENT CACHE (first evaluation)")
-judge_persistent = LLMJudge(config, client, persistent_cache)
+    print("\n3. PERSISTENT CACHE (second evaluation, same text)")
 
-start = time.time()
-result2 = judge_persistent.evaluate(response)
-elapsed_first = time.time() - start
+    start = time.time()
+    result3 = judge_persistent.evaluate(response)
+    elapsed_cached = time.time() - start
 
-print(f"   Time: {elapsed_first:.2f}s")
-print(f"   From cache: {result2.cache_hit}")
+    print(f"   Time: {elapsed_cached:.3f}s")
+    print(f"   From cache: {result3.cache_hit}")
+    print(f"   Speedup: {elapsed_first / elapsed_cached:.0f}x faster")
 
-# Persistent cache - second run is a hit
-print("\n3. PERSISTENT CACHE (second evaluation, same text)")
+    assert result2.score == result3.score
+    assert result2.hit == result3.hit
+    print(f"\nCached result matches original")
 
-start = time.time()
-result3 = judge_persistent.evaluate(response)
-elapsed_cached = time.time() - start
+    print("\n" + "=" * 60)
+    print("Repeated evaluations reuse the cached result and avoid another API call.")
+    print("=" * 60)
 
-print(f"   Time: {elapsed_cached:.3f}s")
-print(f"   From cache: {result3.cache_hit}")
-print(f"   Speedup: {elapsed_first / elapsed_cached:.0f}x faster")
 
-# Verify results are identical
-assert result2.score == result3.score
-assert result2.hit == result3.hit
-print(f"\n✓ Cached result matches original")
-
-print("\n" + "=" * 60)
-print("Repeated evaluations reuse the cached result and avoid another API call.")
-print("=" * 60)
+if __name__ == "__main__":
+    main()
