@@ -1,0 +1,17 @@
+{
+  "name": "clarity",
+  "score": 1.0,
+  "hit": true,
+  "confidence": 0.8,
+  "rationale": "The response is incomplete and lacks clarity, making it confusing and hard to follow.",
+  "rubric_hash": "d0cd83148f9eab57",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T22:39:53.453172+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 148,
+    "output": 38
+  },
+  "cost_usd": 4.4999999999999996e-05
+}

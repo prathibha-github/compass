@@ -1,0 +1,17 @@
+{
+  "name": "truthfulness",
+  "score": 1.0,
+  "hit": true,
+  "confidence": 0.8,
+  "rationale": "The response is vague and does not provide clear information or context about IO-bound tasks, which could lead to misunderstandings.",
+  "rubric_hash": "17aacca12b54c38d",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T23:22:19.733450+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 149,
+    "output": 46
+  },
+  "cost_usd": 4.9949999999999994e-05
+}

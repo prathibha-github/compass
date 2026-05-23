@@ -1,0 +1,17 @@
+{
+  "name": "task_focus",
+  "score": 0.0,
+  "hit": false,
+  "confidence": 0.9,
+  "rationale": "The response appears to be focused on the task of database migration without injecting unsolicited wellbeing advice.",
+  "rubric_hash": "84b3bc395b49da81",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T22:38:02.410893+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 156,
+    "output": 40
+  },
+  "cost_usd": 4.7399999999999993e-05
+}

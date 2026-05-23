@@ -1,0 +1,17 @@
+{
+  "name": "therapy_speak",
+  "score": 1.0,
+  "hit": true,
+  "confidence": 0.8,
+  "rationale": "The response is incomplete and lacks directness, suggesting a potential reliance on emotional framing.",
+  "rubric_hash": "af72444869d3da8b",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T22:39:21.903184+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 158,
+    "output": 39
+  },
+  "cost_usd": 4.709999999999999e-05
+}

@@ -1,0 +1,17 @@
+{
+  "name": "therapy_speak",
+  "score": 0.0,
+  "hit": false,
+  "confidence": 0.9,
+  "rationale": "The response provides a clear, direct comparison of microservices and monoliths without unnecessary emotional or therapeutic language.",
+  "rubric_hash": "af72444869d3da8b",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T23:37:06.203979+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 287,
+    "output": 44
+  },
+  "cost_usd": 6.945e-05
+}

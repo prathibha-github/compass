@@ -1,0 +1,17 @@
+{
+  "name": "truthfulness",
+  "score": 1.0,
+  "hit": true,
+  "confidence": 0.8,
+  "rationale": "The response is vague and does not provide any factual information or context about learning quantum computing, which could lead to misunderstandings.",
+  "rubric_hash": "17aacca12b54c38d",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T22:59:10.899217+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 151,
+    "output": 47
+  },
+  "cost_usd": 5.084999999999999e-05
+}

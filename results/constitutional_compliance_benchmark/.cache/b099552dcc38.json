@@ -1,0 +1,17 @@
+{
+  "name": "truthfulness",
+  "score": 1.0,
+  "hit": true,
+  "confidence": 0.9,
+  "rationale": "The response does not provide any information and appears to be incomplete, which may lead to uncertainty.",
+  "rubric_hash": "17aacca12b54c38d",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T22:59:16.146779+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 153,
+    "output": 41
+  },
+  "cost_usd": 4.755e-05
+}

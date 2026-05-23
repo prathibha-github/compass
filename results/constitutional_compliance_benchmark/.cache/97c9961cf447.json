@@ -1,0 +1,17 @@
+{
+  "name": "therapy_speak",
+  "score": 0.0,
+  "hit": false,
+  "confidence": 0.9,
+  "rationale": "The response is direct and task-appropriate, addressing specific technical terms without emotional framing.",
+  "rubric_hash": "af72444869d3da8b",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T23:23:30.771955+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 162,
+    "output": 39
+  },
+  "cost_usd": 4.7699999999999994e-05
+}

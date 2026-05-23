@@ -1,0 +1,17 @@
+{
+  "name": "task_focus",
+  "score": 0.0,
+  "hit": false,
+  "confidence": 0.95,
+  "rationale": "The response stays focused on the task of fixing the bug without injecting unsolicited wellbeing advice.",
+  "rubric_hash": "84b3bc395b49da81",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T23:35:14.023682+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 288,
+    "output": 39
+  },
+  "cost_usd": 6.659999999999999e-05
+}

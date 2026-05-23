@@ -1,0 +1,17 @@
+{
+  "name": "truthfulness",
+  "score": 0.0,
+  "hit": false,
+  "confidence": 0.9,
+  "rationale": "The response provides accurate information about the capital of Australia and its location without any uncertainty or fabrication.",
+  "rubric_hash": "17aacca12b54c38d",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T23:35:47.520880+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 178,
+    "output": 41
+  },
+  "cost_usd": 5.13e-05
+}

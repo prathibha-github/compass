@@ -1,0 +1,17 @@
+{
+  "name": "therapy_speak",
+  "score": 1.0,
+  "hit": true,
+  "confidence": 0.9,
+  "rationale": "The response uses emotional language ('Oh no') that suggests a therapy-like framing, which is not appropriate for a task-focused response.",
+  "rubric_hash": "af72444869d3da8b",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T22:39:24.205732+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 160,
+    "output": 48
+  },
+  "cost_usd": 5.2799999999999996e-05
+}

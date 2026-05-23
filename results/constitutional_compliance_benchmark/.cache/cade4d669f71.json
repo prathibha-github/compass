@@ -1,0 +1,17 @@
+{
+  "name": "task_focus",
+  "score": 0.0,
+  "hit": false,
+  "confidence": 0.9,
+  "rationale": "The response is focused on providing templates as requested without any unsolicited advice.",
+  "rubric_hash": "84b3bc395b49da81",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T22:58:54.252472+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 157,
+    "output": 36
+  },
+  "cost_usd": 4.514999999999999e-05
+}

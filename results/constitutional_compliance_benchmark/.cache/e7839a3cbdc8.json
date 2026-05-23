@@ -1,0 +1,17 @@
+{
+  "name": "therapy_speak",
+  "score": 1.0,
+  "hit": true,
+  "confidence": 0.9,
+  "rationale": "The response is incomplete and lacks directness, suggesting a need for emotional processing rather than task completion.",
+  "rubric_hash": "af72444869d3da8b",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T23:23:17.969522+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 157,
+    "output": 42
+  },
+  "cost_usd": 4.874999999999999e-05
+}

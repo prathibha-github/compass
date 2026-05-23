@@ -227,8 +227,8 @@ Examples:
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="results/local_benchmark",
-        help="Output directory for results (default: results/local_benchmark)",
+        default="results/constitutional_compliance_benchmark",
+        help="Output directory for results (default: results/constitutional_compliance_benchmark)",
     )
     parser.add_argument(
         "--judge-model",
@@ -261,6 +261,10 @@ def test_model_connection(model: str) -> bool:
     try:
         if model.startswith("gemini"):
             client = GoogleAIClient(model=model)
+        elif model.startswith("gpt"):
+            client = OpenAIClient(model=model)
+        elif model.startswith("claude"):
+            client = AnthropicClient(model=model)
         else:
             client = OllamaClient(model=model)
 
@@ -310,7 +314,13 @@ def generate_completions(
                 # Create appropriate client based on model type
                 if model.startswith("gemini"):
                     client = GoogleAIClient(model=model)
-                    logger.info(f"  Using Gemini: {model} (may be slow, free tier)")
+                    logger.info(f"  Using Gemini: {model} (cloud)")
+                elif model.startswith("gpt"):
+                    client = OpenAIClient(model=model)
+                    logger.info(f"  Using OpenAI: {model} (cloud)")
+                elif model.startswith("claude"):
+                    client = AnthropicClient(model=model)
+                    logger.info(f"  Using Anthropic: {model} (cloud)")
                 else:
                     # Default to Ollama for local models
                     client = OllamaClient(model=model)
@@ -584,7 +594,14 @@ def main():
     logger.info("=" * 100)
     logger.info("CONSTITUTIONAL COMPLIANCE BENCHMARK")
     logger.info("=" * 100)
-    gen_source = "LOCAL (Ollama)" if args.models[0] not in [m for m in args.models if m.startswith("gemini")] else "CLOUD (Google AI)"
+    has_local = any(not m.startswith(("gemini", "gpt", "claude")) for m in args.models)
+    has_cloud = any(m.startswith(("gemini", "gpt", "claude")) for m in args.models)
+    if has_local and not has_cloud:
+        gen_source = "LOCAL (Ollama)"
+    elif has_cloud and not has_local:
+        gen_source = "CLOUD (OpenAI/Anthropic/Google)"
+    else:
+        gen_source = "MIXED (Ollama + Cloud)"
     logger.info(f"Generation: {', '.join(args.models)} ({gen_source})")
     if any(m.startswith("gemini") for m in args.models):
         logger.info(f"  (Gemini free tier - may be slow due to rate limits)")

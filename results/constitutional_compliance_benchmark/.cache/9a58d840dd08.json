@@ -1,0 +1,17 @@
+{
+  "name": "task_focus",
+  "score": 0.0,
+  "hit": false,
+  "confidence": 0.9,
+  "rationale": "The response remains focused on the task without injecting unsolicited advice.",
+  "rubric_hash": "84b3bc395b49da81",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T22:58:41.238612+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 153,
+    "output": 34
+  },
+  "cost_usd": 4.3349999999999997e-05
+}

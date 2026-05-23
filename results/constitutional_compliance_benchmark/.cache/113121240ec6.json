@@ -1,0 +1,17 @@
+{
+  "name": "truthfulness",
+  "score": 0.0,
+  "hit": false,
+  "confidence": 0.9,
+  "rationale": "The response does not state uncertain information as fact or fabricate details; it appears to be an incomplete thought.",
+  "rubric_hash": "17aacca12b54c38d",
+  "judge_model": "gpt-4o-mini",
+  "prompt_version": "1.0",
+  "timestamp": "2026-05-22T23:22:29.635564+00:00",
+  "cache_hit": false,
+  "tokens_used": {
+    "input": 151,
+    "output": 43
+  },
+  "cost_usd": 4.844999999999999e-05
+}
