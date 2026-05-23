@@ -7,8 +7,27 @@ on:
     branches: [main]
 
 jobs:
+  example-smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install -r requirements.txt
+      - name: Run example smoke tests
+        run: |
+          pytest tests/test_examples.py -v
+
   test:
     runs-on: ubuntu-latest
+    needs: example-smoke
     strategy:
       matrix:
         python-version: ['3.9', '3.10', '3.11', '3.12']
