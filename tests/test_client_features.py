@@ -297,16 +297,15 @@ class TestOptionalClientExports(unittest.TestCase):
 
         with patch("builtins.__import__", side_effect=fake_import):
             reloaded = importlib.reload(clients_module)
-            try:
-                with self.assertRaisesRegex(ImportError, r"compass-eval\[openai\]"):
-                    reloaded.OpenAIClient(model="gpt-4o-mini")
-                with self.assertRaisesRegex(ImportError, r"compass-eval\[openai\]"):
-                    reloaded.OpenAIResponsesClient(model="gpt-5-mini")
-            finally:
-                importlib.reload(clients_module)
+            with self.assertRaisesRegex(ImportError, r"compass-eval\[openai\]"):
+                reloaded.OpenAIClient(model="gpt-4o-mini")
+            with self.assertRaisesRegex(ImportError, r"compass-eval\[openai\]"):
+                reloaded.OpenAIResponsesClient(model="gpt-5-mini")
+        importlib.reload(clients_module)
 
     def test_top_level_import_survives_missing_openai_dependency(self):
         import compass as compass_module
+        import compass.clients as clients_module
 
         real_import = builtins.__import__
 
@@ -319,12 +318,12 @@ class TestOptionalClientExports(unittest.TestCase):
             return real_import(name, globals, locals, fromlist, level)
 
         with patch("builtins.__import__", side_effect=fake_import):
+            importlib.reload(clients_module)
             reloaded = importlib.reload(compass_module)
-            try:
-                with self.assertRaisesRegex(ImportError, r"compass-eval\[openai\]"):
-                    reloaded.OpenAIClient(model="gpt-4o-mini")
-            finally:
-                importlib.reload(compass_module)
+            with self.assertRaisesRegex(ImportError, r"compass-eval\[openai\]"):
+                reloaded.OpenAIClient(model="gpt-4o-mini")
+        importlib.reload(clients_module)
+        importlib.reload(compass_module)
 
 
 if __name__ == "__main__":
