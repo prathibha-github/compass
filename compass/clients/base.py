@@ -11,6 +11,7 @@ class CompletionResponse:
     completion: str
     tokens_used: Optional[dict] = None  # {"input": X, "output": Y}
     cost_usd: float = 0.0
+    logprobs: Optional[list] = None
 
 
 class CompletionClient(ABC):
@@ -23,6 +24,8 @@ class CompletionClient(ABC):
         max_tokens: int = 180,
         temperature: float = 0.0,
         system: Optional[str] = None,
+        logprobs: bool = False,
+        top_logprobs: int = 0,
     ) -> CompletionResponse:
         """Get a completion from the LLM."""
         raise NotImplementedError

@@ -4,8 +4,16 @@ import time
 from typing import Optional
 
 from compass.clients.base import CompletionClient, CompletionResponse
+from compass.clients.pricing import get_pricing
 
 logger = logging.getLogger(__name__)
+
+_SAFETY_OFF = [
+    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+]
 
 
 class GoogleAIClient(CompletionClient):
@@ -19,7 +27,13 @@ class GoogleAIClient(CompletionClient):
         print(response.completion)
     """
 
-    def __init__(self, model: str, api_key: Optional[str] = None, request_interval: float = 0.1):
+    def __init__(
+        self,
+        model: str,
+        api_key: Optional[str] = None,
+        request_interval: float = 0.1,
+        disable_safety_filters: bool = False,
+    ):
         """
         Initialize Google AI (Gemini) client.
 
@@ -33,6 +47,7 @@ class GoogleAIClient(CompletionClient):
         """
         try:
             from google import genai
+            from google.genai import types as genai_types
         except ImportError as exc:
             raise ImportError(
                 "Gemini support requires the 'google-genai' package. "
@@ -46,10 +61,14 @@ class GoogleAIClient(CompletionClient):
             self.client = genai.Client()  # Uses GOOGLE_API_KEY env var
 
         self.model = model
+        self._types = genai_types
+        self._pricing = get_pricing(model)
         self._input_tokens = 0
         self._output_tokens = 0
         self._request_interval = request_interval
         self._last_call_at: float = 0.0
+        self._request_count = 0
+        self._disable_safety_filters = disable_safety_filters
 
         logger.info(f"Using {model} (google-genai)")
 
@@ -60,8 +79,10 @@ class GoogleAIClient(CompletionClient):
 
     @property
     def total_cost_usd(self) -> float:
-        """Gemini free tier is free, paid tier billed separately."""
-        return 0.0
+        return (
+            self._input_tokens * self._pricing.input_cost_per_million / 1_000_000
+            + self._output_tokens * self._pricing.output_cost_per_million / 1_000_000
+        )
 
     def _throttle(self) -> None:
         """Enforce minimum request interval."""
@@ -76,6 +97,8 @@ class GoogleAIClient(CompletionClient):
         max_tokens: int = 180,
         temperature: float = 0.0,
         system: Optional[str] = None,
+        logprobs: bool = False,
+        top_logprobs: int = 0,
     ) -> CompletionResponse:
         """
         Generate completion via Google Gemini API.
@@ -92,6 +115,13 @@ class GoogleAIClient(CompletionClient):
         Raises:
             RuntimeError: If Gemini API call fails
         """
+        if self._pricing.max_requests and self._request_count >= self._pricing.max_requests:
+            raise RuntimeError(
+                f"Reached max_requests={self._pricing.max_requests} for {self.model}. "
+                "Use a paid-tier key or lower request volume."
+            )
+        self._request_count += 1
+
         self._throttle()
         self._last_call_at = time.monotonic()
 
@@ -103,13 +133,19 @@ class GoogleAIClient(CompletionClient):
                 full_prompt = prompt
 
             # Call Gemini API
+            config_kwargs = {
+                "max_output_tokens": max_tokens,
+                "temperature": temperature,
+            }
+            if self._disable_safety_filters:
+                config_kwargs["safety_settings"] = [
+                    self._types.SafetySetting(**setting) for setting in _SAFETY_OFF
+                ]
+
             response = self.client.models.generate_content(
                 model=self.model,
                 contents=full_prompt,
-                config={
-                    "max_output_tokens": max_tokens,
-                    "temperature": temperature,
-                },
+                config=self._types.GenerateContentConfig(**config_kwargs),
             )
 
             completion = response.text if response.text else ""
@@ -127,11 +163,15 @@ class GoogleAIClient(CompletionClient):
 
             self._input_tokens += input_tokens
             self._output_tokens += output_tokens
+            cost_usd = (
+                input_tokens * self._pricing.input_cost_per_million / 1_000_000
+                + output_tokens * self._pricing.output_cost_per_million / 1_000_000
+            )
 
             return CompletionResponse(
                 completion=completion.strip(),
                 tokens_used={"input": input_tokens, "output": output_tokens},
-                cost_usd=0.0,
+                cost_usd=cost_usd,
             )
 
         except Exception as exc:

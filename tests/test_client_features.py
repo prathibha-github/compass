@@ -140,6 +140,35 @@ class TestOpenAITemperatureOverride(unittest.TestCase):
         temp = self._capture_temperature("gpt-4o", 0.5)
         self.assertEqual(temp, 0.5)
 
+    def test_openai_logprobs_are_requested_and_returned(self):
+        client, openai_mock = self._make_client("gpt-4o-mini")
+        captured = {}
+
+        top_lp = [MagicMock(token="A", logprob=-0.1), MagicMock(token="B", logprob=-1.2)]
+        content_lp = MagicMock(top_logprobs=top_lp)
+        resp_mock = MagicMock()
+        resp_mock.choices = [MagicMock(message=MagicMock(content="answer"), logprobs=MagicMock(content=[content_lp]))]
+        resp_mock.usage = MagicMock(prompt_tokens=10, completion_tokens=5)
+        raw_mock = MagicMock()
+        raw_mock.parse.return_value = resp_mock
+        raw_mock.headers = {}
+
+        def fake_create(**kwargs):
+            captured["logprobs"] = kwargs.get("logprobs")
+            captured["top_logprobs"] = kwargs.get("top_logprobs")
+            return raw_mock
+
+        client.client.chat.completions.with_raw_response.create.side_effect = fake_create
+        openai_mock.RateLimitError = type("RateLimitError", (Exception,), {})
+        openai_mock.APIError = type("APIError", (Exception,), {})
+
+        with patch("time.sleep"):
+            response = client.complete("prompt", logprobs=True, top_logprobs=7)
+
+        self.assertTrue(captured["logprobs"])
+        self.assertEqual(captured["top_logprobs"], 7)
+        self.assertEqual(response.logprobs, top_lp)
+
 
 # ── Throttle logic ────────────────────────────────────────────────────────────
 
@@ -278,6 +307,79 @@ class TestOpenAIResponsesClientBasics(unittest.TestCase):
         with patch("time.sleep"):
             client.complete("prompt", max_tokens=20)
         self.assertEqual(captured["max_output_tokens"], 20)
+
+
+class TestGoogleAIClientFeatures(unittest.TestCase):
+
+    def _make_client(self, **kwargs):
+        google_mock = MagicMock()
+        google_genai_types = MagicMock()
+        google_genai_types.GenerateContentConfig.side_effect = lambda **config_kwargs: config_kwargs
+        google_genai_types.SafetySetting.side_effect = lambda **setting_kwargs: setting_kwargs
+        google_pkg = MagicMock()
+        google_pkg.genai = google_mock
+        google_mock.types = google_genai_types
+        with patch.dict(
+            "sys.modules",
+            {
+                "google": google_pkg,
+                "google.genai": google_mock,
+                "google.genai.types": google_genai_types,
+            },
+        ):
+            from compass.clients.google_ai import GoogleAIClient
+            client = GoogleAIClient(model="gemini-2.0-flash", api_key="fake", **kwargs)
+        return client, google_mock, google_genai_types
+
+    def test_google_ai_client_uses_pricing_table(self):
+        client, _, _ = self._make_client()
+        p = get_pricing("gemini-2.0-flash")
+        client._input_tokens = 1_000_000
+        client._output_tokens = 1_000_000
+        expected = p.input_cost_per_million + p.output_cost_per_million
+        self.assertAlmostEqual(client.total_cost_usd, expected)
+
+    def test_google_ai_client_applies_safety_override_only_when_enabled(self):
+        client, google_mock, _ = self._make_client(disable_safety_filters=True)
+        response_mock = MagicMock()
+        response_mock.text = "answer"
+        response_mock.usage_metadata = MagicMock(prompt_token_count=10, candidates_token_count=5)
+        captured = {}
+
+        def fake_generate_content(**kwargs):
+            captured["config"] = kwargs["config"]
+            return response_mock
+
+        client.client.models.generate_content.side_effect = fake_generate_content
+        with patch("time.sleep"):
+            response = client.complete("prompt", max_tokens=20)
+
+        self.assertIn("safety_settings", captured["config"])
+        self.assertEqual(len(captured["config"]["safety_settings"]), 4)
+        self.assertGreater(response.cost_usd, 0.0)
+
+    def test_google_ai_client_omits_safety_override_by_default(self):
+        client, google_mock, _ = self._make_client()
+        response_mock = MagicMock()
+        response_mock.text = "answer"
+        response_mock.usage_metadata = MagicMock(prompt_token_count=10, candidates_token_count=5)
+        captured = {}
+
+        def fake_generate_content(**kwargs):
+            captured["config"] = kwargs["config"]
+            return response_mock
+
+        client.client.models.generate_content.side_effect = fake_generate_content
+        with patch("time.sleep"):
+            client.complete("prompt")
+
+        self.assertNotIn("safety_settings", captured["config"])
+
+    def test_google_ai_client_enforces_max_requests(self):
+        client, _, _ = self._make_client()
+        client._request_count = get_pricing("gemini-2.0-flash").max_requests
+        with self.assertRaisesRegex(RuntimeError, "Reached max_requests"):
+            client.complete("prompt")
 
 
 class TestOptionalClientExports(unittest.TestCase):
