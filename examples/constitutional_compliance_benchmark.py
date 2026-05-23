@@ -370,7 +370,7 @@ def evaluate_completions(
     Completions: generated locally (already done, free)
     Judge: runs on cloud (uses API calls, ~$0.001 per evaluation)
     """
-    checkpoint_path = output_dir / "evaluations.jsonl"
+    checkpoint_path = output_dir / f"evaluations_{judge_model}.jsonl"
     checkpoint = CheckpointManager(str(checkpoint_path))
 
     # Load prior evaluations
@@ -470,6 +470,7 @@ def evaluate_completions(
                 "hit": result.hit,
                 "confidence": result.confidence,
                 "rationale": result.rationale[:100] if result.rationale else "",
+                "judge_model": judge_model,
             })
 
             count += 1

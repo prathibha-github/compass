@@ -23,6 +23,9 @@ htmlcov/
 
 # Cache
 .compass_cache/
+results/**/.cache/
+results/*.jsonl
+results/**/*.jsonl
 
 # OS
 .DS_Store
