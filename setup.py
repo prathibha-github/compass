@@ -20,6 +20,7 @@ setup(
     python_requires=">=3.9",
     install_requires=[
         "pydantic>=2.0",
+        "numpy>=1.24",
     ],
     extras_require={
         "openai": ["openai>=1.0"],
