@@ -1,0 +1,256 @@
+"""Tests for new client features: pricing integration, throttle, retry helpers."""
+import time
+import unittest
+from unittest.mock import MagicMock, patch
+
+from compass.clients.pricing import get_pricing
+
+
+# ── Pricing integration ───────────────────────────────────────────────────────
+
+class TestClientPricingIntegration(unittest.TestCase):
+    """Verify that client classes use the pricing table correctly."""
+
+    def test_anthropic_client_uses_pricing_table(self):
+        """AnthropicClient.total_cost_usd uses exact model pricing."""
+        anthropic_mock = MagicMock()
+        with patch.dict("sys.modules", {"anthropic": anthropic_mock}):
+            from compass.clients.anthropic import AnthropicClient
+            client = AnthropicClient(model="claude-sonnet-4-6", api_key="fake")
+        p = get_pricing("claude-sonnet-4-6")
+        # Inject token counts manually
+        client._input_tokens = 1_000_000
+        client._output_tokens = 1_000_000
+        expected = p.input_cost_per_million + p.output_cost_per_million
+        self.assertAlmostEqual(client.total_cost_usd, expected)
+
+    def test_openai_client_uses_pricing_table(self):
+        """OpenAIClient.total_cost_usd uses exact model pricing."""
+        openai_mock = MagicMock()
+        with patch.dict("sys.modules", {"openai": openai_mock}):
+            from compass.clients.openai import OpenAIClient
+            client = OpenAIClient(model="gpt-4o-mini", api_key="fake")
+        p = get_pricing("gpt-4o-mini")
+        client._input_tokens = 1_000_000
+        client._output_tokens = 1_000_000
+        expected = p.input_cost_per_million + p.output_cost_per_million
+        self.assertAlmostEqual(client.total_cost_usd, expected)
+
+    def test_openai_responses_client_uses_pricing_table(self):
+        """OpenAIResponsesClient.total_cost_usd uses exact model pricing."""
+        openai_mock = MagicMock()
+        with patch.dict("sys.modules", {"openai": openai_mock}):
+            from compass.clients.openai_responses import OpenAIResponsesClient
+            client = OpenAIResponsesClient(model="gpt-4o-mini", api_key="fake")
+        p = get_pricing("gpt-4o-mini")
+        client._input_tokens = 1_000_000
+        client._output_tokens = 1_000_000
+        expected = p.input_cost_per_million + p.output_cost_per_million
+        self.assertAlmostEqual(client.total_cost_usd, expected)
+
+
+# ── _parse_reset_seconds helpers ──────────────────────────────────────────────
+
+class TestParseResetSecondsOpenAI(unittest.TestCase):
+
+    def setUp(self):
+        from compass.clients.openai import _parse_reset_seconds
+        self.parse = _parse_reset_seconds
+
+    def test_seconds_only(self):
+        self.assertAlmostEqual(self.parse("20s"), 20.0)
+        self.assertAlmostEqual(self.parse("1.5s"), 1.5)
+
+    def test_minutes_and_seconds(self):
+        self.assertAlmostEqual(self.parse("1m0s"), 60.0)
+        self.assertAlmostEqual(self.parse("1m30.5s"), 90.5)
+
+    def test_minutes_only(self):
+        self.assertAlmostEqual(self.parse("2m"), 120.0)
+
+    def test_bare_float(self):
+        self.assertAlmostEqual(self.parse("45"), 45.0)
+
+    def test_invalid_returns_none(self):
+        self.assertIsNone(self.parse("not-a-number"))
+
+
+class TestParseResetSecondsAnthropic(unittest.TestCase):
+
+    def setUp(self):
+        from compass.clients.anthropic import _parse_reset_seconds
+        self.parse = _parse_reset_seconds
+
+    def test_seconds_only(self):
+        self.assertAlmostEqual(self.parse("30s"), 30.0)
+
+    def test_bare_float(self):
+        self.assertAlmostEqual(self.parse("60"), 60.0)
+
+    def test_invalid_returns_none(self):
+        self.assertIsNone(self.parse("bad"))
+
+
+# ── Temperature override ──────────────────────────────────────────────────────
+
+class TestOpenAITemperatureOverride(unittest.TestCase):
+    """gpt-5 and o4 models must have temperature forced to 1.0."""
+
+    def _make_client(self, model):
+        openai_mock = MagicMock()
+        with patch.dict("sys.modules", {"openai": openai_mock}):
+            from compass.clients.openai import OpenAIClient
+            return OpenAIClient(model=model, api_key="fake"), openai_mock
+
+    def _capture_temperature(self, model, caller_temp):
+        """Return the temperature that would be sent to the API."""
+        client, openai_mock = self._make_client(model)
+        captured = {}
+
+        class _FakeRateLimitError(Exception):
+            pass
+
+        openai_mock.RateLimitError = _FakeRateLimitError
+        openai_mock.APIError = type("APIError", (Exception,), {})
+
+        def fake_create(**kwargs):
+            captured["temperature"] = kwargs.get("temperature")
+            raise _FakeRateLimitError("stop")
+
+        client.client.chat.completions.with_raw_response.create.side_effect = fake_create
+
+        with patch("time.sleep"):  # prevent actual sleeping during retry loop
+            try:
+                client.complete("prompt", temperature=caller_temp)
+            except Exception:
+                pass
+        return captured.get("temperature")
+
+    def test_gpt5_forces_temperature_1(self):
+        temp = self._capture_temperature("gpt-5-mini", 0.0)
+        self.assertEqual(temp, 1.0)
+
+    def test_o4_forces_temperature_1(self):
+        temp = self._capture_temperature("o4-mini", 0.0)
+        self.assertEqual(temp, 1.0)
+
+    def test_gpt4o_uses_caller_temperature(self):
+        temp = self._capture_temperature("gpt-4o", 0.5)
+        self.assertEqual(temp, 0.5)
+
+
+# ── Throttle logic ────────────────────────────────────────────────────────────
+
+class TestThrottleLogic(unittest.TestCase):
+
+    def test_no_sleep_when_interval_zero(self):
+        openai_mock = MagicMock()
+        with patch.dict("sys.modules", {"openai": openai_mock}):
+            from compass.clients.openai import OpenAIClient
+            client = OpenAIClient(model="gpt-4o-mini", api_key="fake", request_interval=0.0)
+        client._last_call_at = time.monotonic()
+        with patch("time.sleep") as mock_sleep:
+            client._throttle()
+            mock_sleep.assert_not_called()
+
+    def test_sleeps_when_interval_positive(self):
+        openai_mock = MagicMock()
+        with patch.dict("sys.modules", {"openai": openai_mock}):
+            from compass.clients.openai import OpenAIClient
+            client = OpenAIClient(model="gpt-4o-mini", api_key="fake", request_interval=5.0)
+        client._last_call_at = time.monotonic()  # just called
+        with patch("time.sleep") as mock_sleep:
+            client._throttle()
+            mock_sleep.assert_called_once()
+            sleep_duration = mock_sleep.call_args[0][0]
+            self.assertGreater(sleep_duration, 0)
+            self.assertLessEqual(sleep_duration, 5.0)
+
+
+# ── _wait_from_429_headers ────────────────────────────────────────────────────
+
+class TestWaitFrom429Headers(unittest.TestCase):
+
+    def test_uses_retry_after_header(self):
+        openai_mock = MagicMock()
+        with patch.dict("sys.modules", {"openai": openai_mock}):
+            from compass.clients.openai import OpenAIClient
+            client = OpenAIClient(model="gpt-4o-mini", api_key="fake")
+        wait = client._wait_from_429_headers({"retry-after": "30s"}, attempt=0)
+        self.assertGreaterEqual(wait, 30.0)
+        self.assertLessEqual(wait, 33.0)
+
+    def test_fallback_when_no_headers(self):
+        openai_mock = MagicMock()
+        with patch.dict("sys.modules", {"openai": openai_mock}):
+            from compass.clients.openai import OpenAIClient
+            client = OpenAIClient(model="gpt-4o-mini", api_key="fake")
+        wait = client._wait_from_429_headers({}, attempt=0)
+        self.assertGreater(wait, 0)
+
+    def test_exponential_backoff_on_repeated_attempts(self):
+        openai_mock = MagicMock()
+        with patch.dict("sys.modules", {"openai": openai_mock}):
+            from compass.clients.openai import OpenAIClient
+            client = OpenAIClient(model="gpt-4o-mini", api_key="fake")
+        waits = [client._wait_from_429_headers({}, attempt=i) for i in range(5)]
+        # Later attempts should generally have longer waits (modulo jitter)
+        # At minimum, the cap at 60 means it's always bounded
+        for w in waits:
+            self.assertLessEqual(w, 65.0)
+
+
+# ── OpenAIResponsesClient ─────────────────────────────────────────────────────
+
+class TestOpenAIResponsesClientBasics(unittest.TestCase):
+
+    def _make_client(self, model="gpt-5-mini"):
+        openai_mock = MagicMock()
+        with patch.dict("sys.modules", {"openai": openai_mock}):
+            from compass.clients.openai_responses import OpenAIResponsesClient
+            return OpenAIResponsesClient(model=model, api_key="fake"), openai_mock
+
+    def test_gpt5_token_budget_multiplied(self):
+        """gpt-5 models get 10x max_tokens for reasoning budget."""
+        client, openai_mock = self._make_client("gpt-5-mini")
+        captured = {}
+
+        resp_mock = MagicMock()
+        resp_mock.output_text = "hello"
+        resp_mock.usage = MagicMock(input_tokens=10, output_tokens=5)
+
+        def fake_create(**kwargs):
+            captured["max_output_tokens"] = kwargs.get("max_output_tokens")
+            return resp_mock
+
+        client.client.responses.create.side_effect = fake_create
+        openai_mock.RateLimitError = type("RateLimitError", (Exception,), {})
+        openai_mock.APIError = type("APIError", (Exception,), {})
+
+        with patch("time.sleep"):
+            client.complete("prompt", max_tokens=20)
+        self.assertEqual(captured["max_output_tokens"], 200)  # 20 * 10
+
+    def test_non_gpt5_token_budget_unchanged(self):
+        client, openai_mock = self._make_client("gpt-4o-mini")
+        captured = {}
+
+        resp_mock = MagicMock()
+        resp_mock.output_text = "hello"
+        resp_mock.usage = MagicMock(input_tokens=10, output_tokens=5)
+
+        def fake_create(**kwargs):
+            captured["max_output_tokens"] = kwargs.get("max_output_tokens")
+            return resp_mock
+
+        client.client.responses.create.side_effect = fake_create
+        openai_mock.RateLimitError = type("RateLimitError", (Exception,), {})
+        openai_mock.APIError = type("APIError", (Exception,), {})
+
+        with patch("time.sleep"):
+            client.complete("prompt", max_tokens=20)
+        self.assertEqual(captured["max_output_tokens"], 20)
+
+
+if __name__ == "__main__":
+    unittest.main()

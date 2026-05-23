@@ -1,4 +1,4 @@
-"""OpenAI Chat Completions client for LLM inference."""
+"""OpenAI Responses API client for GPT-5 and compatible models."""
 import logging
 import random
 import re
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_reset_seconds(s: str) -> Optional[float]:
-    """Parse OpenAI's x-ratelimit-reset-* values: '20s', '1m0s', '1m30.5s'."""
+    """Parse OpenAI's rate limit reset values: '20s', '1m0s', '1m30.5s'."""
     s = s.strip()
     m = re.fullmatch(r"([\d.]+)s", s)
     if m:
@@ -29,11 +29,14 @@ def _parse_reset_seconds(s: str) -> Optional[float]:
         return None
 
 
-class OpenAIClient(CompletionClient):
-    """Client for OpenAI Chat Completions API (GPT-4, GPT-4o-mini, o4, etc.).
+class OpenAIResponsesClient(CompletionClient):
+    """OpenAI Responses API client for GPT-5 and compatible models.
+
+    The Responses API does not support logprobs. For gpt-5 models the actual
+    max_output_tokens is multiplied by 10 to reserve budget for reasoning tokens.
 
     Usage:
-        client = OpenAIClient(model="gpt-4o-mini")
+        client = OpenAIResponsesClient(model="gpt-5-mini")
         response = client.complete("What is 2+2?")
         print(response.completion)
     """
@@ -46,7 +49,7 @@ class OpenAIClient(CompletionClient):
     ):
         """
         Args:
-            model: Model name (e.g., 'gpt-4o-mini', 'gpt-4o', 'o4-mini')
+            model: Model name (e.g., 'gpt-5-mini', 'gpt-5')
             api_key: OpenAI API key. If None, reads from OPENAI_API_KEY env var.
             request_interval: Minimum seconds between API calls (0 = no throttle).
         """
@@ -59,7 +62,6 @@ class OpenAIClient(CompletionClient):
 
         self._openai = _openai
         self.model = model
-        # max_retries=0: the SDK must not absorb 429s before we handle them.
         self.client = _openai.OpenAI(api_key=api_key, max_retries=0)
         self._pricing = get_pricing(model)
         self._input_tokens = 0
@@ -84,25 +86,6 @@ class OpenAIClient(CompletionClient):
         if gap > 0:
             time.sleep(gap)
 
-    def _adapt_from_success_headers(self, headers: dict) -> None:
-        """Proactively pause when a quota window is nearly exhausted."""
-        for quota_type in ("requests", "tokens"):
-            remaining = headers.get(f"x-ratelimit-remaining-{quota_type}")
-            reset_str = headers.get(f"x-ratelimit-reset-{quota_type}")
-            if remaining is None or reset_str is None:
-                continue
-            try:
-                if int(remaining) <= 1:
-                    wait = (_parse_reset_seconds(reset_str) or 60) + 1.0
-                    logger.info(
-                        "Quota for %s nearly exhausted — pausing %.0fs for window reset",
-                        quota_type, wait,
-                    )
-                    time.sleep(wait)
-                    break
-            except (ValueError, TypeError):
-                continue
-
     def _wait_from_429_headers(self, headers: dict, attempt: int) -> float:
         for key in ("retry-after", "x-ratelimit-reset-requests"):
             val = headers.get(key)
@@ -120,15 +103,17 @@ class OpenAIClient(CompletionClient):
         system: Optional[str] = None,
     ) -> CompletionResponse:
         """
-        Generate completion via OpenAI Chat Completions API with retry/backoff on 429.
+        Generate completion via OpenAI Responses API with retry/backoff on 429.
 
-        gpt-5 and o4 models have temperature forced to 1.0 regardless of the caller's value.
+        For gpt-5 models, max_tokens is multiplied by 10 to accommodate reasoning tokens.
+        The temperature parameter is accepted for interface compatibility but not forwarded
+        to the Responses API.
 
         Args:
             prompt: Input prompt
-            max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature (0.0 = deterministic; ignored for gpt-5/o4)
-            system: Optional system prompt
+            max_tokens: Maximum output tokens (multiplied by 10 for gpt-5 reasoning budget)
+            temperature: Accepted for interface compatibility; not forwarded.
+            system: Optional system/instructions prompt
 
         Returns:
             CompletionResponse with completion text and token counts
@@ -136,23 +121,9 @@ class OpenAIClient(CompletionClient):
         Raises:
             RuntimeError: If the API call fails after all retries
         """
-        # gpt-5 and o4 models require temperature=1.0
-        actual_temperature = (
-            1.0 if (self.model.startswith("gpt-5") or self.model.startswith("o4"))
-            else temperature
-        )
-
-        messages = []
-        if system:
-            messages.append({"role": "system", "content": system})
-        messages.append({"role": "user", "content": prompt})
-
-        kwargs: dict = dict(
-            model=self.model,
-            messages=messages,
-            max_completion_tokens=max_tokens,
-            temperature=actual_temperature,
-        )
+        # gpt-5 models need a larger token budget for reasoning + output
+        actual_max_tokens = max_tokens * 10 if self.model.startswith("gpt-5") else max_tokens
+        instructions = system or "You are a helpful assistant."
 
         max_attempts = 10
         for attempt in range(max_attempts):
@@ -160,23 +131,46 @@ class OpenAIClient(CompletionClient):
             self._last_call_at = time.monotonic()
 
             try:
-                # with_raw_response is the only way to read response headers from the
-                # openai SDK; the parsed response object does not expose them.
-                raw = self.client.chat.completions.with_raw_response.create(**kwargs)
-                resp = raw.parse()
-                headers = dict(raw.headers)
+                resp = self.client.responses.create(
+                    model=self.model,
+                    instructions=instructions,
+                    input=prompt,
+                    max_output_tokens=actual_max_tokens,
+                )
 
-                usage = resp.usage
-                input_tokens = usage.prompt_tokens
-                output_tokens = usage.completion_tokens
-                self._input_tokens += input_tokens
-                self._output_tokens += output_tokens
+                # Count tokens immediately even if we might retry on empty output
+                usage = getattr(resp, "usage", None)
+                if usage:
+                    input_tokens = getattr(usage, "input_tokens", 0)
+                    output_tokens = getattr(usage, "output_tokens", 0)
+                    self._input_tokens += input_tokens
+                    self._output_tokens += output_tokens
+                else:
+                    input_tokens = 0
+                    output_tokens = 0
 
-                self._adapt_from_success_headers(headers)
+                completion = resp.output_text or ""
 
-                completion = resp.choices[0].message.content or ""
-                if not completion:
-                    raise RuntimeError(f"Empty response from {self.model}")
+                if not completion.strip():
+                    logger.warning(
+                        "Responses API returned empty output (tokens counted). status=%s, "
+                        "incomplete_details=%s, usage=%s, attempt=%d/%d",
+                        getattr(resp, "status", "unknown"),
+                        getattr(resp, "incomplete_details", None),
+                        usage,
+                        attempt + 1, max_attempts,
+                    )
+                    if attempt == max_attempts - 1:
+                        raise RuntimeError(
+                            f"Responses API returned empty output after {max_attempts} attempts"
+                        )
+                    time.sleep(min(4 * (2 ** attempt), 30))
+                    continue
+
+                # Fallback token estimation when usage is unavailable
+                if not usage:
+                    output_tokens = len(completion) // 4
+                    self._output_tokens += output_tokens
 
                 return CompletionResponse(
                     completion=completion,
@@ -188,25 +182,22 @@ class OpenAIClient(CompletionClient):
                 )
 
             except self._openai.RateLimitError as exc:
-                headers_429: dict = {}
+                headers: dict = {}
                 if hasattr(exc, "response") and exc.response is not None:
-                    headers_429 = dict(exc.response.headers)
-                wait = self._wait_from_429_headers(headers_429, attempt)
+                    headers = dict(exc.response.headers)
+                wait = self._wait_from_429_headers(headers, attempt)
                 logger.warning(
-                    "Rate limit (attempt %d/%d) — waiting %.0fs  "
-                    "[retry-after=%s  reset-requests=%s]",
+                    "Rate limit (attempt %d/%d) — waiting %.0fs",
                     attempt + 1, max_attempts, wait,
-                    headers_429.get("retry-after", "—"),
-                    headers_429.get("x-ratelimit-reset-requests", "—"),
                 )
                 time.sleep(wait)
 
             except self._openai.APIError as exc:
-                logger.error("OpenAI API error on attempt %d: %s", attempt + 1, exc)
+                logger.error("API error on attempt %d: %s", attempt + 1, exc)
                 if attempt == max_attempts - 1:
                     raise RuntimeError(
-                        f"OpenAI inference failed for {self.model}: {exc}"
+                        f"OpenAI Responses API failed for {self.model}: {exc}"
                     ) from exc
                 time.sleep(min(4 * (2 ** attempt), 30))
 
-        raise RuntimeError(f"OpenAI call failed after {max_attempts} attempts")
+        raise RuntimeError(f"Responses API call failed after {max_attempts} attempts")

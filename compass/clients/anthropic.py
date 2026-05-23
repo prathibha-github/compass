@@ -1,25 +1,26 @@
 """Anthropic client for LLM inference."""
 import logging
+import random
+import re
+import time
 from typing import Optional
 
 from compass.clients.base import CompletionClient, CompletionResponse
+from compass.clients.pricing import get_pricing
 
 logger = logging.getLogger(__name__)
 
-# Approximate prices per 1M tokens (as of May 2026). Matched on model prefix.
-_PRICING = {
-    "claude-haiku": (0.80, 4.00),      # input, output $/1M tokens
-    "claude-sonnet": (3.00, 15.00),
-    "claude-opus": (15.00, 75.00),
-}
-_PRICING_DEFAULT = (3.00, 15.00)  # fall back to Sonnet pricing if unknown
 
-
-def _price_per_token(model: str) -> tuple:
-    for prefix, prices in _PRICING.items():
-        if prefix in model:
-            return prices
-    return _PRICING_DEFAULT
+def _parse_reset_seconds(s: str) -> Optional[float]:
+    """Parse Anthropic rate-limit reset values: '20s' or bare seconds."""
+    s = s.strip()
+    m = re.fullmatch(r"([\d.]+)s", s)
+    if m:
+        return float(m.group(1))
+    try:
+        return float(s)
+    except ValueError:
+        return None
 
 
 class AnthropicClient(CompletionClient):
@@ -31,42 +32,59 @@ class AnthropicClient(CompletionClient):
         print(response.completion)
     """
 
-    def __init__(self, model: str, api_key: Optional[str] = None):
+    def __init__(
+        self,
+        model: str,
+        api_key: Optional[str] = None,
+        request_interval: float = 0.0,
+    ):
         """
-        Initialize Anthropic client.
-
         Args:
             model: Model name (e.g., 'claude-haiku-4-5', 'claude-sonnet-4-6')
             api_key: Anthropic API key. If None, reads from ANTHROPIC_API_KEY env var.
-
-        Raises:
-            ImportError: If anthropic package is not installed
+            request_interval: Minimum seconds between API calls (0 = no throttle).
         """
         try:
-            from anthropic import Anthropic
+            import anthropic as _anthropic
         except ImportError as e:
             raise ImportError(
                 "anthropic package required. Install with: pip install anthropic"
             ) from e
 
+        self._anthropic = _anthropic
         self.model = model
-        self.client = Anthropic(api_key=api_key)
+        self.client = _anthropic.Anthropic(api_key=api_key, max_retries=0)
+        self._pricing = get_pricing(model)
         self._input_tokens = 0
         self._output_tokens = 0
+        self._request_interval = request_interval
+        self._last_call_at: float = 0.0
 
     @property
     def total_tokens(self) -> dict:
-        """Total tokens used across all requests."""
         return {"input": self._input_tokens, "output": self._output_tokens}
 
     @property
     def total_cost_usd(self) -> float:
-        """Total cost in USD (estimated based on token counts and model pricing)."""
-        input_price, output_price = _price_per_token(self.model)
         return (
-            self._input_tokens * input_price / 1_000_000
-            + self._output_tokens * output_price / 1_000_000
+            self._input_tokens * self._pricing.input_cost_per_million / 1_000_000
+            + self._output_tokens * self._pricing.output_cost_per_million / 1_000_000
         )
+
+    def _throttle(self) -> None:
+        elapsed = time.monotonic() - self._last_call_at
+        gap = self._request_interval - elapsed
+        if gap > 0:
+            time.sleep(gap)
+
+    def _wait_from_429_headers(self, headers: dict, attempt: int) -> float:
+        for key in ("retry-after", "anthropic-ratelimit-requests-reset"):
+            val = headers.get(key)
+            if val:
+                secs = _parse_reset_seconds(val)
+                if secs is not None:
+                    return secs + random.uniform(0.5, 2.0)
+        return min(15 * (2 ** attempt), 60) + random.uniform(0, 5)
 
     def complete(
         self,
@@ -76,7 +94,7 @@ class AnthropicClient(CompletionClient):
         system: Optional[str] = None,
     ) -> CompletionResponse:
         """
-        Generate completion via Anthropic API.
+        Generate completion via Anthropic API with retry/backoff on 429.
 
         Args:
             prompt: Input prompt
@@ -88,40 +106,63 @@ class AnthropicClient(CompletionClient):
             CompletionResponse with completion text and token counts
 
         Raises:
-            RuntimeError: If Anthropic API call fails
+            RuntimeError: If the API call fails after all retries
         """
-        try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                system=system or "",
-                messages=[{"role": "user", "content": prompt}],
-            )
+        max_attempts = 10
+        for attempt in range(max_attempts):
+            self._throttle()
+            self._last_call_at = time.monotonic()
 
-            completion = response.content[0].text
-            if not completion:
-                raise RuntimeError(f"Empty response from {self.model}")
+            try:
+                resp = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    system=system or "",
+                    messages=[{"role": "user", "content": prompt}],
+                )
 
-            # Track tokens
-            input_tokens = response.usage.input_tokens
-            output_tokens = response.usage.output_tokens
-            self._input_tokens += input_tokens
-            self._output_tokens += output_tokens
+                usage = getattr(resp, "usage", None)
+                input_tokens = getattr(usage, "input_tokens", 0) if usage else 0
+                output_tokens = getattr(usage, "output_tokens", 0) if usage else 0
+                self._input_tokens += input_tokens
+                self._output_tokens += output_tokens
 
-            input_price, output_price = _price_per_token(self.model)
-            return CompletionResponse(
-                completion=completion,
-                tokens_used={
-                    "input": input_tokens,
-                    "output": output_tokens,
-                },
-                cost_usd=(
-                    input_tokens * input_price / 1_000_000
-                    + output_tokens * output_price / 1_000_000
-                ),
-            )
+                chunks = [
+                    getattr(block, "text", "")
+                    for block in (getattr(resp, "content", []) or [])
+                    if getattr(block, "type", None) == "text"
+                ]
+                completion = "\n".join(chunks).strip()
+                if not completion:
+                    raise RuntimeError(f"Empty response from {self.model}")
 
-        except Exception as e:
-            logger.error(f"Anthropic error for model {self.model}: {e}")
-            raise RuntimeError(f"Anthropic inference failed for {self.model}: {e}") from e
+                return CompletionResponse(
+                    completion=completion,
+                    tokens_used={"input": input_tokens, "output": output_tokens},
+                    cost_usd=(
+                        input_tokens * self._pricing.input_cost_per_million / 1_000_000
+                        + output_tokens * self._pricing.output_cost_per_million / 1_000_000
+                    ),
+                )
+
+            except self._anthropic.RateLimitError as exc:
+                headers: dict = {}
+                if hasattr(exc, "response") and exc.response is not None:
+                    headers = dict(exc.response.headers)
+                wait = self._wait_from_429_headers(headers, attempt)
+                logger.warning(
+                    "Anthropic rate limit (attempt %d/%d) — waiting %.0fs",
+                    attempt + 1, max_attempts, wait,
+                )
+                time.sleep(wait)
+
+            except self._anthropic.APIError as exc:
+                logger.error("Anthropic API error on attempt %d: %s", attempt + 1, exc)
+                if attempt == max_attempts - 1:
+                    raise RuntimeError(
+                        f"Anthropic inference failed for {self.model}: {exc}"
+                    ) from exc
+                time.sleep(min(4 * (2 ** attempt), 30))
+
+        raise RuntimeError(f"Anthropic call failed after {max_attempts} attempts")
