@@ -158,6 +158,11 @@ class AnthropicClient(CompletionClient):
                 time.sleep(wait)
 
             except self._anthropic.APIError as exc:
+                status = getattr(exc, "status_code", None)
+                if status is not None and 400 <= status < 500:
+                    raise RuntimeError(
+                        f"Anthropic inference failed for {self.model}: {exc}"
+                    ) from exc
                 logger.error("Anthropic API error on attempt %d: %s", attempt + 1, exc)
                 if attempt == max_attempts - 1:
                     raise RuntimeError(

@@ -1,7 +1,7 @@
 """Heuristic (non-LLM) tic detectors: regex, phrase sets, emoji, character counts."""
 import re
 from dataclasses import dataclass
-from typing import Dict, Iterable
+from typing import Dict, Tuple
 
 from compass.detectors.base import DetectorResult, TicDetector
 
@@ -30,8 +30,11 @@ class RegexDetector(TicDetector):
 class PhraseSetDetector(TicDetector):
     """Count case-insensitive whole-phrase occurrences from a fixed phrase set."""
     name: str
-    phrases: Iterable[str]
+    phrases: Tuple[str, ...]
     hit_threshold: int = 1
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "phrases", tuple(self.phrases))
 
     def detect(self, text: str) -> DetectorResult:
         phrase_hits: Dict[str, int] = {}

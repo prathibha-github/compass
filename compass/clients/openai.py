@@ -166,17 +166,17 @@ class OpenAIClient(CompletionClient):
                 resp = raw.parse()
                 headers = dict(raw.headers)
 
+                completion = resp.choices[0].message.content or ""
+                if not completion:
+                    raise RuntimeError(f"Empty response from {self.model}")
+
                 usage = resp.usage
-                input_tokens = usage.prompt_tokens
-                output_tokens = usage.completion_tokens
+                input_tokens = usage.prompt_tokens if usage else 0
+                output_tokens = usage.completion_tokens if usage else 0
                 self._input_tokens += input_tokens
                 self._output_tokens += output_tokens
 
                 self._adapt_from_success_headers(headers)
-
-                completion = resp.choices[0].message.content or ""
-                if not completion:
-                    raise RuntimeError(f"Empty response from {self.model}")
 
                 return CompletionResponse(
                     completion=completion,
@@ -202,6 +202,11 @@ class OpenAIClient(CompletionClient):
                 time.sleep(wait)
 
             except self._openai.APIError as exc:
+                status = getattr(exc, "status_code", None)
+                if status is not None and 400 <= status < 500:
+                    raise RuntimeError(
+                        f"OpenAI inference failed for {self.model}: {exc}"
+                    ) from exc
                 logger.error("OpenAI API error on attempt %d: %s", attempt + 1, exc)
                 if attempt == max_attempts - 1:
                     raise RuntimeError(

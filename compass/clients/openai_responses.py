@@ -138,22 +138,14 @@ class OpenAIResponsesClient(CompletionClient):
                     max_output_tokens=actual_max_tokens,
                 )
 
-                # Count tokens immediately even if we might retry on empty output
-                usage = getattr(resp, "usage", None)
-                if usage:
-                    input_tokens = getattr(usage, "input_tokens", 0)
-                    output_tokens = getattr(usage, "output_tokens", 0)
-                    self._input_tokens += input_tokens
-                    self._output_tokens += output_tokens
-                else:
-                    input_tokens = 0
-                    output_tokens = 0
-
                 completion = resp.output_text or ""
+                usage = getattr(resp, "usage", None)
+                input_tokens = getattr(usage, "input_tokens", 0) if usage else 0
+                output_tokens = getattr(usage, "output_tokens", 0) if usage else 0
 
                 if not completion.strip():
                     logger.warning(
-                        "Responses API returned empty output (tokens counted). status=%s, "
+                        "Responses API returned empty output. status=%s, "
                         "incomplete_details=%s, usage=%s, attempt=%d/%d",
                         getattr(resp, "status", "unknown"),
                         getattr(resp, "incomplete_details", None),
@@ -166,6 +158,9 @@ class OpenAIResponsesClient(CompletionClient):
                         )
                     time.sleep(min(4 * (2 ** attempt), 30))
                     continue
+
+                self._input_tokens += input_tokens
+                self._output_tokens += output_tokens
 
                 # Fallback token estimation when usage is unavailable
                 if not usage:

@@ -138,6 +138,7 @@ def analyze_text(
 def summarize_outputs(
     condition_outputs: Dict[str, List[str]],
     suite: TicSuite,
+    judge_fn: Optional[JudgeFn] = None,
 ) -> Dict[str, dict]:
     """Aggregate detector prevalence and intensity by condition."""
     summary: Dict[str, dict] = {}
@@ -147,7 +148,7 @@ def summarize_outputs(
         detector_hits = {detector.name: 0 for detector in suite.detectors}
 
         for output in outputs:
-            results = analyze_text(output, suite)
+            results = analyze_text(output, suite, judge_fn)
             for name, result in results.items():
                 detector_values[name].append(result.count)
                 if result.hit:
@@ -240,7 +241,7 @@ def compute_uplift(
     for condition, stats in condition_results.items():
         value = stats["detectors"].get(detector_name, {}).get(metric, 0.0)
         if base_value > 0:
-            delta = 100 * (value - base_value) / max(base_value, 0.1)
+            delta = 100 * (value - base_value) / base_value
         else:
             delta = 100 if value > 0 else 0
         uplift[condition] = round(delta, 1)
