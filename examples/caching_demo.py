@@ -6,11 +6,9 @@ between a fresh evaluation and a cached hit, plus how the cache persists.
 """
 import time
 
-from anthropic import Anthropic
+from compass import AnthropicClient, EvaluationCache, JudgeConfig, LLMJudge, RubricLibrary
 
-from compass import EvaluationCache, JudgeConfig, LLMJudge, RubricLibrary
-
-client = Anthropic()
+client = AnthropicClient(model="claude-opus-4-7")
 
 # Create two caches to show the difference
 fresh_cache = EvaluationCache(cache_dir=".compass_cache_fresh")

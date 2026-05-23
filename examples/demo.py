@@ -6,9 +6,8 @@ Shows: single evaluation, batch processing, multi-model comparison, cost trackin
 """
 import json
 
-from anthropic import Anthropic
-
 from compass import (
+    AnthropicClient,
     EvaluationCache,
     JudgeConfig,
     LLMJudge,
@@ -20,7 +19,7 @@ from compass import (
 )
 
 # Initialize client and cache
-client = Anthropic()
+client = AnthropicClient(model="claude-opus-4-7")
 cache = EvaluationCache(cache_dir=".compass_cache_demo")
 
 # Sample responses to evaluate

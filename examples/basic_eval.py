@@ -4,12 +4,10 @@
 Shows how to score a single completion using an LLM judge and a rubric.
 Useful for spot-checking outputs or small-scale evaluations.
 """
-from anthropic import Anthropic
-
-from compass import EvaluationCache, JudgeConfig, LLMJudge, RubricLibrary
+from compass import AnthropicClient, EvaluationCache, JudgeConfig, LLMJudge, RubricLibrary
 
 # Initialize the client and cache
-client = Anthropic()
+client = AnthropicClient(model="claude-opus-4-7")
 cache = EvaluationCache()
 
 # Pick a rubric from the library

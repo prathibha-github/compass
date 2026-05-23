@@ -4,11 +4,16 @@
 Processes many completions efficiently with caching. Useful for benchmarking
 models or evaluating datasets. Caching makes re-runs nearly instant.
 """
-from anthropic import Anthropic
+from compass import (
+    AnthropicClient,
+    EvaluationCache,
+    JudgeConfig,
+    LLMJudge,
+    RubricLibrary,
+    cost_summary,
+)
 
-from compass import EvaluationCache, JudgeConfig, LLMJudge, RubricLibrary, cost_summary
-
-client = Anthropic()
+client = AnthropicClient(model="claude-opus-4-7")
 cache = EvaluationCache()
 
 # Set up judge for detecting therapy-speak patterns
