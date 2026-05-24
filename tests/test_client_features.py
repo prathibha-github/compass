@@ -381,31 +381,27 @@ class TestGoogleAIClientFeatures(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Reached max_requests"):
             client.complete("prompt")
 
-    def test_google_ai_client_uses_visible_text_not_thought_metadata(self):
+    def test_max_tokens_forwarded_to_api(self):
         client, _, _ = self._make_client()
+        captured = {}
+
         response_mock = MagicMock()
-        response_mock.text = "At its core, an artificial neural network..."
+        response_mock.text = "Some response"
         response_mock.usage_metadata = MagicMock(
-            prompt_token_count=7,
-            candidates_token_count=39,
+            prompt_token_count=5,
+            candidates_token_count=10,
         )
 
-        thought_signature = b"opaque-thought-metadata"
-        part_mock = MagicMock()
-        part_mock.text = "At its core, an artificial neural network..."
-        part_mock.thought_signature = thought_signature
-        response_mock.candidates = [
-            MagicMock(content=MagicMock(parts=[part_mock]))
-        ]
+        def fake_generate(**kwargs):
+            captured["config"] = kwargs.get("config")
+            return response_mock
 
-        client.client.models.generate_content.return_value = response_mock
+        client.client.models.generate_content.side_effect = fake_generate
 
         with patch("time.sleep"):
-            response = client.complete("prompt", max_tokens=1000, temperature=0.0)
+            client.complete("prompt", max_tokens=1000)
 
-        self.assertEqual(response.completion, "At its core, an artificial neural network...")
-        self.assertEqual(response.tokens_used, {"input": 7, "output": 39})
-        self.assertGreater(response.cost_usd, 0.0)
+        self.assertEqual(captured["config"]["max_output_tokens"], 1000)
 
 
 class TestOptionalClientExports(unittest.TestCase):

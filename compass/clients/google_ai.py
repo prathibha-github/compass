@@ -94,7 +94,7 @@ class GoogleAIClient(CompletionClient):
     def complete(
         self,
         prompt: str,
-        max_tokens: int = 180,
+        max_tokens: int = 1000,
         temperature: float = 0.0,
         system: Optional[str] = None,
         logprobs: bool = False,
