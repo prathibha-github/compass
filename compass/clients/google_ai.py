@@ -115,6 +115,12 @@ class GoogleAIClient(CompletionClient):
         Raises:
             RuntimeError: If Gemini API call fails
         """
+        if logprobs:
+            raise ValueError(
+                f"{self.__class__.__name__} does not support logprobs"
+            )
+        del top_logprobs
+
         if self._pricing.max_requests and self._request_count >= self._pricing.max_requests:
             raise RuntimeError(
                 f"Reached max_requests={self._pricing.max_requests} for {self.model}. "
