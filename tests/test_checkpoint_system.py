@@ -10,6 +10,7 @@ from compass.evaluation.record_schema import (
     CHECKPOINT_SCHEMA_VERSION,
     RECORD_TYPE_BENCHMARK,
     RECORD_TYPE_SUITE,
+    VALID_RECORD_TYPES,
 )
 
 
@@ -186,6 +187,11 @@ class TestCheckpointManager(unittest.TestCase):
         """Record type values are part of checkpoint schema and must stay stable."""
         self.assertEqual(RECORD_TYPE_SUITE, "suite_eval")
         self.assertEqual(RECORD_TYPE_BENCHMARK, "benchmark_eval")
+        self.assertIsInstance(VALID_RECORD_TYPES, frozenset)
+        self.assertEqual(
+            VALID_RECORD_TYPES,
+            frozenset({"suite_eval", "benchmark_eval"}),
+        )
 
     def test_unsupported_schema_version_skipped(self):
         """Unsupported schema versions are skipped, valid records still load."""
