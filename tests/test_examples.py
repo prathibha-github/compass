@@ -230,5 +230,39 @@ class BenchmarkRecordLoadingTests(unittest.TestCase):
         self.assertEqual(rows[0]["prompt_id"], "p1")
 
 
+class BenchmarkQualityGuardrailTests(unittest.TestCase):
+    def test_compute_generation_quality_flags_token_cap_fragments(self):
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        quality = benchmark._compute_generation_quality(
+            completion="At its core, a",
+            output_tokens=150,
+            max_tokens_requested=150,
+        )
+        self.assertTrue(quality["hit_token_cap"])
+        self.assertTrue(quality["is_fragment"])
+        self.assertTrue(quality["quality_flagged"])
+
+    def test_analyze_results_includes_quality_metrics(self):
+        import tempfile
+
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        line = (
+            '{"model":"llama3.1","rubric":"clarity","prompt_id":"p1","task_type":"general",'
+            '"sample_idx":0,"score":0.2,"hit":true,"generation_quality_flagged":true,'
+            '"generation_hit_token_cap":true,"generation_is_fragment":true}'
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = pathlib.Path(tmpdir) / "evaluations.jsonl"
+            path.write_text(line + "\n")
+            stats = benchmark.analyze_results(path, pathlib.Path(tmpdir))
+
+        key = "llama3.1|clarity"
+        self.assertIn(key, stats)
+        self.assertEqual(stats[key]["quality_flagged_pct"], 100.0)
+        self.assertEqual(stats[key]["token_cap_pct"], 100.0)
+        self.assertEqual(stats[key]["fragment_pct"], 100.0)
+        self.assertIsNone(stats[key]["quality_filtered_hit_rate"])
+
+
 if __name__ == "__main__":
     unittest.main()

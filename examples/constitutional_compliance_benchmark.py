@@ -54,6 +54,45 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+MIN_VISIBLE_CHARS = 80
+_SENTENCE_ENDINGS = (".", "!", "?", "\"", "'", "`")
+
+
+def _compute_generation_quality(
+    completion: str, output_tokens: int, max_tokens_requested: int
+) -> dict:
+    text = (completion or "").strip()
+    visible_chars = len(text)
+    visible_tokens = len(text.split()) if text else 0
+    hit_token_cap = bool(max_tokens_requested > 0 and output_tokens >= max_tokens_requested)
+    sentence_complete = bool(text and text.endswith(_SENTENCE_ENDINGS))
+    is_fragment = (
+        not text
+        or (visible_chars < MIN_VISIBLE_CHARS and not sentence_complete)
+        or (hit_token_cap and not sentence_complete)
+    )
+    quality_flagged = bool(hit_token_cap or is_fragment)
+    return {
+        "visible_chars": visible_chars,
+        "visible_tokens": visible_tokens,
+        "hit_token_cap": hit_token_cap,
+        "is_fragment": is_fragment,
+        "quality_flagged": quality_flagged,
+    }
+
+
+def _generation_quality_from_record(record: dict) -> dict:
+    output_tokens = 0
+    tokens_used = record.get("tokens_used")
+    if isinstance(tokens_used, dict):
+        output_tokens = int(tokens_used.get("output", 0) or 0)
+    max_tokens_requested = int(record.get("max_tokens_requested", 0) or 0)
+    return _compute_generation_quality(
+        completion=record.get("completion", ""),
+        output_tokens=output_tokens,
+        max_tokens_requested=max_tokens_requested,
+    )
+
 
 def load_generation_records(generations_path: Path) -> dict:
     """Load generation rows with schema migration and validation."""
@@ -387,6 +426,11 @@ def generate_completions(
                             max_tokens=max_tokens,
                             temperature=0.7,
                         )
+                        quality = _compute_generation_quality(
+                            completion=response.completion,
+                            output_tokens=int(response.tokens_used.get("output", 0)),
+                            max_tokens_requested=max_tokens,
+                        )
 
                         checkpoint.save(migrate_generation_record({
                             "model": model,
@@ -398,6 +442,12 @@ def generate_completions(
                             "completion": response.completion,
                             "tokens_used": response.tokens_used,
                             "cost_usd": response.cost_usd,
+                            "max_tokens_requested": max_tokens,
+                            "visible_chars": quality["visible_chars"],
+                            "visible_tokens": quality["visible_tokens"],
+                            "hit_token_cap": quality["hit_token_cap"],
+                            "is_fragment": quality["is_fragment"],
+                            "quality_flagged": quality["quality_flagged"],
                         }))
 
                         count += 1
@@ -504,6 +554,7 @@ def evaluate_completions(
         try:
             judge = judges[rubric]
             result = judge.evaluate(gen["completion"])
+            quality = _generation_quality_from_record(gen)
 
             checkpoint.save(migrate_evaluation_record({
                 "model": model,
@@ -517,6 +568,11 @@ def evaluate_completions(
                 "confidence": result.confidence,
                 "rationale": result.rationale[:100] if result.rationale else "",
                 "judge_model": judge_model,
+                "generation_visible_chars": quality["visible_chars"],
+                "generation_visible_tokens": quality["visible_tokens"],
+                "generation_hit_token_cap": quality["hit_token_cap"],
+                "generation_is_fragment": quality["is_fragment"],
+                "generation_quality_flagged": quality["quality_flagged"],
             }))
 
             count += 1
@@ -547,6 +603,13 @@ def analyze_results(evaluations_path: Path, output_dir: Path) -> dict:
         total = len(results)
         hit_rate = (hits / total * 100) if total > 0 else 0.0
         mean_score = sum(r["score"] for r in results) / total if total > 0 else 0.0
+        flagged = sum(1 for r in results if r.get("generation_quality_flagged"))
+        token_cap_hits = sum(1 for r in results if r.get("generation_hit_token_cap"))
+        fragments = sum(1 for r in results if r.get("generation_is_fragment"))
+        quality_filtered = [r for r in results if not r.get("generation_quality_flagged")]
+        qf_hits = sum(1 for r in quality_filtered if r["hit"])
+        qf_total = len(quality_filtered)
+        qf_hit_rate = (qf_hits / qf_total * 100) if qf_total > 0 else None
 
         key_str = f"{model}|{rubric}"
         stats[key_str] = {
@@ -556,6 +619,11 @@ def analyze_results(evaluations_path: Path, output_dir: Path) -> dict:
             "mean_score": mean_score,
             "hits": hits,
             "total": total,
+            "quality_flagged_pct": (flagged / total * 100) if total > 0 else 0.0,
+            "token_cap_pct": (token_cap_hits / total * 100) if total > 0 else 0.0,
+            "fragment_pct": (fragments / total * 100) if total > 0 else 0.0,
+            "quality_filtered_total": qf_total,
+            "quality_filtered_hit_rate": qf_hit_rate,
         }
 
     return stats
@@ -569,14 +637,22 @@ def print_summary(stats: dict, evaluations_path: Path):
     logger.info("=" * 100)
     logger.info("")
     logger.info(
-        f"{'Model':<15} | {'Rubric':<15} | {'Hit Rate':>10} | {'Mean Score':>11} | {'Samples':>7}"
+        f"{'Model':<15} | {'Rubric':<15} | {'Hit Rate':>9} | {'Q-Flag':>7} | "
+        f"{'Cap':>5} | {'Frag':>5} | {'QF Hit':>7} | {'Samples':>7}"
     )
     logger.info("-" * 100)
 
     for key in sorted(stats.keys()):
         s = stats[key]
+        qf_hit_text = (
+            f"{s['quality_filtered_hit_rate']:.1f}%"
+            if s["quality_filtered_hit_rate"] is not None
+            else "n/a"
+        )
         logger.info(
-            f"{s['model']:<15} | {s['rubric']:<15} | {s['hit_rate']:>9.1f}% | {s['mean_score']:>10.3f} | {s['total']:>7}"
+            f"{s['model']:<15} | {s['rubric']:<15} | {s['hit_rate']:>8.1f}% | "
+            f"{s['quality_flagged_pct']:>6.1f}% | {s['token_cap_pct']:>4.1f}% | "
+            f"{s['fragment_pct']:>4.1f}% | {qf_hit_text:>7} | {s['total']:>7}"
         )
 
     logger.info("")
