@@ -381,6 +381,58 @@ class TestGoogleAIClientFeatures(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Reached max_requests"):
             client.complete("prompt")
 
+    def test_uses_response_text_not_thought_signature(self):
+        """Client must use response.text, not attempt to decode thought_signature bytes.
+
+        Real Gemini thinking models return a single part that has both .text
+        (the visible answer) and .thought_signature (opaque internal reasoning
+        bytes). The client must read response.text and ignore thought_signature.
+        """
+        client, _, _ = self._make_client()
+
+        part_mock = MagicMock()
+        part_mock.text = "At its core, an artificial neural network..."
+        part_mock.thought_signature = b"ErgeCrUeAQw51sc-opaque-reasoning-bytes"
+
+        response_mock = MagicMock()
+        response_mock.text = "At its core, an artificial neural network..."
+        response_mock.candidates = [
+            MagicMock(content=MagicMock(parts=[part_mock]))
+        ]
+        response_mock.usage_metadata = MagicMock(
+            prompt_token_count=7,
+            candidates_token_count=39,
+        )
+        client.client.models.generate_content.return_value = response_mock
+
+        with patch("time.sleep"):
+            response = client.complete("What is a neural network?", max_tokens=1000)
+
+        self.assertEqual(response.completion, "At its core, an artificial neural network...")
+        self.assertEqual(response.tokens_used, {"input": 7, "output": 39})
+
+    def test_max_tokens_forwarded_to_api(self):
+        client, _, _ = self._make_client()
+        captured = {}
+
+        response_mock = MagicMock()
+        response_mock.text = "Some response"
+        response_mock.usage_metadata = MagicMock(
+            prompt_token_count=5,
+            candidates_token_count=10,
+        )
+
+        def fake_generate(**kwargs):
+            captured["config"] = kwargs.get("config")
+            return response_mock
+
+        client.client.models.generate_content.side_effect = fake_generate
+
+        with patch("time.sleep"):
+            client.complete("prompt", max_tokens=1000)
+
+        self.assertEqual(captured["config"]["max_output_tokens"], 1000)
+
 
 class TestOptionalClientExports(unittest.TestCase):
 
