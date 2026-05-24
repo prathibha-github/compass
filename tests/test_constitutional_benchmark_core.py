@@ -31,6 +31,35 @@ def _load_benchmark_module():
 
 
 class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
+    def test_generate_completions_reuses_client_per_model(self):
+        benchmark = _load_benchmark_module()
+        prompts = {
+            "task_focus": [
+                {"id": "p1", "text": "hello", "task_type": "general"},
+                {"id": "p2", "text": "hello again", "task_type": "general"},
+            ]
+        }
+        created = []
+
+        class _Client:
+            def complete(self, prompt, max_tokens, temperature):
+                return SimpleNamespace(
+                    completion="ok",
+                    tokens_used={"input": 1, "output": 10},
+                    cost_usd=0.0,
+                )
+
+        def _make_client(model):
+            created.append(model)
+            return _Client()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out = pathlib.Path(tmpdir)
+            with patch("compass.benchmark.runner.OllamaClient", side_effect=_make_client):
+                benchmark.generate_completions(["llama3.1"], prompts, 2, out)
+
+        self.assertEqual(created, ["llama3.1"])
+
     def test_generate_completions_resume_skips_completed_samples(self):
         benchmark = _load_benchmark_module()
         prompts = {
@@ -54,13 +83,13 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             out = pathlib.Path(tmpdir)
             first_client = _Client()
-            with patch.object(benchmark, "OllamaClient", return_value=first_client):
+            with patch("compass.benchmark.runner.OllamaClient", return_value=first_client):
                 benchmark.generate_completions(["llama3.1"], prompts, 2, out)
             self.assertEqual(first_client.calls, 2)
 
             # Resume pass should skip both completed samples.
             second_client = _Client()
-            with patch.object(benchmark, "OllamaClient", return_value=second_client):
+            with patch("compass.benchmark.runner.OllamaClient", return_value=second_client):
                 benchmark.generate_completions(["llama3.1"], prompts, 2, out)
             self.assertEqual(second_client.calls, 0)
 
@@ -83,7 +112,7 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             out = pathlib.Path(tmpdir)
-            with patch.object(benchmark, "OllamaClient", return_value=_Client()):
+            with patch("compass.benchmark.runner.OllamaClient", return_value=_Client()):
                 path = benchmark.generate_completions(["llama3.1"], prompts, 1, out)
 
             row = json.loads(path.read_text().strip().splitlines()[0])
@@ -161,8 +190,8 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
             )
 
             _FakeJudge.calls = 0
-            with patch.object(benchmark, "LLMJudge", side_effect=_FakeJudge), patch.object(
-                benchmark, "OllamaClient", return_value=SimpleNamespace()
+            with patch("compass.benchmark.runner.LLMJudge", side_effect=_FakeJudge), patch(
+                "compass.benchmark.runner.OllamaClient", return_value=SimpleNamespace()
             ):
                 benchmark.evaluate_completions(generations_path, "llama3.1", out)
 
@@ -224,4 +253,3 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
