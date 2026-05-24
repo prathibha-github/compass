@@ -13,13 +13,23 @@ class MockClient(CompletionClient):
         self.cost = cost
         self.calls = []
 
-    def complete(self, prompt, max_tokens=180, temperature=0.0, system=None):
+    def complete(
+        self,
+        prompt,
+        max_tokens=180,
+        temperature=0.0,
+        system=None,
+        logprobs=False,
+        top_logprobs=0,
+    ):
         self.calls.append(
             {
                 "prompt": prompt,
                 "max_tokens": max_tokens,
                 "temperature": temperature,
                 "system": system,
+                "logprobs": logprobs,
+                "top_logprobs": top_logprobs,
             }
         )
         return CompletionResponse(

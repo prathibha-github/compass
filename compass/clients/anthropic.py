@@ -92,6 +92,8 @@ class AnthropicClient(CompletionClient):
         max_tokens: int = 180,
         temperature: float = 0.0,
         system: Optional[str] = None,
+        logprobs: bool = False,
+        top_logprobs: int = 0,
     ) -> CompletionResponse:
         """
         Generate completion via Anthropic API with retry/backoff on 429.
@@ -108,6 +110,12 @@ class AnthropicClient(CompletionClient):
         Raises:
             RuntimeError: If the API call fails after all retries
         """
+        if logprobs:
+            raise ValueError(
+                f"{self.__class__.__name__} does not support logprobs"
+            )
+        del top_logprobs
+
         max_attempts = 10
         for attempt in range(max_attempts):
             self._throttle()

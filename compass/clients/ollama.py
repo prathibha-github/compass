@@ -76,6 +76,8 @@ class OllamaClient(CompletionClient):
         max_tokens: int = 180,
         temperature: float = 0.0,
         system: Optional[str] = None,
+        logprobs: bool = False,
+        top_logprobs: int = 0,
     ) -> CompletionResponse:
         """
         Generate completion via Ollama.
@@ -92,6 +94,12 @@ class OllamaClient(CompletionClient):
         Raises:
             RuntimeError: If Ollama API call fails (e.g., model not loaded)
         """
+        if logprobs:
+            raise ValueError(
+                f"{self.__class__.__name__} does not support logprobs"
+            )
+        del top_logprobs
+
         self._throttle()
         self._last_call_at = time.monotonic()
 

@@ -101,6 +101,8 @@ class OpenAIResponsesClient(CompletionClient):
         max_tokens: int = 180,
         temperature: float = 0.0,
         system: Optional[str] = None,
+        logprobs: bool = False,
+        top_logprobs: int = 0,
     ) -> CompletionResponse:
         """
         Generate completion via OpenAI Responses API with retry/backoff on 429.
@@ -121,6 +123,12 @@ class OpenAIResponsesClient(CompletionClient):
         Raises:
             RuntimeError: If the API call fails after all retries
         """
+        if logprobs:
+            raise ValueError(
+                f"{self.__class__.__name__} does not support logprobs"
+            )
+        del top_logprobs
+
         # gpt-5 models need a larger token budget for reasoning + output
         actual_max_tokens = max_tokens * 10 if self.model.startswith("gpt-5") else max_tokens
         instructions = system or "You are a helpful assistant."
