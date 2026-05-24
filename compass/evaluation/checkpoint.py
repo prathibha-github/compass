@@ -4,6 +4,12 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Set, Tuple
 
+from compass.evaluation.record_schema import (
+    checkpoint_identity,
+    migrate_checkpoint_record,
+    suite_sample_identity,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,28 +71,8 @@ class CheckpointManager:
                     continue
                 try:
                     result = json.loads(line)
-                    sample_idx = result.get("sample_idx", 0)
-                    if not isinstance(sample_idx, int):
-                        sample_idx = int(sample_idx)
-
-                    # Try new benchmark format first (model, rubric, prompt_id, sample_idx)
-                    if "model" in result and "rubric" in result and "prompt_id" in result:
-                        key = (result["model"], result["rubric"], result["prompt_id"], sample_idx)
-                        completed.add(key)
-                    # Fall back to old format (model, suite, detector, prompt_id, condition, sample_idx)
-                    elif all(k in result for k in ["model", "suite", "detector", "prompt_id", "condition"]):
-                        key = (
-                            result["model"],
-                            result["suite"],
-                            result["detector"],
-                            result["prompt_id"],
-                            result["condition"],
-                            sample_idx,
-                        )
-                        completed.add(key)
-                    else:
-                        logger.warning(f"Skipping record at checkpoint line {line_num}: unknown format")
-                        continue
+                    key = checkpoint_identity(result)
+                    completed.add(key)
 
                 except json.JSONDecodeError:
                     logger.warning(f"Skipping malformed JSON at checkpoint line {line_num}")
@@ -109,8 +95,19 @@ class CheckpointManager:
                    condition, sample_idx, score, hit, confidence,
                    rationale, input_tokens, output_tokens
         """
+        try:
+            normalized = migrate_checkpoint_record(result)
+        except (TypeError, ValueError) as e:
+            # Preserve save() best-effort behavior for callers that pass
+            # non-standard checkpoint rows. load() will skip unreadable rows.
+            logger.warning(
+                "Saving raw checkpoint record without schema tags due to "
+                "normalization error: %s",
+                e,
+            )
+            normalized = result
         with open(self.checkpoint_path, "a") as f:
-            f.write(json.dumps(result) + "\n")
+            f.write(json.dumps(normalized) + "\n")
 
     def reset(self) -> int:
         """
@@ -165,7 +162,13 @@ class CheckpointManager:
             True if all detectors for this sample are complete
         """
         return all(
-            (model, suite, detector_name, prompt_id, condition, sample_idx)
-            in completed
+            suite_sample_identity(
+                model=model,
+                suite=suite,
+                detector=detector_name,
+                prompt_id=prompt_id,
+                condition=condition,
+                sample_idx=sample_idx,
+            ) in completed
             for detector_name in detector_names
         )
