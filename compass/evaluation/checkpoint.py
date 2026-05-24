@@ -4,7 +4,11 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Set, Tuple
 
-from compass.evaluation.record_schema import checkpoint_identity, migrate_checkpoint_record
+from compass.evaluation.record_schema import (
+    checkpoint_identity,
+    migrate_checkpoint_record,
+    suite_sample_identity,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +95,17 @@ class CheckpointManager:
                    condition, sample_idx, score, hit, confidence,
                    rationale, input_tokens, output_tokens
         """
-        normalized = migrate_checkpoint_record(result)
+        try:
+            normalized = migrate_checkpoint_record(result)
+        except (TypeError, ValueError) as e:
+            # Preserve save() best-effort behavior for callers that pass
+            # non-standard checkpoint rows. load() will skip unreadable rows.
+            logger.warning(
+                "Saving raw checkpoint record without schema tags due to "
+                "normalization error: %s",
+                e,
+            )
+            normalized = result
         with open(self.checkpoint_path, "a") as f:
             f.write(json.dumps(normalized) + "\n")
 
@@ -148,7 +162,13 @@ class CheckpointManager:
             True if all detectors for this sample are complete
         """
         return all(
-            (model, suite, detector_name, prompt_id, condition, sample_idx)
-            in completed
+            suite_sample_identity(
+                model=model,
+                suite=suite,
+                detector=detector_name,
+                prompt_id=prompt_id,
+                condition=condition,
+                sample_idx=sample_idx,
+            ) in completed
             for detector_name in detector_names
         )

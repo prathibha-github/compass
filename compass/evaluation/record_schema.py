@@ -5,9 +5,10 @@ from typing import Any, Dict, Tuple
 CHECKPOINT_SCHEMA_VERSION = 1
 LEGACY_SCHEMA_VERSION = 0
 
-_RECORD_TYPE_SUITE = "suite_eval"
-_RECORD_TYPE_BENCHMARK = "benchmark_eval"
-_VALID_RECORD_TYPES = {_RECORD_TYPE_SUITE, _RECORD_TYPE_BENCHMARK}
+# Persisted on-disk values: treat as frozen schema constants.
+RECORD_TYPE_SUITE = "suite_eval"
+RECORD_TYPE_BENCHMARK = "benchmark_eval"
+VALID_RECORD_TYPES = {RECORD_TYPE_SUITE, RECORD_TYPE_BENCHMARK}
 _SUPPORTED_INPUT_SCHEMA_VERSIONS = {LEGACY_SCHEMA_VERSION, CHECKPOINT_SCHEMA_VERSION}
 
 
@@ -51,19 +52,21 @@ def migrate_checkpoint_record(record: Dict[str, Any]) -> Dict[str, Any]:
 
     record_type = data.get("record_type")
     if record_type is None:
-        if _is_benchmark_shape(data):
-            record_type = _RECORD_TYPE_BENCHMARK
-        elif _is_suite_shape(data):
-            record_type = _RECORD_TYPE_SUITE
+        # Prefer suite shape when fields overlap (some suite records may also
+        # carry a rubric field for reporting).
+        if _is_suite_shape(data):
+            record_type = RECORD_TYPE_SUITE
+        elif _is_benchmark_shape(data):
+            record_type = RECORD_TYPE_BENCHMARK
         else:
             raise ValueError("unknown checkpoint record format")
 
-    if record_type not in _VALID_RECORD_TYPES:
+    if record_type not in VALID_RECORD_TYPES:
         raise ValueError(f"unsupported checkpoint record_type={record_type!r}")
 
-    if record_type == _RECORD_TYPE_BENCHMARK and not _is_benchmark_shape(data):
+    if record_type == RECORD_TYPE_BENCHMARK and not _is_benchmark_shape(data):
         raise ValueError("benchmark_eval record missing required fields")
-    if record_type == _RECORD_TYPE_SUITE and not _is_suite_shape(data):
+    if record_type == RECORD_TYPE_SUITE and not _is_suite_shape(data):
         raise ValueError("suite_eval record missing required fields")
 
     data["schema_version"] = CHECKPOINT_SCHEMA_VERSION
@@ -74,7 +77,7 @@ def migrate_checkpoint_record(record: Dict[str, Any]) -> Dict[str, Any]:
 def checkpoint_identity(record: Dict[str, Any]) -> Tuple[Any, ...]:
     """Return canonical identity tuple for a normalized checkpoint record."""
     normalized = migrate_checkpoint_record(record)
-    if normalized["record_type"] == _RECORD_TYPE_BENCHMARK:
+    if normalized["record_type"] == RECORD_TYPE_BENCHMARK:
         return (
             normalized["model"],
             normalized["rubric"],
@@ -82,11 +85,30 @@ def checkpoint_identity(record: Dict[str, Any]) -> Tuple[Any, ...]:
             normalized["sample_idx"],
         )
 
+    return suite_sample_identity(
+        model=normalized["model"],
+        suite=normalized["suite"],
+        detector=normalized["detector"],
+        prompt_id=normalized["prompt_id"],
+        condition=normalized["condition"],
+        sample_idx=normalized["sample_idx"],
+    )
+
+
+def suite_sample_identity(
+    model: str,
+    suite: str,
+    detector: str,
+    prompt_id: str,
+    condition: str,
+    sample_idx: int,
+) -> Tuple[Any, ...]:
+    """Canonical identity tuple for suite-eval checkpoint rows."""
     return (
-        normalized["model"],
-        normalized["suite"],
-        normalized["detector"],
-        normalized["prompt_id"],
-        normalized["condition"],
-        normalized["sample_idx"],
+        model,
+        suite,
+        detector,
+        prompt_id,
+        condition,
+        sample_idx,
     )

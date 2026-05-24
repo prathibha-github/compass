@@ -6,7 +6,11 @@ import unittest
 from pathlib import Path
 
 from compass.evaluation.checkpoint import CheckpointManager
-from compass.evaluation.record_schema import CHECKPOINT_SCHEMA_VERSION
+from compass.evaluation.record_schema import (
+    CHECKPOINT_SCHEMA_VERSION,
+    RECORD_TYPE_BENCHMARK,
+    RECORD_TYPE_SUITE,
+)
 
 
 class TestCheckpointManager(unittest.TestCase):
@@ -152,6 +156,36 @@ class TestCheckpointManager(unittest.TestCase):
         self.assertIn(("gpt-4o", "task_focus", "d1", "p1", "c1", 0), completed)
         self.assertIn(("gpt-5-mini", "clarity", "p2", 3), completed)
         self.assertEqual(len(completed), 2)
+
+    def test_inference_prefers_suite_shape_when_rubric_is_present(self):
+        """Suite rows with an extra rubric key stay suite-shaped on load."""
+        line = (
+            '{"model":"gpt-4o","suite":"task_focus","detector":"d1",'
+            '"prompt_id":"p1","condition":"c1","rubric":"clarity","sample_idx":0}'
+        )
+        self.checkpoint_path.write_text(line + "\n")
+
+        cp = CheckpointManager(str(self.checkpoint_path))
+        completed = cp.load()
+
+        self.assertIn(("gpt-4o", "task_focus", "d1", "p1", "c1", 0), completed)
+        self.assertEqual(len(completed), 1)
+
+    def test_save_unknown_shape_is_best_effort_and_non_fatal(self):
+        """save() keeps prior non-fatal behavior for unknown dict shapes."""
+        cp = CheckpointManager(str(self.checkpoint_path))
+
+        cp.save({"foo": "bar", "value": 123})
+        lines = self.checkpoint_path.read_text().strip().split("\n")
+        self.assertEqual(len(lines), 1)
+        saved = json.loads(lines[0])
+        self.assertEqual(saved["foo"], "bar")
+        self.assertEqual(saved["value"], 123)
+
+    def test_record_type_constants_are_stable_public_values(self):
+        """Record type values are part of checkpoint schema and must stay stable."""
+        self.assertEqual(RECORD_TYPE_SUITE, "suite_eval")
+        self.assertEqual(RECORD_TYPE_BENCHMARK, "benchmark_eval")
 
     def test_unsupported_schema_version_skipped(self):
         """Unsupported schema versions are skipped, valid records still load."""
