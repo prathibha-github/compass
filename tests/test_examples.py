@@ -298,5 +298,32 @@ class BenchmarkQualityGuardrailTests(unittest.TestCase):
         self.assertTrue(quality["is_fragment"])
 
 
+class BenchmarkTokenBudgetPolicyTests(unittest.TestCase):
+    def test_validate_token_budget_policy_fails_on_mixed_by_default(self):
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        with self.assertRaisesRegex(ValueError, "Mixed max token budgets detected"):
+            benchmark.validate_token_budget_policy(
+                ["gemini-2.5-flash", "llama3.1"],
+                allow_mixed=False,
+            )
+
+    def test_validate_token_budget_policy_allows_mixed_with_override(self):
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        budgets = benchmark.validate_token_budget_policy(
+            ["gemini-2.5-flash", "llama3.1"],
+            allow_mixed=True,
+        )
+        self.assertEqual(budgets["gemini-2.5-flash"], 2000)
+        self.assertEqual(budgets["llama3.1"], 150)
+
+    def test_validate_token_budget_policy_uniform_models(self):
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        budgets = benchmark.validate_token_budget_policy(
+            ["llama3.1", "mistral", "phi"],
+            allow_mixed=False,
+        )
+        self.assertEqual(set(budgets.values()), {150})
+
+
 if __name__ == "__main__":
     unittest.main()
