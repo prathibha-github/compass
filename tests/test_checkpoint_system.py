@@ -1,10 +1,12 @@
 """Tests for checkpoint/resume system."""
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from compass.evaluation.checkpoint import CheckpointManager
+from compass.evaluation.record_schema import CHECKPOINT_SCHEMA_VERSION
 
 
 class TestCheckpointManager(unittest.TestCase):
@@ -69,6 +71,9 @@ class TestCheckpointManager(unittest.TestCase):
         self.assertTrue(self.checkpoint_path.exists())
         lines = self.checkpoint_path.read_text().strip().split('\n')
         self.assertEqual(len(lines), 1)
+        saved = json.loads(lines[0])
+        self.assertEqual(saved["schema_version"], CHECKPOINT_SCHEMA_VERSION)
+        self.assertEqual(saved["record_type"], "suite_eval")
 
     def test_identity_tuple_format(self):
         """Identity tuple matches (model, suite, detector, prompt_id, condition, sample_idx)."""
@@ -130,6 +135,37 @@ class TestCheckpointManager(unittest.TestCase):
 
         # Should skip incomplete, load complete
         self.assertEqual(len(completed), 1)
+
+    def test_mixed_legacy_and_versioned_records_load(self):
+        """Legacy and versioned records in one checkpoint both load."""
+        lines = [
+            # Legacy suite-style record (no sample_idx, no schema_version)
+            '{"model": "gpt-4o", "suite": "task_focus", "detector": "d1", "prompt_id": "p1", "condition": "c1"}',
+            # Current benchmark-style record
+            '{"model": "gpt-5-mini", "rubric": "clarity", "prompt_id": "p2", "sample_idx": "3", "schema_version": 1, "record_type": "benchmark_eval"}',
+        ]
+        self.checkpoint_path.write_text("\n".join(lines) + "\n")
+
+        cp = CheckpointManager(str(self.checkpoint_path))
+        completed = cp.load()
+
+        self.assertIn(("gpt-4o", "task_focus", "d1", "p1", "c1", 0), completed)
+        self.assertIn(("gpt-5-mini", "clarity", "p2", 3), completed)
+        self.assertEqual(len(completed), 2)
+
+    def test_unsupported_schema_version_skipped(self):
+        """Unsupported schema versions are skipped, valid records still load."""
+        lines = [
+            '{"model": "gpt-4o", "suite": "task_focus", "detector": "d1", "prompt_id": "p1", "condition": "c1", "schema_version": 99}',
+            '{"model": "gpt-4o", "suite": "task_focus", "detector": "d2", "prompt_id": "p2", "condition": "c1", "sample_idx": 1}',
+        ]
+        self.checkpoint_path.write_text("\n".join(lines) + "\n")
+
+        cp = CheckpointManager(str(self.checkpoint_path))
+        completed = cp.load()
+
+        self.assertEqual(len(completed), 1)
+        self.assertIn(("gpt-4o", "task_focus", "d2", "p2", "c1", 1), completed)
 
     def test_sample_complete_all_detectors_done(self):
         """is_sample_complete() returns True when all detectors for sample are done."""

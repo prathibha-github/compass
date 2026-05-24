@@ -4,6 +4,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Set, Tuple
 
+from compass.evaluation.record_schema import checkpoint_identity, migrate_checkpoint_record
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,28 +67,8 @@ class CheckpointManager:
                     continue
                 try:
                     result = json.loads(line)
-                    sample_idx = result.get("sample_idx", 0)
-                    if not isinstance(sample_idx, int):
-                        sample_idx = int(sample_idx)
-
-                    # Try new benchmark format first (model, rubric, prompt_id, sample_idx)
-                    if "model" in result and "rubric" in result and "prompt_id" in result:
-                        key = (result["model"], result["rubric"], result["prompt_id"], sample_idx)
-                        completed.add(key)
-                    # Fall back to old format (model, suite, detector, prompt_id, condition, sample_idx)
-                    elif all(k in result for k in ["model", "suite", "detector", "prompt_id", "condition"]):
-                        key = (
-                            result["model"],
-                            result["suite"],
-                            result["detector"],
-                            result["prompt_id"],
-                            result["condition"],
-                            sample_idx,
-                        )
-                        completed.add(key)
-                    else:
-                        logger.warning(f"Skipping record at checkpoint line {line_num}: unknown format")
-                        continue
+                    key = checkpoint_identity(result)
+                    completed.add(key)
 
                 except json.JSONDecodeError:
                     logger.warning(f"Skipping malformed JSON at checkpoint line {line_num}")
@@ -109,8 +91,9 @@ class CheckpointManager:
                    condition, sample_idx, score, hit, confidence,
                    rationale, input_tokens, output_tokens
         """
+        normalized = migrate_checkpoint_record(result)
         with open(self.checkpoint_path, "a") as f:
-            f.write(json.dumps(result) + "\n")
+            f.write(json.dumps(normalized) + "\n")
 
     def reset(self) -> int:
         """
