@@ -230,5 +230,73 @@ class BenchmarkRecordLoadingTests(unittest.TestCase):
         self.assertEqual(rows[0]["prompt_id"], "p1")
 
 
+class BenchmarkQualityGuardrailTests(unittest.TestCase):
+    def test_compute_generation_quality_flags_token_cap_fragments(self):
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        quality = benchmark._compute_generation_quality(
+            completion="At its core, a",
+            output_tokens=150,
+            max_tokens_requested=150,
+        )
+        self.assertTrue(quality["hit_token_cap"])
+        self.assertTrue(quality["is_fragment"])
+        self.assertTrue(quality["quality_flagged"])
+        self.assertIn("visible_word_count", quality)
+
+    def test_analyze_results_includes_quality_metrics(self):
+        import tempfile
+
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        line = (
+            '{"model":"llama3.1","rubric":"clarity","prompt_id":"p1","task_type":"general",'
+            '"sample_idx":0,"score":0.2,"hit":true,"generation_quality_flagged":true,'
+            '"generation_hit_token_cap":true,"generation_is_fragment":true}'
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = pathlib.Path(tmpdir) / "evaluations.jsonl"
+            path.write_text(line + "\n")
+            stats = benchmark.analyze_results(path, pathlib.Path(tmpdir))
+
+        key = "llama3.1|clarity"
+        self.assertIn(key, stats)
+        self.assertEqual(stats[key]["quality_flagged_pct"], 100.0)
+        self.assertEqual(stats[key]["token_cap_pct"], 100.0)
+        self.assertEqual(stats[key]["fragment_pct"], 100.0)
+        self.assertIsNone(stats[key]["quality_filtered_hit_rate"])
+
+    def test_legacy_rows_infer_token_cap_when_missing_max_tokens(self):
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        quality = benchmark._generation_quality_from_record(
+            {
+                "model": "gpt-5.4-mini",
+                "completion": "At its core, a",
+                "tokens_used": {"output": 150},
+            }
+        )
+        self.assertTrue(quality["hit_token_cap"])
+        self.assertTrue(quality["token_cap_inferred_legacy"])
+        self.assertTrue(quality["quality_flagged"])
+
+    def test_finish_reason_can_mark_token_cap(self):
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        quality = benchmark._compute_generation_quality(
+            completion="Long response...",
+            output_tokens=20,
+            max_tokens_requested=1000,
+            finish_reason="MAX_TOKENS",
+        )
+        self.assertTrue(quality["hit_token_cap"])
+        self.assertTrue(quality["quality_flagged"])
+
+    def test_backtick_does_not_mark_sentence_complete(self):
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        quality = benchmark._compute_generation_quality(
+            completion="`print('x')`",
+            output_tokens=5,
+            max_tokens_requested=2000,
+        )
+        self.assertTrue(quality["is_fragment"])
+
+
 if __name__ == "__main__":
     unittest.main()
