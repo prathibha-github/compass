@@ -13,8 +13,7 @@ logger = logging.getLogger(__name__)
 
 def analyze_results(evaluations_path: Path, output_dir: Path) -> dict:
     """Analyze evaluation results and generate report data."""
-    del output_dir
-
+    # Reserved for future report artifact paths; kept for API compatibility.
     results_by_key = defaultdict(list)
     for result in load_evaluation_records(evaluations_path):
         key = (result["model"], result["rubric"])
@@ -99,7 +98,7 @@ def rank_models(
     output_dir: Path,
 ) -> None:
     """Perform pairwise model ranking."""
-    del output_dir
+    # Reserved for future ranking artifact paths; kept for API compatibility.
 
     logger.info("Computing pairwise model rankings...")
     ranker = PairwiseRanker()
@@ -145,6 +144,12 @@ def rank_models(
             segment_by=benchmark_spec.pairwise_segment_field,
             min_matches=1,
         )
+        if not segmented and ranking:
+            logger.info(
+                "    No %s metadata available for segmented ranking.",
+                benchmark_spec.pairwise_segment_field,
+            )
+            continue
 
         for segment_value in sorted(segmented.keys()):
             seg_ranking = segmented[segment_value]["overall_ranking"]

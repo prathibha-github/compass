@@ -41,6 +41,22 @@ class BenchmarkRegistryTests(unittest.TestCase):
         self.assertEqual(spec.prompt_count, 2)
         self.assertEqual(spec.as_prompt_dict()["clarity"][0]["id"], "p1")
 
+    def test_build_benchmark_spec_is_immutable(self):
+        spec = build_benchmark_spec(
+            name="toy",
+            version="0.1",
+            prompts_by_rubric={
+                "clarity": [
+                    {"id": "p1", "text": "Explain X", "task_type": "explanation"},
+                ]
+            },
+            rubrics_by_name={"clarity": RubricLibrary.clarity},
+        )
+        with self.assertRaises(TypeError):
+            spec.prompts_by_rubric["clarity"] = ()
+        with self.assertRaises(TypeError):
+            spec.rubrics_by_name["clarity"] = RubricLibrary.truthfulness
+
     def test_build_benchmark_spec_requires_matching_rubrics(self):
         with self.assertRaisesRegex(ValueError, "same rubric names"):
             build_benchmark_spec(

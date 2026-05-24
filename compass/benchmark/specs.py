@@ -1,6 +1,7 @@
 """Benchmark specification contracts."""
 
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, Dict, Mapping, Sequence, Tuple
 
 from compass.rubrics.base import Rubric
@@ -45,8 +46,8 @@ class BenchmarkSpec:
 
     name: str
     version: str
-    prompts_by_rubric: Dict[str, Tuple[BenchmarkPrompt, ...]]
-    rubrics_by_name: Dict[str, Rubric]
+    prompts_by_rubric: Mapping[str, Tuple[BenchmarkPrompt, ...]]
+    rubrics_by_name: Mapping[str, Rubric]
     pairwise_segment_field: str = "task_type"
 
     def __post_init__(self) -> None:
@@ -70,8 +71,16 @@ class BenchmarkSpec:
         if not self.pairwise_segment_field:
             raise ValueError("pairwise_segment_field is required")
 
-        object.__setattr__(self, "prompts_by_rubric", normalized_prompts)
-        object.__setattr__(self, "rubrics_by_name", dict(self.rubrics_by_name))
+        object.__setattr__(
+            self,
+            "prompts_by_rubric",
+            MappingProxyType(normalized_prompts),
+        )
+        object.__setattr__(
+            self,
+            "rubrics_by_name",
+            MappingProxyType(dict(self.rubrics_by_name)),
+        )
 
     @property
     def rubric_names(self) -> Tuple[str, ...]:

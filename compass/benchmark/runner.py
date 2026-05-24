@@ -186,12 +186,13 @@ def generate_completions(
         allow_mixed=allow_mixed_token_budgets,
         max_tokens_by_model=max_tokens_by_model,
     )
+    clients_by_model = {model: _create_client(model) for model in models}
 
     count = 0
     for rubric, prompts in benchmark_spec.prompts_by_rubric.items():
         for prompt in prompts:
             for model in models:
-                client = _create_client(model)
+                client = clients_by_model[model]
 
                 for sample_idx in range(samples):
                     identity = (model, rubric, prompt.id, sample_idx)
