@@ -145,7 +145,7 @@ class ExampleSmokeTests(unittest.TestCase):
 class BenchmarkMaxTokensTests(unittest.TestCase):
     """Verify per-model max_tokens selection in generate_completions."""
 
-    def _run_generate(self, models):
+    def _run_generate(self, models, allow_mixed_token_budgets=False, max_tokens_by_model=None):
         """Run generate_completions with minimal fixtures; return captured max_tokens per model."""
         import tempfile
         benchmark = _load_example("constitutional_compliance_benchmark")
@@ -176,7 +176,14 @@ class BenchmarkMaxTokensTests(unittest.TestCase):
                  patch.object(benchmark, "OllamaClient", side_effect=make_fake_client), \
                  patch.object(benchmark, "OpenAIClient", side_effect=make_fake_client), \
                  patch.object(benchmark, "AnthropicClient", side_effect=make_fake_client):
-                benchmark.generate_completions(models, prompts_by_rubric, 1, output_dir)
+                benchmark.generate_completions(
+                    models,
+                    prompts_by_rubric,
+                    1,
+                    output_dir,
+                    max_tokens_by_model=max_tokens_by_model,
+                    allow_mixed_token_budgets=allow_mixed_token_budgets,
+                )
 
         return captured
 
@@ -189,9 +196,30 @@ class BenchmarkMaxTokensTests(unittest.TestCase):
         self.assertEqual(captured["llama3.1"], 150)
 
     def test_mixed_models_use_correct_limits(self):
-        captured = self._run_generate(["gemini-2.5-flash", "llama3.1"])
+        captured = self._run_generate(
+            ["gemini-2.5-flash", "llama3.1"],
+            allow_mixed_token_budgets=True,
+        )
         self.assertEqual(captured["gemini-2.5-flash"], 2000)
         self.assertEqual(captured["llama3.1"], 150)
+
+    def test_generate_completions_mixed_models_fail_without_override(self):
+        with self.assertRaisesRegex(ValueError, "Mixed max token budgets detected"):
+            self._run_generate(["gemini-2.5-flash", "llama3.1"])
+
+    def test_generate_completions_custom_budget_map_validated(self):
+        with self.assertRaisesRegex(ValueError, "Missing max token budget for model"):
+            self._run_generate(
+                ["llama3.1", "mistral"],
+                allow_mixed_token_budgets=True,
+                max_tokens_by_model={"llama3.1": 256},
+            )
+
+        with self.assertRaisesRegex(ValueError, "Invalid max token budget for model"):
+            self._run_generate(
+                ["llama3.1"],
+                max_tokens_by_model={"llama3.1": 0},
+            )
 
 
 class BenchmarkRecordLoadingTests(unittest.TestCase):

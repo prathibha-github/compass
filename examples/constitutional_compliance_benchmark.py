@@ -118,6 +118,10 @@ def _generation_quality_from_record(record: dict) -> dict:
 def _default_max_tokens_for_model(model: str) -> int:
     # Gemini thinking models generally need larger output budgets to avoid
     # truncating the visible answer.
+    #
+    # Note: non-Gemini default remains 150 for historical comparability with
+    # prior runs; this may still truncate some cloud models. Use the preflight
+    # policy and quality flags to surface that explicitly.
     return 2000 if model.startswith("gemini") else 150
 
 
@@ -126,13 +130,30 @@ def compute_token_budget_by_model(models: list) -> dict:
     return {model: _default_max_tokens_for_model(model) for model in models}
 
 
-def validate_token_budget_policy(models: list, allow_mixed: bool) -> dict:
+def validate_token_budget_policy(
+    models: list, allow_mixed: bool, max_tokens_by_model: dict = None
+) -> dict:
     """Validate token-budget fairness policy and return effective budgets.
 
     Fails by default when models in the same run use different token budgets.
     Mixed budgets are allowed only when the explicit override flag is set.
     """
-    budgets = compute_token_budget_by_model(models)
+    if max_tokens_by_model is None:
+        budgets = compute_token_budget_by_model(models)
+    else:
+        budgets = {}
+        for model in models:
+            if model not in max_tokens_by_model:
+                raise ValueError(
+                    f"Missing max token budget for model {model!r} in custom map."
+                )
+            budget = int(max_tokens_by_model[model])
+            if budget <= 0:
+                raise ValueError(
+                    f"Invalid max token budget for model {model!r}: {budget}"
+                )
+            budgets[model] = budget
+
     distinct = sorted(set(budgets.values()))
     if len(distinct) > 1 and not allow_mixed:
         raise ValueError(
@@ -424,6 +445,7 @@ def generate_completions(
     samples: int,
     output_dir: Path,
     max_tokens_by_model: dict = None,
+    allow_mixed_token_budgets: bool = False,
 ) -> Path:
     """Generate completions from models (Ollama local or cloud).
 
@@ -452,7 +474,11 @@ def generate_completions(
         return checkpoint_path
 
     logger.info(f"Generating {total_to_generate} completions...")
-    max_tokens_by_model = max_tokens_by_model or compute_token_budget_by_model(models)
+    max_tokens_by_model = validate_token_budget_policy(
+        models,
+        allow_mixed=allow_mixed_token_budgets,
+        max_tokens_by_model=max_tokens_by_model,
+    )
 
     count = 0
     for rubric, prompts in prompts_by_rubric.items():
@@ -854,6 +880,7 @@ def main():
             args.samples,
             output_dir,
             max_tokens_by_model=token_budget_by_model,
+            allow_mixed_token_budgets=args.allow_mixed_token_budgets,
         )
     else:
         generations_path = output_dir / "generations.jsonl"
