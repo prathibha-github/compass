@@ -381,41 +381,35 @@ class TestGoogleAIClientFeatures(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Reached max_requests"):
             client.complete("prompt")
 
-    def test_uses_response_text_not_part_concatenation(self):
-        """Client must use response.text (visible only), not concatenate all parts.
+    def test_uses_response_text_not_thought_signature(self):
+        """Client must use response.text, not attempt to decode thought_signature bytes.
 
-        Gemini thinking models return parts where some have thought_signature set
-        (internal reasoning). Concatenating all parts would leak thought text into
-        the completion; response.text already contains only the visible output.
+        Real Gemini thinking models return a single part that has both .text
+        (the visible answer) and .thought_signature (opaque internal reasoning
+        bytes). The client must read response.text and ignore thought_signature.
         """
         client, _, _ = self._make_client()
 
-        thought_part = MagicMock()
-        thought_part.thought_signature = b"opaque-bytes"
-        thought_part.text = "Let me reason step by step... the answer is 42."
-
-        visible_part = MagicMock()
-        visible_part.thought_signature = None
-        visible_part.text = "The answer is 42."
+        part_mock = MagicMock()
+        part_mock.text = "At its core, an artificial neural network..."
+        part_mock.thought_signature = b"ErgeCrUeAQw51sc-opaque-reasoning-bytes"
 
         response_mock = MagicMock()
-        # response.text is the SDK-provided visible-only text
-        response_mock.text = "The answer is 42."
+        response_mock.text = "At its core, an artificial neural network..."
         response_mock.candidates = [
-            MagicMock(content=MagicMock(parts=[thought_part, visible_part]))
+            MagicMock(content=MagicMock(parts=[part_mock]))
         ]
         response_mock.usage_metadata = MagicMock(
-            prompt_token_count=5,
-            candidates_token_count=8,
+            prompt_token_count=7,
+            candidates_token_count=39,
         )
         client.client.models.generate_content.return_value = response_mock
 
         with patch("time.sleep"):
-            response = client.complete("What is 6 × 7?")
+            response = client.complete("What is a neural network?", max_tokens=1000)
 
-        # Must match response.text, not thought_part.text + visible_part.text
-        self.assertEqual(response.completion, "The answer is 42.")
-        self.assertNotIn("Let me reason", response.completion)
+        self.assertEqual(response.completion, "At its core, an artificial neural network...")
+        self.assertEqual(response.tokens_used, {"input": 7, "output": 39})
 
     def test_max_tokens_forwarded_to_api(self):
         client, _, _ = self._make_client()
