@@ -381,6 +381,42 @@ class TestGoogleAIClientFeatures(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Reached max_requests"):
             client.complete("prompt")
 
+    def test_uses_response_text_not_part_concatenation(self):
+        """Client must use response.text (visible only), not concatenate all parts.
+
+        Gemini thinking models return parts where some have thought_signature set
+        (internal reasoning). Concatenating all parts would leak thought text into
+        the completion; response.text already contains only the visible output.
+        """
+        client, _, _ = self._make_client()
+
+        thought_part = MagicMock()
+        thought_part.thought_signature = b"opaque-bytes"
+        thought_part.text = "Let me reason step by step... the answer is 42."
+
+        visible_part = MagicMock()
+        visible_part.thought_signature = None
+        visible_part.text = "The answer is 42."
+
+        response_mock = MagicMock()
+        # response.text is the SDK-provided visible-only text
+        response_mock.text = "The answer is 42."
+        response_mock.candidates = [
+            MagicMock(content=MagicMock(parts=[thought_part, visible_part]))
+        ]
+        response_mock.usage_metadata = MagicMock(
+            prompt_token_count=5,
+            candidates_token_count=8,
+        )
+        client.client.models.generate_content.return_value = response_mock
+
+        with patch("time.sleep"):
+            response = client.complete("What is 6 × 7?")
+
+        # Must match response.text, not thought_part.text + visible_part.text
+        self.assertEqual(response.completion, "The answer is 42.")
+        self.assertNotIn("Let me reason", response.completion)
+
     def test_max_tokens_forwarded_to_api(self):
         client, _, _ = self._make_client()
         captured = {}
