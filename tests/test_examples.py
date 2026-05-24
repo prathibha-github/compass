@@ -142,5 +142,57 @@ class ExampleSmokeTests(unittest.TestCase):
         self._run_main("multi_model_compare")
 
 
+class BenchmarkMaxTokensTests(unittest.TestCase):
+    """Verify per-model max_tokens selection in generate_completions."""
+
+    def _run_generate(self, models):
+        """Run generate_completions with minimal fixtures; return captured max_tokens per model."""
+        import tempfile
+        benchmark = _load_example("constitutional_compliance_benchmark")
+
+        prompts_by_rubric = {
+            "task_focus": [{"id": "p1", "text": "Hello", "task_type": "general"}]
+        }
+        captured = {}
+
+        def make_fake_client(model, **kwargs):
+            fake = MagicMock()
+            response = SimpleNamespace(
+                completion="ok",
+                tokens_used={"input": 1, "output": 1},
+                cost_usd=0.0,
+            )
+
+            def fake_complete(prompt, max_tokens, temperature):
+                captured[model] = max_tokens
+                return response
+
+            fake.complete.side_effect = fake_complete
+            return fake
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = pathlib.Path(tmpdir)
+            with patch.object(benchmark, "GoogleAIClient", side_effect=make_fake_client), \
+                 patch.object(benchmark, "OllamaClient", side_effect=make_fake_client), \
+                 patch.object(benchmark, "OpenAIClient", side_effect=make_fake_client), \
+                 patch.object(benchmark, "AnthropicClient", side_effect=make_fake_client):
+                benchmark.generate_completions(models, prompts_by_rubric, 1, output_dir)
+
+        return captured
+
+    def test_gemini_gets_2000_max_tokens(self):
+        captured = self._run_generate(["gemini-2.5-flash"])
+        self.assertEqual(captured["gemini-2.5-flash"], 2000)
+
+    def test_non_gemini_gets_150_max_tokens(self):
+        captured = self._run_generate(["llama3.1"])
+        self.assertEqual(captured["llama3.1"], 150)
+
+    def test_mixed_models_use_correct_limits(self):
+        captured = self._run_generate(["gemini-2.5-flash", "llama3.1"])
+        self.assertEqual(captured["gemini-2.5-flash"], 2000)
+        self.assertEqual(captured["llama3.1"], 150)
+
+
 if __name__ == "__main__":
     unittest.main()
