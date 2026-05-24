@@ -194,5 +194,41 @@ class BenchmarkMaxTokensTests(unittest.TestCase):
         self.assertEqual(captured["llama3.1"], 150)
 
 
+class BenchmarkRecordLoadingTests(unittest.TestCase):
+    def test_load_generation_records_migrates_legacy_rows(self):
+        import tempfile
+
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        lines = [
+            '{"model":"llama3.1","rubric":"clarity","prompt_id":"p1","completion":"ok","task_type":"general"}',
+            '{"model":"llama3.1","rubric":"clarity","prompt_id":"p2","completion":"ok","sample_idx":"2","task_type":"general"}',
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = pathlib.Path(tmpdir) / "generations.jsonl"
+            path.write_text("\n".join(lines) + "\n")
+            rows = benchmark.load_generation_records(path)
+
+        self.assertIn(("llama3.1", "clarity", "p1", 0), rows)
+        self.assertIn(("llama3.1", "clarity", "p2", 2), rows)
+
+    def test_load_evaluation_records_skips_invalid_rows(self):
+        import tempfile
+
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        lines = [
+            '{"model":"llama3.1","rubric":"clarity","prompt_id":"p1","score":0.2,"hit":true}',
+            '{"model":"llama3.1","rubric":"clarity","prompt_id":"p2"}',
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = pathlib.Path(tmpdir) / "evaluations.jsonl"
+            path.write_text("\n".join(lines) + "\n")
+            rows = benchmark.load_evaluation_records(path)
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["prompt_id"], "p1")
+
+
 if __name__ == "__main__":
     unittest.main()

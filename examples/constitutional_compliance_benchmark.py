@@ -40,6 +40,11 @@ from compass import (
     PairwiseRanker,
     RubricLibrary,
 )
+from compass.benchmark import (
+    generation_identity,
+    migrate_evaluation_record,
+    migrate_generation_record,
+)
 from compass.clients import OpenAIClient, AnthropicClient, GoogleAIClient
 
 logging.basicConfig(
@@ -48,6 +53,48 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+
+def load_generation_records(generations_path: Path) -> dict:
+    """Load generation rows with schema migration and validation."""
+    generations_by_key = {}
+    with open(generations_path) as f:
+        for line_num, line in enumerate(f, 1):
+            if not line.strip():
+                continue
+            try:
+                row = migrate_generation_record(json.loads(line))
+                generations_by_key[generation_identity(row)] = row
+            except (TypeError, ValueError, json.JSONDecodeError) as e:
+                logger.warning(
+                    "Skipping invalid generation row at %s:%d (%s)",
+                    generations_path,
+                    line_num,
+                    e,
+                )
+                continue
+    return generations_by_key
+
+
+def load_evaluation_records(evaluations_path: Path) -> list:
+    """Load evaluation rows with schema migration and validation."""
+    rows = []
+    with open(evaluations_path) as f:
+        for line_num, line in enumerate(f, 1):
+            if not line.strip():
+                continue
+            try:
+                row = migrate_evaluation_record(json.loads(line))
+                rows.append(row)
+            except (TypeError, ValueError, json.JSONDecodeError) as e:
+                logger.warning(
+                    "Skipping invalid evaluation row at %s:%d (%s)",
+                    evaluations_path,
+                    line_num,
+                    e,
+                )
+                continue
+    return rows
 
 
 # Evaluation prompts for all 5 Constitutional principles
@@ -341,7 +388,7 @@ def generate_completions(
                             temperature=0.7,
                         )
 
-                        checkpoint.save({
+                        checkpoint.save(migrate_generation_record({
                             "model": model,
                             "rubric": rubric,
                             "prompt_id": prompt["id"],
@@ -351,7 +398,7 @@ def generate_completions(
                             "completion": response.completion,
                             "tokens_used": response.tokens_used,
                             "cost_usd": response.cost_usd,
-                        })
+                        }))
 
                         count += 1
                         if count % 10 == 0:
@@ -382,12 +429,7 @@ def evaluate_completions(
     logger.info(f"Resuming: {len(completed)} prior evaluations")
 
     # Load generations
-    generations_by_key = {}
-    with open(generations_path) as f:
-        for line in f:
-            gen = json.loads(line)
-            key = (gen["model"], gen["rubric"], gen["prompt_id"], gen["sample_idx"])
-            generations_by_key[key] = gen
+    generations_by_key = load_generation_records(generations_path)
 
     # Set up judge
     cache = EvaluationCache(cache_dir=str(output_dir / ".cache"))
@@ -463,7 +505,7 @@ def evaluate_completions(
             judge = judges[rubric]
             result = judge.evaluate(gen["completion"])
 
-            checkpoint.save({
+            checkpoint.save(migrate_evaluation_record({
                 "model": model,
                 "rubric": rubric,
                 "prompt_id": prompt_id,
@@ -475,7 +517,7 @@ def evaluate_completions(
                 "confidence": result.confidence,
                 "rationale": result.rationale[:100] if result.rationale else "",
                 "judge_model": judge_model,
-            })
+            }))
 
             count += 1
             if count % 10 == 0:
@@ -494,11 +536,9 @@ def analyze_results(evaluations_path: Path, output_dir: Path) -> dict:
 
     # Load evaluations
     results_by_key = defaultdict(list)
-    with open(evaluations_path) as f:
-        for line in f:
-            result = json.loads(line)
-            key = (result["model"], result["rubric"])
-            results_by_key[key].append(result)
+    for result in load_evaluation_records(evaluations_path):
+        key = (result["model"], result["rubric"])
+        results_by_key[key].append(result)
 
     # Aggregate statistics
     stats = {}
@@ -551,16 +591,14 @@ def rank_models(evaluations_path: Path, output_dir: Path):
 
     ranker = PairwiseRanker()
 
-    with open(evaluations_path) as f:
-        for line in f:
-            result = json.loads(line)
-            ranker.add_record(
-                suite=result["rubric"],
-                model=result["model"],
-                comparison_key=(result["prompt_id"], "default"),
-                score=result["score"],
-                metadata={"task_type": result["task_type"]},
-            )
+    for result in load_evaluation_records(evaluations_path):
+        ranker.add_record(
+            suite=result["rubric"],
+            model=result["model"],
+            comparison_key=(result["prompt_id"], "default"),
+            score=result["score"],
+            metadata={"task_type": result["task_type"]},
+        )
 
     # Rank by rubric
     rubrics = ["task_focus", "truthfulness", "sycophancy", "therapy_speak", "clarity"]
