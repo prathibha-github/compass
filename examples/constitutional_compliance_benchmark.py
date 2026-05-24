@@ -331,9 +331,13 @@ def generate_completions(
                         continue
 
                     try:
+                        # Gemini thinking models spend most of their token
+                        # budget on internal reasoning; 2000 leaves enough
+                        # room for a full visible response after thinking.
+                        max_tokens = 2000 if model.startswith("gemini") else 150
                         response = client.complete(
                             prompt=prompt["text"],
-                            max_tokens=150,
+                            max_tokens=max_tokens,
                             temperature=0.7,
                         )
 
