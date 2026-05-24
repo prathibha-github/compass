@@ -55,16 +55,25 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 MIN_VISIBLE_CHARS = 80
-_SENTENCE_ENDINGS = (".", "!", "?", "\"", "'", "`")
+_SENTENCE_ENDINGS = (".", "!", "?", "\"", "'")
+_TOKEN_CAP_FINISH_REASONS = {"length", "max_tokens", "max_output_tokens", "token_limit"}
 
 
 def _compute_generation_quality(
-    completion: str, output_tokens: int, max_tokens_requested: int
+    completion: str,
+    output_tokens: int,
+    max_tokens_requested: int,
+    finish_reason: str = "",
+    token_cap_inferred_legacy: bool = False,
 ) -> dict:
     text = (completion or "").strip()
     visible_chars = len(text)
-    visible_tokens = len(text.split()) if text else 0
-    hit_token_cap = bool(max_tokens_requested > 0 and output_tokens >= max_tokens_requested)
+    visible_word_count = len(text.split()) if text else 0
+    finish_reason_norm = (finish_reason or "").strip().lower()
+    hit_token_cap = bool(
+        (max_tokens_requested > 0 and output_tokens >= max_tokens_requested)
+        or (finish_reason_norm in _TOKEN_CAP_FINISH_REASONS)
+    )
     sentence_complete = bool(text and text.endswith(_SENTENCE_ENDINGS))
     is_fragment = (
         not text
@@ -74,10 +83,12 @@ def _compute_generation_quality(
     quality_flagged = bool(hit_token_cap or is_fragment)
     return {
         "visible_chars": visible_chars,
-        "visible_tokens": visible_tokens,
+        "visible_word_count": visible_word_count,
         "hit_token_cap": hit_token_cap,
         "is_fragment": is_fragment,
         "quality_flagged": quality_flagged,
+        "finish_reason": finish_reason,
+        "token_cap_inferred_legacy": token_cap_inferred_legacy,
     }
 
 
@@ -86,11 +97,21 @@ def _generation_quality_from_record(record: dict) -> dict:
     tokens_used = record.get("tokens_used")
     if isinstance(tokens_used, dict):
         output_tokens = int(tokens_used.get("output", 0) or 0)
-    max_tokens_requested = int(record.get("max_tokens_requested", 0) or 0)
+    raw_max_tokens = record.get("max_tokens_requested")
+    max_tokens_requested = int(raw_max_tokens or 0)
+    token_cap_inferred_legacy = False
+    # Legacy benchmark runs did not persist max_tokens_requested. Infer likely
+    # cap-hit for old rows so truncation does not stay silent in analyses.
+    if not max_tokens_requested and output_tokens >= 150:
+        max_tokens_requested = 150
+        token_cap_inferred_legacy = True
+    finish_reason = str(record.get("finish_reason") or "")
     return _compute_generation_quality(
         completion=record.get("completion", ""),
         output_tokens=output_tokens,
         max_tokens_requested=max_tokens_requested,
+        finish_reason=finish_reason,
+        token_cap_inferred_legacy=token_cap_inferred_legacy,
     )
 
 
@@ -430,6 +451,7 @@ def generate_completions(
                             completion=response.completion,
                             output_tokens=int(response.tokens_used.get("output", 0)),
                             max_tokens_requested=max_tokens,
+                            finish_reason=str(getattr(response, "finish_reason", "") or ""),
                         )
 
                         checkpoint.save(migrate_generation_record({
@@ -443,8 +465,9 @@ def generate_completions(
                             "tokens_used": response.tokens_used,
                             "cost_usd": response.cost_usd,
                             "max_tokens_requested": max_tokens,
+                            "finish_reason": str(getattr(response, "finish_reason", "") or ""),
                             "visible_chars": quality["visible_chars"],
-                            "visible_tokens": quality["visible_tokens"],
+                            "visible_word_count": quality["visible_word_count"],
                             "hit_token_cap": quality["hit_token_cap"],
                             "is_fragment": quality["is_fragment"],
                             "quality_flagged": quality["quality_flagged"],
@@ -569,10 +592,12 @@ def evaluate_completions(
                 "rationale": result.rationale[:100] if result.rationale else "",
                 "judge_model": judge_model,
                 "generation_visible_chars": quality["visible_chars"],
-                "generation_visible_tokens": quality["visible_tokens"],
+                "generation_visible_word_count": quality["visible_word_count"],
                 "generation_hit_token_cap": quality["hit_token_cap"],
                 "generation_is_fragment": quality["is_fragment"],
                 "generation_quality_flagged": quality["quality_flagged"],
+                "generation_finish_reason": quality["finish_reason"],
+                "generation_token_cap_inferred_legacy": quality["token_cap_inferred_legacy"],
             }))
 
             count += 1
@@ -606,6 +631,9 @@ def analyze_results(evaluations_path: Path, output_dir: Path) -> dict:
         flagged = sum(1 for r in results if r.get("generation_quality_flagged"))
         token_cap_hits = sum(1 for r in results if r.get("generation_hit_token_cap"))
         fragments = sum(1 for r in results if r.get("generation_is_fragment"))
+        legacy_cap_inferred = sum(
+            1 for r in results if r.get("generation_token_cap_inferred_legacy")
+        )
         quality_filtered = [r for r in results if not r.get("generation_quality_flagged")]
         qf_hits = sum(1 for r in quality_filtered if r["hit"])
         qf_total = len(quality_filtered)
@@ -622,6 +650,7 @@ def analyze_results(evaluations_path: Path, output_dir: Path) -> dict:
             "quality_flagged_pct": (flagged / total * 100) if total > 0 else 0.0,
             "token_cap_pct": (token_cap_hits / total * 100) if total > 0 else 0.0,
             "fragment_pct": (fragments / total * 100) if total > 0 else 0.0,
+            "legacy_cap_inferred_pct": (legacy_cap_inferred / total * 100) if total > 0 else 0.0,
             "quality_filtered_total": qf_total,
             "quality_filtered_hit_rate": qf_hit_rate,
         }
@@ -638,7 +667,7 @@ def print_summary(stats: dict, evaluations_path: Path):
     logger.info("")
     logger.info(
         f"{'Model':<15} | {'Rubric':<15} | {'Hit Rate':>9} | {'Q-Flag':>7} | "
-        f"{'Cap':>5} | {'Frag':>5} | {'QF Hit':>7} | {'Samples':>7}"
+        f"{'Cap':>5} | {'Frag':>5} | {'LegacyCap':>9} | {'QF Hit':>7} | {'Samples':>7}"
     )
     logger.info("-" * 100)
 
@@ -652,7 +681,8 @@ def print_summary(stats: dict, evaluations_path: Path):
         logger.info(
             f"{s['model']:<15} | {s['rubric']:<15} | {s['hit_rate']:>8.1f}% | "
             f"{s['quality_flagged_pct']:>6.1f}% | {s['token_cap_pct']:>4.1f}% | "
-            f"{s['fragment_pct']:>4.1f}% | {qf_hit_text:>7} | {s['total']:>7}"
+            f"{s['fragment_pct']:>4.1f}% | {s['legacy_cap_inferred_pct']:>8.1f}% | "
+            f"{qf_hit_text:>7} | {s['total']:>7}"
         )
 
     logger.info("")
