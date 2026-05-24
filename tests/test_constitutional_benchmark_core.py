@@ -54,13 +54,13 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             out = pathlib.Path(tmpdir)
             first_client = _Client()
-            with patch.object(benchmark, "OllamaClient", return_value=first_client):
+            with patch("compass.benchmark.runner.OllamaClient", return_value=first_client):
                 benchmark.generate_completions(["llama3.1"], prompts, 2, out)
             self.assertEqual(first_client.calls, 2)
 
             # Resume pass should skip both completed samples.
             second_client = _Client()
-            with patch.object(benchmark, "OllamaClient", return_value=second_client):
+            with patch("compass.benchmark.runner.OllamaClient", return_value=second_client):
                 benchmark.generate_completions(["llama3.1"], prompts, 2, out)
             self.assertEqual(second_client.calls, 0)
 
@@ -83,7 +83,7 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             out = pathlib.Path(tmpdir)
-            with patch.object(benchmark, "OllamaClient", return_value=_Client()):
+            with patch("compass.benchmark.runner.OllamaClient", return_value=_Client()):
                 path = benchmark.generate_completions(["llama3.1"], prompts, 1, out)
 
             row = json.loads(path.read_text().strip().splitlines()[0])
@@ -161,8 +161,8 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
             )
 
             _FakeJudge.calls = 0
-            with patch.object(benchmark, "LLMJudge", side_effect=_FakeJudge), patch.object(
-                benchmark, "OllamaClient", return_value=SimpleNamespace()
+            with patch("compass.benchmark.runner.LLMJudge", side_effect=_FakeJudge), patch(
+                "compass.benchmark.runner.OllamaClient", return_value=SimpleNamespace()
             ):
                 benchmark.evaluate_completions(generations_path, "llama3.1", out)
 
@@ -224,4 +224,3 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

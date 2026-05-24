@@ -172,10 +172,10 @@ class BenchmarkMaxTokensTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             output_dir = pathlib.Path(tmpdir)
-            with patch.object(benchmark, "GoogleAIClient", side_effect=make_fake_client), \
-                 patch.object(benchmark, "OllamaClient", side_effect=make_fake_client), \
-                 patch.object(benchmark, "OpenAIClient", side_effect=make_fake_client), \
-                 patch.object(benchmark, "AnthropicClient", side_effect=make_fake_client):
+            with patch("compass.benchmark.runner.GoogleAIClient", side_effect=make_fake_client), \
+                 patch("compass.benchmark.runner.OllamaClient", side_effect=make_fake_client), \
+                 patch("compass.benchmark.runner.OpenAIClient", side_effect=make_fake_client), \
+                 patch("compass.benchmark.runner.AnthropicClient", side_effect=make_fake_client):
                 benchmark.generate_completions(
                     models,
                     prompts_by_rubric,
