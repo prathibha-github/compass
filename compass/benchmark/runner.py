@@ -255,12 +255,14 @@ def generate_completions(
 
                         checkpoint.save(
                             migrate_generation_record(
-                                {
-                                    "model": model,
-                                    "rubric": rubric,
-                                    "prompt_id": prompt.id,
-                                    "prompt_text": prompt.text,
-                                    "task_type": prompt.task_type,
+                            {
+                                "benchmark_name": benchmark_spec.name,
+                                "benchmark_version": benchmark_spec.version,
+                                "model": model,
+                                "rubric": rubric,
+                                "prompt_id": prompt.id,
+                                "prompt_text": prompt.text,
+                                "task_type": prompt.task_type,
                                     "sample_idx": sample_idx,
                                     "completion": response.completion,
                                     "tokens_used": response.tokens_used,
@@ -350,6 +352,8 @@ def evaluate_completions(
             checkpoint.save(
                 migrate_evaluation_record(
                     {
+                        "benchmark_name": benchmark_spec.name,
+                        "benchmark_version": benchmark_spec.version,
                         "model": model,
                         "rubric": rubric,
                         "prompt_id": prompt_id,

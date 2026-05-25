@@ -132,6 +132,18 @@ class BenchmarkExtensionContractTests(unittest.TestCase):
 
         self.assertEqual(len(generation_rows), 4)
         self.assertEqual(len(evaluation_rows), 4)
+        self.assertTrue(
+            all(row["benchmark_name"] == spec.name for row in generation_rows)
+        )
+        self.assertTrue(
+            all(row["benchmark_version"] == spec.version for row in generation_rows)
+        )
+        self.assertTrue(
+            all(row["benchmark_name"] == spec.name for row in evaluation_rows)
+        )
+        self.assertTrue(
+            all(row["benchmark_version"] == spec.version for row in evaluation_rows)
+        )
         self.assertEqual(stats["mistral|task_focus"]["hit_rate"], 100.0)
         self.assertEqual(stats["llama3.1|task_focus"]["hit_rate"], 0.0)
         self.assertEqual(stats["mistral|truthfulness"]["hit_rate"], 100.0)

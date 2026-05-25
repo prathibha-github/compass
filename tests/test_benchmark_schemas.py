@@ -3,9 +3,11 @@
 import unittest
 
 from compass.benchmark.schemas import (
+    BENCHMARK_NAME_FIELD,
     BENCHMARK_SCHEMA_VERSION,
     BENCHMARK_SCHEMA_VERSION_FIELD,
     BENCHMARK_RECORD_TYPE_FIELD,
+    BENCHMARK_VERSION_FIELD,
     EVALUATION_RECORD_TYPE,
     GENERATION_RECORD_TYPE,
     VALID_BENCHMARK_RECORD_TYPES,
@@ -33,6 +35,8 @@ class TestBenchmarkSchemas(unittest.TestCase):
         self.assertEqual(row["benchmark_schema_version"], BENCHMARK_SCHEMA_VERSION)
         self.assertEqual(row["benchmark_record_type"], GENERATION_RECORD_TYPE)
         self.assertEqual(row["sample_idx"], 0)
+        self.assertNotIn(BENCHMARK_NAME_FIELD, row)
+        self.assertNotIn(BENCHMARK_VERSION_FIELD, row)
 
     def test_evaluation_migration_infers_legacy_type(self):
         legacy = {
@@ -47,6 +51,34 @@ class TestBenchmarkSchemas(unittest.TestCase):
         self.assertEqual(row["benchmark_schema_version"], BENCHMARK_SCHEMA_VERSION)
         self.assertEqual(row["benchmark_record_type"], EVALUATION_RECORD_TYPE)
         self.assertEqual(row["sample_idx"], 2)
+        self.assertNotIn(BENCHMARK_NAME_FIELD, row)
+        self.assertNotIn(BENCHMARK_VERSION_FIELD, row)
+
+    def test_generation_migration_preserves_benchmark_identity(self):
+        row = migrate_generation_record(
+            {
+                "benchmark_name": "constitutional_compliance",
+                "benchmark_version": "1.0",
+                "model": "llama3.1",
+                "rubric": "clarity",
+                "prompt_id": "p1",
+                "completion": "answer",
+            }
+        )
+        self.assertEqual(row[BENCHMARK_NAME_FIELD], "constitutional_compliance")
+        self.assertEqual(row[BENCHMARK_VERSION_FIELD], "1.0")
+
+    def test_benchmark_identity_requires_name_and_version_together(self):
+        with self.assertRaisesRegex(ValueError, "both benchmark_name and benchmark_version"):
+            migrate_generation_record(
+                {
+                    "benchmark_name": "constitutional_compliance",
+                    "model": "llama3.1",
+                    "rubric": "clarity",
+                    "prompt_id": "p1",
+                    "completion": "answer",
+                }
+            )
 
     def test_generation_identity(self):
         identity = generation_identity(

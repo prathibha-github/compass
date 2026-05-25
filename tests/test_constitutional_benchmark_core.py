@@ -116,6 +116,8 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
                 path = benchmark.generate_completions(["llama3.1"], prompts, 1, out)
 
             row = json.loads(path.read_text().strip().splitlines()[0])
+            self.assertEqual(row["benchmark_name"], "constitutional_compliance")
+            self.assertEqual(row["benchmark_version"], "1.0")
             self.assertIn("benchmark_schema_version", row)
             self.assertEqual(row["benchmark_record_type"], "generation")
             self.assertNotIn("schema_version", row)
@@ -214,6 +216,8 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
             saved = [json.loads(line) for line in eval_path.read_text().splitlines() if line.strip()]
             self.assertEqual(len(saved), 2)
             latest = saved[-1]
+            self.assertEqual(latest["benchmark_name"], "constitutional_compliance")
+            self.assertEqual(latest["benchmark_version"], "1.0")
             self.assertIn("generation_quality_flagged", latest)
             self.assertIn("generation_hit_token_cap", latest)
             self.assertIn("generation_is_fragment", latest)
