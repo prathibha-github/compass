@@ -8,11 +8,13 @@ from pathlib import Path
 
 from compass.benchmark import (
     DEFAULT_TOKEN_BUDGETS,
+    LEGACY_TOKEN_CAP_FALLBACK,
     _compute_generation_quality,
     _default_max_tokens_for_model,
     _generation_quality_from_record,
     analyze_results,
     compute_token_budget_by_model,
+    default_max_tokens_for_model,
     evaluate_completions as _evaluate_completions,
     generate_completions as _generate_completions,
     load_evaluation_records,
@@ -99,7 +101,10 @@ def generate_completions(
 
 
 def evaluate_completions(
-    generations_path: Path, judge_model: str, output_dir: Path
+    generations_path: Path,
+    judge_model: str,
+    output_dir: Path,
+    legacy_token_cap_threshold: int = LEGACY_TOKEN_CAP_FALLBACK,
 ) -> Path:
     """Backward-compatible wrapper around shared benchmark evaluation."""
     return _evaluate_completions(
@@ -107,6 +112,7 @@ def evaluate_completions(
         benchmark_spec=BENCHMARK_SPEC,
         judge_model=judge_model,
         output_dir=output_dir,
+        legacy_token_cap_threshold=legacy_token_cap_threshold,
     )
 
 
@@ -207,6 +213,15 @@ Examples:
             "By default, mixed budgets fail preflight to preserve fairness."
         ),
     )
+    parser.add_argument(
+        "--legacy-token-cap-threshold",
+        type=int,
+        default=LEGACY_TOKEN_CAP_FALLBACK,
+        help=(
+            "Threshold used to infer token-cap hits when analyzing legacy "
+            "generation rows that do not store max_tokens_requested."
+        ),
+    )
     return parser
 
 
@@ -239,6 +254,7 @@ def main():
     logger.info("Samples per prompt: %d", args.samples)
     logger.info("Output directory: %s", args.output_dir)
     logger.info("Default token budget config: %s", dict(DEFAULT_TOKEN_BUDGETS))
+    logger.info("Legacy token-cap threshold: %d", args.legacy_token_cap_threshold)
 
     total_evals = BENCHMARK_SPEC.total_evaluations(len(args.models), args.samples)
     if args.judge_model in ("llama3.1", "mistral", "phi", "neural-chat", "dolphin-mixtral"):
@@ -252,6 +268,9 @@ def main():
     logger.info("")
 
     output_dir = setup_output_dir(args.output_dir)
+    if args.legacy_token_cap_threshold <= 0:
+        logger.error("--legacy-token-cap-threshold must be > 0")
+        sys.exit(2)
 
     logger.info("Checking model availability...")
     available_models = [m for m in args.models if test_model_connection(m)]
@@ -321,7 +340,10 @@ def main():
     logger.info("")
     logger.info("PHASE 2: Evaluating completions...")
     evaluations_path = evaluate_completions(
-        generations_path, args.judge_model, output_dir
+        generations_path,
+        args.judge_model,
+        output_dir,
+        legacy_token_cap_threshold=args.legacy_token_cap_threshold,
     )
 
     logger.info("")

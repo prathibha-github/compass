@@ -18,9 +18,13 @@ def default_max_tokens_for_model(
     token_budgets: Mapping[str, int] = DEFAULT_TOKEN_BUDGETS,
 ) -> int:
     """Return the configured default max token budget for a model."""
-    for prefix, budget in token_budgets.items():
-        if prefix == "default":
-            continue
+    prefixes = sorted(
+        (prefix for prefix in token_budgets if prefix != "default"),
+        key=len,
+        reverse=True,
+    )
+    for prefix in prefixes:
+        budget = token_budgets[prefix]
         if model.startswith(prefix):
             return int(budget)
     return int(token_budgets["default"])

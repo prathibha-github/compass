@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 MIN_VISIBLE_CHARS = 80
 _SENTENCE_ENDINGS = (".", "!", "?", "\"", "'")
 _TOKEN_CAP_FINISH_REASONS = {"length", "max_tokens", "max_output_tokens", "token_limit"}
+_warned_legacy_token_cap_thresholds = set()
 
 
 def _compute_generation_quality(
@@ -62,7 +63,10 @@ def _compute_generation_quality(
     }
 
 
-def _generation_quality_from_record(record: dict) -> dict:
+def _generation_quality_from_record(
+    record: dict,
+    legacy_token_cap_threshold: int = LEGACY_TOKEN_CAP_FALLBACK,
+) -> dict:
     output_tokens = 0
     tokens_used = record.get("tokens_used")
     if isinstance(tokens_used, dict):
@@ -70,9 +74,18 @@ def _generation_quality_from_record(record: dict) -> dict:
     raw_max_tokens = record.get("max_tokens_requested")
     max_tokens_requested = int(raw_max_tokens or 0)
     token_cap_inferred_legacy = False
-    if not max_tokens_requested and output_tokens >= LEGACY_TOKEN_CAP_FALLBACK:
-        max_tokens_requested = LEGACY_TOKEN_CAP_FALLBACK
+    if not max_tokens_requested and output_tokens >= legacy_token_cap_threshold:
+        max_tokens_requested = legacy_token_cap_threshold
         token_cap_inferred_legacy = True
+        if legacy_token_cap_threshold not in _warned_legacy_token_cap_thresholds:
+            logger.warning(
+                "Inferring token cap from output_tokens >= %d because "
+                "max_tokens_requested is missing in legacy generation rows. "
+                "Override with --legacy-token-cap-threshold if the original run "
+                "used a different budget.",
+                legacy_token_cap_threshold,
+            )
+            _warned_legacy_token_cap_thresholds.add(legacy_token_cap_threshold)
     finish_reason = str(record.get("finish_reason") or "")
     return _compute_generation_quality(
         completion=record.get("completion", ""),
@@ -261,6 +274,7 @@ def evaluate_completions(
     benchmark_spec: BenchmarkSpec,
     judge_model: str,
     output_dir: Path,
+    legacy_token_cap_threshold: int = LEGACY_TOKEN_CAP_FALLBACK,
 ) -> Path:
     """Evaluate benchmark completions with a judge model."""
     checkpoint_path = output_dir / f"evaluations_{judge_model}.jsonl"
@@ -302,7 +316,10 @@ def evaluate_completions(
         try:
             judge = judges[rubric]
             result = judge.evaluate(gen["completion"])
-            quality = _generation_quality_from_record(gen)
+            quality = _generation_quality_from_record(
+                gen,
+                legacy_token_cap_threshold=legacy_token_cap_threshold,
+            )
 
             checkpoint.save(
                 migrate_evaluation_record(
