@@ -43,7 +43,7 @@ rubric = RubricLibrary.clarity
 rubric = RubricLibrary.task_focus
 
 # List all available rubrics
-all_rubrics = RubricLibrary.all()
+all_rubrics = RubricLibrary.all_rubrics()
 
 # Get by name
 rubric = RubricLibrary.get("sycophancy")

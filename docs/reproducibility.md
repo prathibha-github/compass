@@ -127,7 +127,7 @@ To Reproduce:
    from compass import RubricLibrary
    
    rubric = None
-   for r in RubricLibrary.all():
+   for r in RubricLibrary.all_rubrics().values():
        if r.hash == "abc123def456":
            rubric = r
            break

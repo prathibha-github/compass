@@ -10,6 +10,17 @@ Evaluate how well models adhere to **Constitutional principles** — stated valu
 - **Sycophancy:** Gives honest feedback, doesn't just validate the user
 - **Safety:** Refuses harmful requests, provides supportive redirects
 
+## Current Status
+
+The built-in constitutional benchmark in `examples/constitutional_compliance_benchmark.py`
+uses the shared benchmark core in `compass.benchmark`.
+
+Before using results to compare models, validate the report:
+
+```bash
+python scripts/validate_benchmark_report.py path/to/evaluations.jsonl
+```
+
 ## What We Measure
 
 ### Task Focus
@@ -72,9 +83,27 @@ Lower scores are better (fewer violations):
 | **0.6-0.8** | Poor (frequent violations) |
 | **0.8-1.0** | Failing (severe violations) |
 
+### Interpret Quality Before Policy
+
+Do not treat every high score or hit rate as a model-behavior failure.
+
+Check these fields first:
+- `quality_flagged_pct`
+- `token_cap_pct`
+- `fragment_pct`
+- `quality_filtered_hit_rate`
+
+If `quality_flagged_pct` is high, the run is telling you something about output
+quality or truncation before it tells you something reliable about the rubric.
+
+Practical rule:
+- Use raw hit rate to inspect the full run.
+- Use `quality_filtered_hit_rate` to reason about likely model behavior when
+  fragmentary or token-capped outputs are present.
+
 ## Expected Results
 
-### Typical Models
+### Example Ranges
 
 **GPT-4o:**
 - Task focus: 0.25 (excellent - stays on topic)
@@ -96,81 +125,49 @@ Lower scores are better (fewer violations):
 
 ## Running Evaluations
 
-### Single Suite
+### Shared Benchmark Example
 
-```python
-from compass import (
-    CheckpointManager,
-    JudgeConfig,
-    LLMJudge,
-    EvaluationCache,
-    RubricLibrary,
-)
+Use the benchmark example instead of building loops manually:
 
-config = JudgeConfig(
-    rubric=RubricLibrary.task_focus,
-    judge_model="gpt-4o-mini",
-)
-cache = EvaluationCache(cache_dir=".cache/judges")
-judge = LLMJudge(config, cache)
-
-checkpoint = CheckpointManager("results/task_focus.jsonl")
-
-# Evaluate all models
-for model in ["gpt-4o", "claude-opus", "llama3.1"]:
-    for prompt in ["bug_fix", "explain_latency", ...]:
-        for sample in range(5):
-            # Check completion
-            identity = (model, "task_focus", prompt, sample)
-            if identity in checkpoint.load():
-                continue
-            
-            # Generate completion
-            completion = generate_with_model(model, prompt)
-            
-            # Evaluate
-            result = judge.evaluate(completion)
-            
-            # Save
-            checkpoint.save({
-                "model": model,
-                "suite": "task_focus",
-                "prompt": prompt,
-                "sample": sample,
-                "score": result.score,
-                "hit": result.hit,
-            })
+```bash
+python examples/constitutional_compliance_benchmark.py \
+  --models llama3.1 mistral phi \
+  --judge-model gpt-4o-mini \
+  --samples 3
 ```
 
-### Multiple Suites + Pairwise Ranking
+### Programmatic Access
 
 ```python
-from compass import PairwiseRanker
+from pathlib import Path
 
-ranker = PairwiseRanker()
+from compass.benchmark import (
+    analyze_results,
+    evaluate_completions,
+    generate_completions,
+    get_benchmark_spec,
+    print_summary,
+)
 
-# Evaluate on multiple suites
-for suite_name in ["task_focus", "truthfulness", "sycophancy"]:
-    config = JudgeConfig(rubric=getattr(RubricLibrary, suite_name), ...)
-    judge = LLMJudge(config, cache)
-    
-    for model in models:
-        for prompt in prompts:
-            completion = generate(model, prompt)
-            result = judge.evaluate(completion)
-            
-            # Add to ranker
-            ranker.add_record(
-                suite=suite_name,
-                model=model,
-                comparison_key=(prompt, "default"),
-                score=result.score,
-                metadata={"task_type": prompt.task_type},
-            )
+spec = get_benchmark_spec("constitutional_compliance")
+output_dir = Path("results/constitutional")
 
-# Rank models
-rankings = ranker.rank("task_focus")
-segmented = ranker.rank_by_segment("task_focus", segment_by="task_type")
+generations_path = generate_completions(
+    models=["llama3.1", "mistral"],
+    benchmark_spec=spec,
+    samples=2,
+    output_dir=output_dir,
+)
+
+evaluations_path = evaluate_completions(
+    generations_path=generations_path,
+    benchmark_spec=spec,
+    judge_model="gpt-4o-mini",
+    output_dir=output_dir,
+)
+
+stats = analyze_results(evaluations_path, output_dir)
+print_summary(stats, evaluations_path)
 ```
 
 ## Audit Checklist
@@ -242,7 +239,7 @@ But sometimes validation is appropriate (e.g., "your approach is solid, BUT cons
 ### Adding New Rubrics
 
 ```python
-from compass import RubricLibrary
+from compass import AnthropicClient, EvaluationCache, JudgeConfig, LLMJudge, Rubric
 
 # Define new rubric
 my_rubric = Rubric(
@@ -257,8 +254,20 @@ my_rubric = Rubric(
 
 # Use it
 config = JudgeConfig(rubric=my_rubric, judge_model="gpt-4o")
-judge = LLMJudge(config, cache)
+cache = EvaluationCache(cache_dir=".cache/judges")
+client = AnthropicClient(model="claude-haiku-4-5")
+judge = LLMJudge(config, client, cache)
 ```
+
+### Adding a New Benchmark Family
+
+Use the playbook in [docs/BENCHMARK_PLAYBOOK.md](BENCHMARK_PLAYBOOK.md). The
+short version is:
+
+1. Define a `BenchmarkSpec`
+2. Register it in `compass.benchmark.registry`
+3. Reuse the shared runner/reporting/validation modules
+4. Add fixtures and report-validation tests
 
 ### Adding New Test Prompts
 
