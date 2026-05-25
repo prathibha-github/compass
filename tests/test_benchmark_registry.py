@@ -1,6 +1,9 @@
 """Contract tests for benchmark specs and registry."""
 
+import json
 from pathlib import Path
+import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -335,6 +338,76 @@ class BenchmarkRegistryTests(unittest.TestCase):
                 runner.validate_report(Path("evaluations.jsonl"), run_config)
 
         validate_run_config.assert_called_once_with(run_config)
+
+    def test_shared_runner_evaluate_applies_custom_legacy_token_cap_threshold(self):
+        spec = build_benchmark_spec(
+            name="toy_legacy_threshold",
+            version="0.1",
+            prompts_by_rubric={
+                "clarity": [
+                    {"id": "p1", "text": "Explain X", "task_type": "explanation"},
+                ]
+            },
+            rubrics_by_name={"clarity": RubricLibrary.clarity},
+        )
+        runner = SharedBenchmarkRunner(spec)
+
+        class _FakeJudge:
+            def __init__(self, config, client, cache):
+                self.config = config
+
+            def evaluate(self, text):
+                return SimpleNamespace(
+                    score=0.4,
+                    hit=False,
+                    confidence=0.8,
+                    rationale="legacy-threshold",
+                )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            generations_path = output_dir / "generations.jsonl"
+            generations_path.write_text(
+                json.dumps(
+                    {
+                        "benchmark_name": spec.name,
+                        "benchmark_version": spec.version,
+                        "benchmark_schema_version": 1,
+                        "benchmark_record_type": "generation",
+                        "model": "llama3.1",
+                        "rubric": "clarity",
+                        "prompt_id": "p1",
+                        "task_type": "explanation",
+                        "sample_idx": 0,
+                        "completion": "At its core, a",
+                        "tokens_used": {"input": 1, "output": 301},
+                    }
+                )
+                + "\n"
+            )
+            run_config = spec.make_run_config(
+                output_dir=str(output_dir),
+                legacy_token_cap_threshold=301,
+            )
+            with patch(
+                "compass.benchmark.runner.LLMJudge",
+                side_effect=_FakeJudge,
+            ), patch(
+                "compass.benchmark.runner.OllamaClient",
+                return_value=SimpleNamespace(),
+            ):
+                evaluations_path = runner.evaluate(generations_path, run_config)
+
+            saved_rows = [
+                json.loads(line)
+                for line in evaluations_path.read_text().splitlines()
+                if line.strip()
+            ]
+
+        self.assertEqual(len(saved_rows), 1)
+        self.assertTrue(saved_rows[0]["generation_hit_token_cap"])
+        self.assertTrue(saved_rows[0]["generation_token_cap_inferred_legacy"])
+        self.assertTrue(saved_rows[0]["generation_quality_flagged"])
 
     def test_benchmark_list_contains_constitutional(self):
         self.assertIn("constitutional_compliance", list_benchmark_specs())
