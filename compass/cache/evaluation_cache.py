@@ -1,10 +1,15 @@
 """Deterministic caching for evaluation results."""
 import hashlib
 import json
+import logging
+import os
+import tempfile
 from pathlib import Path
 from typing import Dict, Optional
 
 from compass.judges.base import EvaluationResult
+
+logger = logging.getLogger(__name__)
 
 
 class EvaluationCache:
@@ -69,12 +74,27 @@ class EvaluationCache:
         self.memory[key] = result
 
         cache_file = self.cache_dir / f"{key}.json"
+        temp_path: Optional[Path] = None
         try:
-            with open(cache_file, "w") as f:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                dir=self.cache_dir,
+                prefix=f"{key}.",
+                suffix=".tmp",
+                delete=False,
+            ) as f:
                 json.dump(result.to_dict(), f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+                temp_path = Path(f.name)
+            os.replace(temp_path, cache_file)
         except OSError as e:
-            import logging
-            logging.getLogger(__name__).warning("Cache write failed for %s: %s", key, e)
+            if temp_path is not None:
+                try:
+                    temp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            logger.warning("Cache write failed for %s: %s", key, e)
 
     def stats(self) -> Dict[str, int]:
         """Return cache statistics."""

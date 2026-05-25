@@ -2,6 +2,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from compass.cache import EvaluationCache
 from compass.judges import EvaluationResult
@@ -145,6 +146,24 @@ class TestEvaluationCache(unittest.TestCase):
         # Cache should handle this gracefully
         result = self.cache.get("somekey", "hash", "1.0")
         self.assertIsNone(result)
+
+    def test_cache_cleans_up_temp_file_on_replace_failure(self):
+        """Atomic writes should not leave temp files behind on failure."""
+        result = EvaluationResult(
+            name="test",
+            score=0.5,
+            hit=False,
+            rubric_hash="hash1",
+            judge_model="gpt-4o",
+        )
+
+        with self.assertLogs("compass.cache.evaluation_cache", level="WARNING") as logs:
+            with patch("compass.cache.evaluation_cache.os.replace", side_effect=OSError("boom")):
+                self.cache.put("config123", "text", "1.0", result)
+
+        self.assertIn("Cache write failed", logs.output[0])
+        self.assertEqual(list(Path(self.tmpdir.name).glob("*.tmp")), [])
+        self.assertEqual(list(Path(self.tmpdir.name).glob("*.json")), [])
 
 
 if __name__ == "__main__":
