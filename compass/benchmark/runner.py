@@ -445,13 +445,19 @@ class SharedBenchmarkRunner:
     ) -> Path:
         """Evaluate completions for a benchmark run config."""
         config = self.validate_run_config(run_config)
-        return evaluate_completions(
+        evaluations_path = evaluate_completions(
             generations_path=generations_path,
             benchmark_spec=self.spec,
             judge_model=config.judge_model,
             output_dir=setup_output_dir(config.output_dir),
             legacy_token_cap_threshold=config.legacy_token_cap_threshold,
         )
+        errors = self.validate_report(evaluations_path, config)
+        if errors:
+            raise ValueError(
+                "Benchmark report validation failed: " + "; ".join(errors)
+            )
+        return evaluations_path
 
     def analyze(self, evaluations_path: Path, run_config: BenchmarkRunConfig) -> dict:
         """Analyze benchmark results for a run config."""

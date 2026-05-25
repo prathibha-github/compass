@@ -251,6 +251,65 @@ class BenchmarkRegistryTests(unittest.TestCase):
         self.assertEqual(analyze.call_args.kwargs["quality_filter_mode"], "exclude_flagged")
         self.assertEqual(rank.call_args.kwargs["quality_filter_mode"], "exclude_flagged")
 
+    def test_shared_runner_evaluate_runs_validation_hook(self):
+        spec = build_benchmark_spec(
+            name="toy_validate_hook",
+            version="0.1",
+            prompts_by_rubric={
+                "clarity": [
+                    {"id": "p1", "text": "Explain X", "task_type": "explanation"},
+                ]
+            },
+            rubrics_by_name={"clarity": RubricLibrary.clarity},
+        )
+        runner = SharedBenchmarkRunner(spec)
+        run_config = spec.make_run_config()
+        evaluations_path = Path("evaluations.jsonl")
+        with patch(
+            "compass.benchmark.runner.evaluate_completions",
+            return_value=evaluations_path,
+        ) as evaluate:
+            with patch.object(
+                runner,
+                "validate_report",
+                return_value=[],
+            ) as validate_report:
+                self.assertEqual(
+                    runner.evaluate(Path("generations.jsonl"), run_config),
+                    evaluations_path,
+                )
+
+        evaluate.assert_called_once()
+        validate_report.assert_called_once_with(evaluations_path, run_config)
+
+    def test_shared_runner_evaluate_raises_on_invalid_report(self):
+        spec = build_benchmark_spec(
+            name="toy_invalid_report",
+            version="0.1",
+            prompts_by_rubric={
+                "clarity": [
+                    {"id": "p1", "text": "Explain X", "task_type": "explanation"},
+                ]
+            },
+            rubrics_by_name={"clarity": RubricLibrary.clarity},
+        )
+        runner = SharedBenchmarkRunner(spec)
+        run_config = spec.make_run_config()
+        with patch(
+            "compass.benchmark.runner.evaluate_completions",
+            return_value=Path("evaluations.jsonl"),
+        ):
+            with patch.object(
+                runner,
+                "validate_report",
+                return_value=["evaluation row 1 missing quality fields: generation_visible_chars"],
+            ):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "Benchmark report validation failed",
+                ):
+                    runner.evaluate(Path("generations.jsonl"), run_config)
+
     def test_benchmark_list_contains_constitutional(self):
         self.assertIn("constitutional_compliance", list_benchmark_specs())
 
