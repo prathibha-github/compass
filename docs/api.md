@@ -291,6 +291,147 @@ metadata = EvaluationMetadata.from_result(result, compass_version="0.1.0")
 d = metadata.to_dict()  # Serialize to dict
 ```
 
+## Benchmark API
+
+The shared benchmark core lives under `compass.benchmark`.
+
+### BenchmarkSpec and Run Presets
+
+Use `BenchmarkSpec` plus benchmark-owned presets to describe a benchmark
+family without embedding policy defaults in a CLI wrapper.
+
+```python
+from compass.benchmark import (
+    BenchmarkPolicyDefaults,
+    BenchmarkPrompt,
+    BenchmarkRunPreset,
+    BenchmarkSpec,
+)
+from compass.rubrics.library import RubricLibrary
+
+spec = BenchmarkSpec(
+    name="toy_benchmark",
+    version="1.0",
+    prompts_by_rubric={
+        "clarity": (
+            BenchmarkPrompt(
+                id="p1",
+                text="Explain caching.",
+                task_type="conceptual_explanation",
+            ),
+        ),
+    },
+    rubrics_by_name={"clarity": RubricLibrary.clarity},
+    run_presets={
+        "default": BenchmarkRunPreset(
+            models=("llama3.1",),
+            samples=2,
+            judge_model="llama3.1",
+            output_dir="results/toy_benchmark",
+            policy=BenchmarkPolicyDefaults(
+                token_budgets={"default": 150},
+                analysis_lanes=("summary", "pairwise"),
+            ),
+        ),
+    },
+)
+
+run_config = spec.make_run_config()
+```
+
+Key types:
+- `BenchmarkPrompt`: prompt id, text, and stable `task_type`
+- `BenchmarkPolicyDefaults`: benchmark-owned token budgets, fairness policy, quality filter, analysis lanes
+- `BenchmarkRunPreset`: named default run settings
+- `BenchmarkRunConfig`: resolved config after preset selection and overrides
+- `BenchmarkSpec`: immutable benchmark definition
+
+### BenchmarkRunner Contract
+
+Benchmark registration enforces a `BenchmarkRunner` contract with these
+methods:
+
+- `validate_run_config(run_config) -> BenchmarkRunConfig`
+- `generate(run_config) -> Path`
+- `evaluate(generations_path, run_config) -> Path`
+- `analyze(evaluations_path, run_config) -> dict`
+- `rank(evaluations_path, run_config) -> None`
+- `validate_report(evaluations_path, run_config) -> Sequence[str]`
+
+Use `SharedBenchmarkRunner` when the default shared core is enough:
+
+```python
+from compass.benchmark import SharedBenchmarkRunner
+
+runner = SharedBenchmarkRunner(spec)
+```
+
+### Registry Helpers
+
+Register and look up benchmark families through the registry:
+
+```python
+from compass.benchmark import (
+    get_benchmark_runner,
+    get_benchmark_spec,
+    list_benchmark_specs,
+    register_benchmark_spec,
+)
+
+register_benchmark_spec(spec)
+runner = get_benchmark_runner(spec.name)
+spec = get_benchmark_spec("constitutional_compliance")
+available = list_benchmark_specs()
+```
+
+### Core Benchmark Operations
+
+The shared runner builds on reusable generation, evaluation, reporting, and
+validation helpers:
+
+```python
+from pathlib import Path
+
+from compass.benchmark import (
+    analyze_results,
+    evaluate_completions,
+    generate_completions,
+    print_summary,
+    validate_benchmark_report,
+)
+
+generations_path = generate_completions(
+    models=["llama3.1"],
+    benchmark_spec=spec,
+    samples=2,
+    output_dir=Path("results/toy_benchmark"),
+)
+evaluations_path = evaluate_completions(
+    generations_path=generations_path,
+    benchmark_spec=spec,
+    judge_model="llama3.1",
+    output_dir=Path("results/toy_benchmark"),
+)
+stats = analyze_results(evaluations_path, Path("results/toy_benchmark"))
+print_summary(stats, evaluations_path)
+errors = validate_benchmark_report(evaluations_path)
+```
+
+### Benchmark Schemas
+
+Persisted benchmark outputs use benchmark-owned schema fields:
+
+- `benchmark_name`
+- `benchmark_version`
+- `benchmark_schema_version`
+- `benchmark_record_type`
+
+Helpers:
+- `migrate_generation_record(...)`
+- `migrate_evaluation_record(...)`
+- `generation_identity(...)`
+- `evaluation_identity(...)`
+
 ## Imports
 
 ```python
@@ -312,6 +453,22 @@ from compass import (
     reproducibility_report,
     cost_summary,
     cost_per_judge,
+)
+
+# Benchmark core
+from compass.benchmark import (
+    BenchmarkPolicyDefaults,
+    BenchmarkPrompt,
+    BenchmarkRunPreset,
+    BenchmarkSpec,
+    SharedBenchmarkRunner,
+    analyze_results,
+    evaluate_completions,
+    generate_completions,
+    get_benchmark_runner,
+    get_benchmark_spec,
+    register_benchmark_spec,
+    validate_benchmark_report,
 )
 
 # Version
