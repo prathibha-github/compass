@@ -16,7 +16,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from compass.benchmark.schemas import migrate_generation_record
+from compass.benchmark.schemas import migrate_evaluation_record, migrate_generation_record
 
 EXAMPLES_DIR = pathlib.Path(__file__).resolve().parents[1] / "examples"
 
@@ -177,14 +177,27 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
             eval_path = out / "evaluations_llama3.1.jsonl"
             eval_path.write_text(
                 json.dumps(
-                    {
-                        "model": "llama3.1",
-                        "rubric": "clarity",
-                        "prompt_id": "p1",
-                        "sample_idx": 0,
-                        "score": 0.1,
-                        "hit": False,
-                    }
+                    migrate_evaluation_record(
+                        {
+                            "model": "llama3.1",
+                            "rubric": "clarity",
+                            "prompt_id": "p1",
+                            "task_type": "general",
+                            "sample_idx": 0,
+                            "score": 0.1,
+                            "hit": False,
+                            "confidence": 0.8,
+                            "rationale": "cached",
+                            "judge_model": "llama3.1",
+                            "generation_visible_chars": 120,
+                            "generation_visible_word_count": 20,
+                            "generation_hit_token_cap": False,
+                            "generation_is_fragment": False,
+                            "generation_quality_flagged": False,
+                            "generation_finish_reason": "stop",
+                            "generation_token_cap_inferred_legacy": False,
+                        }
+                    )
                 )
                 + "\n"
             )

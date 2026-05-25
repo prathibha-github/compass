@@ -85,6 +85,8 @@ Add the spec to `compass/benchmark/registry.py` and expose both lookup paths:
 Registration validates that the runner satisfies the `BenchmarkRunner`
 contract. If the shared core runner is enough, `register_benchmark_spec(...)`
 will supply `SharedBenchmarkRunner(spec)` automatically.
+The shared runner also invokes `validate_report(...)` after evaluation so
+benchmark quality-gate enforcement does not depend on CLI convention.
 
 ### 3. Reuse the shared runner
 
