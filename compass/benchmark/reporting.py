@@ -3,12 +3,23 @@
 import logging
 from collections import defaultdict
 from pathlib import Path
+from typing import Iterable, List
 
 from compass import PairwiseRanker
 from compass.benchmark.io import load_evaluation_records
 from compass.benchmark.specs import BenchmarkSpec
 
 logger = logging.getLogger(__name__)
+
+
+def _quality_filtered_results(results: Iterable[dict]) -> List[dict]:
+    return [result for result in results if not result.get("generation_quality_flagged")]
+
+
+def _scored_results_for_policy(results: List[dict], quality_filter_mode: str) -> List[dict]:
+    if quality_filter_mode == "exclude_flagged":
+        return _quality_filtered_results(results)
+    return list(results)
 
 
 def format_summary(stats: dict, evaluations_path: Path) -> str:
@@ -51,7 +62,11 @@ def format_summary(stats: dict, evaluations_path: Path) -> str:
     return "\n".join(lines)
 
 
-def analyze_results(evaluations_path: Path, output_dir: Path) -> dict:
+def analyze_results(
+    evaluations_path: Path,
+    output_dir: Path,
+    quality_filter_mode: str = "annotate",
+) -> dict:
     """Analyze evaluation results and generate report data."""
     # Reserved for future report artifact paths; kept for API compatibility.
     results_by_key = defaultdict(list)
@@ -61,22 +76,24 @@ def analyze_results(evaluations_path: Path, output_dir: Path) -> dict:
 
     stats = {}
     for (model, rubric), results in results_by_key.items():
-        hits = sum(1 for r in results if r["hit"])
-        total = len(results)
+        scored_results = _scored_results_for_policy(results, quality_filter_mode)
+        quality_filtered = _quality_filtered_results(results)
+        hits = sum(1 for r in scored_results if r["hit"])
+        total = len(scored_results)
         hit_rate = (hits / total * 100) if total > 0 else 0.0
-        mean_score = sum(r["score"] for r in results) / total if total > 0 else 0.0
+        mean_score = (
+            sum(r["score"] for r in scored_results) / total if total > 0 else 0.0
+        )
         flagged = sum(1 for r in results if r.get("generation_quality_flagged"))
         token_cap_hits = sum(1 for r in results if r.get("generation_hit_token_cap"))
         fragments = sum(1 for r in results if r.get("generation_is_fragment"))
         legacy_cap_inferred = sum(
             1 for r in results if r.get("generation_token_cap_inferred_legacy")
         )
-        quality_filtered = [
-            r for r in results if not r.get("generation_quality_flagged")
-        ]
         qf_hits = sum(1 for r in quality_filtered if r["hit"])
         qf_total = len(quality_filtered)
         qf_hit_rate = (qf_hits / qf_total * 100) if qf_total > 0 else None
+        raw_total = len(results)
 
         key_str = f"{model}|{rubric}"
         stats[key_str] = {
@@ -86,14 +103,16 @@ def analyze_results(evaluations_path: Path, output_dir: Path) -> dict:
             "mean_score": mean_score,
             "hits": hits,
             "total": total,
-            "quality_flagged_pct": (flagged / total * 100) if total > 0 else 0.0,
-            "token_cap_pct": (token_cap_hits / total * 100) if total > 0 else 0.0,
-            "fragment_pct": (fragments / total * 100) if total > 0 else 0.0,
+            "quality_flagged_pct": (flagged / raw_total * 100) if raw_total > 0 else 0.0,
+            "token_cap_pct": (token_cap_hits / raw_total * 100) if raw_total > 0 else 0.0,
+            "fragment_pct": (fragments / raw_total * 100) if raw_total > 0 else 0.0,
             "legacy_cap_inferred_pct": (
-                legacy_cap_inferred / total * 100
-            ) if total > 0 else 0.0,
+                legacy_cap_inferred / raw_total * 100
+            ) if raw_total > 0 else 0.0,
             "quality_filtered_total": qf_total,
             "quality_filtered_hit_rate": qf_hit_rate,
+            "quality_filter_mode": quality_filter_mode,
+            "raw_total": raw_total,
         }
 
     return stats
@@ -109,6 +128,7 @@ def rank_models(
     evaluations_path: Path,
     benchmark_spec: BenchmarkSpec,
     output_dir: Path,
+    quality_filter_mode: str = "annotate",
 ) -> None:
     """Perform pairwise model ranking."""
     # Reserved for future ranking artifact paths; kept for API compatibility.
@@ -117,6 +137,11 @@ def rank_models(
     ranker = PairwiseRanker()
 
     for result in load_evaluation_records(evaluations_path):
+        if (
+            quality_filter_mode == "exclude_flagged"
+            and result.get("generation_quality_flagged")
+        ):
+            continue
         metadata = {}
         segment_value = result.get(benchmark_spec.pairwise_segment_field)
         if segment_value is not None:

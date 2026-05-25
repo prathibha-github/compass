@@ -250,6 +250,58 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
             self.assertEqual(row["token_cap_pct"], 50.0)
             self.assertEqual(row["fragment_pct"], 50.0)
 
+    def test_analyze_results_can_exclude_quality_flagged_rows(self):
+        benchmark = _load_benchmark_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out = pathlib.Path(tmpdir)
+            eval_path = out / "evaluations.jsonl"
+            eval_path.write_text(
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "model": "m1",
+                                "rubric": "clarity",
+                                "prompt_id": "p1",
+                                "sample_idx": 0,
+                                "score": 0.1,
+                                "hit": False,
+                                "generation_quality_flagged": True,
+                                "generation_hit_token_cap": True,
+                                "generation_is_fragment": True,
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "model": "m1",
+                                "rubric": "clarity",
+                                "prompt_id": "p2",
+                                "sample_idx": 0,
+                                "score": 0.9,
+                                "hit": True,
+                                "generation_quality_flagged": False,
+                                "generation_hit_token_cap": False,
+                                "generation_is_fragment": False,
+                            }
+                        ),
+                    ]
+                )
+                + "\n"
+            )
+
+            stats = benchmark.analyze_results(
+                eval_path,
+                out,
+                quality_filter_mode="exclude_flagged",
+            )
+            row = stats["m1|clarity"]
+            self.assertEqual(row["hits"], 1)
+            self.assertEqual(row["total"], 1)
+            self.assertEqual(row["hit_rate"], 100.0)
+            self.assertEqual(row["quality_filtered_total"], 1)
+            self.assertEqual(row["quality_filter_mode"], "exclude_flagged")
+            self.assertEqual(row["raw_total"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

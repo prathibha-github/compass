@@ -8,11 +8,11 @@ forking the core runner.
 Use this split consistently:
 
 - `compass/benchmark/specs.py`
-  Benchmark contracts (`BenchmarkPrompt`, `BenchmarkSpec`)
+  Benchmark contracts (`BenchmarkPrompt`, `BenchmarkSpec`, run presets, runner contract)
 - `compass/benchmark/registry.py`
-  Built-in benchmark registrations
+  Built-in benchmark registrations and runner lookup
 - `compass/benchmark/runner.py`
-  Shared generation and evaluation loops
+  Shared generation and evaluation loops plus the default shared runner
 - `compass/benchmark/reporting.py`
   Shared aggregation, summary formatting, pairwise ranking
 - `compass/benchmark/validation.py`
@@ -26,12 +26,17 @@ benchmark-specific branches.
 
 ## Benchmark Authoring Workflow
 
-### 1. Define the benchmark spec
+### 1. Define the benchmark spec and run preset
 
-Create prompts and rubric mappings as a `BenchmarkSpec`:
+Create prompts, rubric mappings, and at least one benchmark-owned run preset:
 
 ```python
-from compass.benchmark import BenchmarkPrompt, BenchmarkSpec
+from compass.benchmark import (
+    BenchmarkPolicyDefaults,
+    BenchmarkPrompt,
+    BenchmarkRunPreset,
+    BenchmarkSpec,
+)
 from compass.rubrics.library import RubricLibrary
 
 MY_BENCHMARK = BenchmarkSpec(
@@ -49,6 +54,18 @@ MY_BENCHMARK = BenchmarkSpec(
     rubrics_by_name={
         "clarity": RubricLibrary.clarity,
     },
+    run_presets={
+        "default": BenchmarkRunPreset(
+            models=("llama3.1",),
+            samples=2,
+            judge_model="llama3.1",
+            output_dir="results/my_benchmark",
+            policy=BenchmarkPolicyDefaults(
+                token_budgets={"default": 150, "gpt": 400},
+                analysis_lanes=("summary", "pairwise"),
+            ),
+        ),
+    },
 )
 ```
 
@@ -56,29 +73,35 @@ Rules:
 - `name` and `version` must be explicit.
 - `prompts_by_rubric` and `rubrics_by_name` must cover the same rubric names.
 - `task_type` should be stable enough to support pairwise segmentation.
+- benchmark defaults belong in `run_presets`, not as CLI-only defaults
+- policy defaults should cover token budgets, fairness, quality filtering, and analysis lanes
 
-### 2. Register the benchmark
+### 2. Register the benchmark and runner contract
 
-Add the spec to `compass/benchmark/registry.py` and expose a lookup path via
-`get_benchmark_spec(...)`.
+Add the spec to `compass/benchmark/registry.py` and expose both lookup paths:
+- `get_benchmark_spec(...)`
+- `get_benchmark_runner(...)`
 
-Registration is what makes the benchmark reusable by examples, downstream
-repos, and tests without rewriting orchestration.
+Registration validates that the runner satisfies the `BenchmarkRunner`
+contract. If the shared core runner is enough, `register_benchmark_spec(...)`
+will supply `SharedBenchmarkRunner(spec)` automatically.
 
 ### 3. Reuse the shared runner
 
-Benchmark examples should call:
+Benchmark examples should build a run config from the benchmark preset, apply
+CLI overrides, and call the registered runner:
 
-- `generate_completions(...)`
-- `evaluate_completions(...)`
-- `analyze_results(...)`
-- `print_summary(...)`
-- `rank_models(...)`
+- `spec.make_run_config(...)`
+- `runner.validate_run_config(...)`
+- `runner.generate(...)`
+- `runner.evaluate(...)`
+- `runner.analyze(...)`
+- `runner.rank(...)`
 
 The example script should mainly do:
 - argument parsing
-- model/judge selection
-- output directory setup
+- thin override merging on top of a benchmark-owned preset
+- model/judge availability checks
 - call into the shared benchmark core
 
 ### 4. Persist versioned outputs
@@ -116,6 +139,7 @@ Required aggregated metrics:
 
 Minimum test set:
 - spec/registry contract test
+- preset/run-config override test
 - generation loop test
 - evaluation loop test
 - quality validation test
