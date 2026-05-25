@@ -88,6 +88,20 @@ will supply `SharedBenchmarkRunner(spec)` automatically.
 The shared runner also invokes `validate_report(...)` after evaluation so
 benchmark quality-gate enforcement does not depend on CLI convention.
 
+The `BenchmarkRunner` contract is registration-time enforced and must expose:
+- `spec`
+- `validate_run_config(run_config) -> BenchmarkRunConfig`
+- `generate(run_config) -> Path`
+- `evaluate(generations_path, run_config) -> Path`
+- `analyze(evaluations_path, run_config) -> dict`
+- `rank(evaluations_path, run_config) -> None`
+- `validate_report(evaluations_path, run_config) -> Sequence[str]`
+
+Registration invariants:
+- `runner.spec.name` must match `spec.name`
+- `runner.spec.version` must match `spec.version`
+- report validation must participate through the runner contract, not only the CLI wrapper
+
 ### 3. Reuse the shared runner
 
 Benchmark examples should build a run config from the benchmark preset, apply
@@ -112,6 +126,8 @@ Generated rows and evaluation rows must go through schema migration helpers in
 `compass/benchmark/schemas.py`.
 
 Minimum persisted guarantees:
+- `benchmark_name`
+- `benchmark_version`
 - `benchmark_schema_version`
 - `benchmark_record_type`
 - stable identity fields (`model`, `rubric`, `prompt_id`, `sample_idx`)
