@@ -221,6 +221,17 @@ class BenchmarkMaxTokensTests(unittest.TestCase):
                 max_tokens_by_model={"llama3.1": 0},
             )
 
+    def test_custom_uniform_budget_overrides_defaults(self):
+        captured = self._run_generate(
+            ["claude-haiku-4-5", "gpt-5.4-mini"],
+            max_tokens_by_model={
+                "claude-haiku-4-5": 1000,
+                "gpt-5.4-mini": 1000,
+            },
+        )
+        self.assertEqual(captured["claude-haiku-4-5"], 1000)
+        self.assertEqual(captured["gpt-5.4-mini"], 1000)
+
 
 class BenchmarkRecordLoadingTests(unittest.TestCase):
     def test_load_generation_records_migrates_legacy_rows(self):
@@ -351,6 +362,27 @@ class BenchmarkTokenBudgetPolicyTests(unittest.TestCase):
             allow_mixed=False,
         )
         self.assertEqual(set(budgets.values()), {150})
+
+class BenchmarkTokenBudgetCliParsingTests(unittest.TestCase):
+    def test_parse_max_tokens_by_model_args(self):
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        budgets = benchmark._parse_max_tokens_by_model_args(
+            ["claude-haiku-4-5=1000", "gpt-5.4-mini=1000"]
+        )
+        self.assertEqual(
+            budgets,
+            {
+                "claude-haiku-4-5": 1000,
+                "gpt-5.4-mini": 1000,
+            },
+        )
+
+    def test_parse_max_tokens_by_model_args_rejects_invalid_entries(self):
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        with self.assertRaisesRegex(ValueError, "expected MODEL=TOKENS"):
+            benchmark._parse_max_tokens_by_model_args(["bad-entry"])
+        with self.assertRaisesRegex(ValueError, "must be > 0"):
+            benchmark._parse_max_tokens_by_model_args(["llama3.1=0"])
 
 
 if __name__ == "__main__":
