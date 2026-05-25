@@ -535,6 +535,40 @@ class BenchmarkMainOrchestrationTests(unittest.TestCase):
         self.assertEqual(runner.rank_calls, 1)
         print_summary.assert_not_called()
 
+    def test_main_exits_cleanly_when_report_validation_fails(self):
+        import tempfile
+
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        output_dir = None
+
+        class _Runner:
+            def __init__(self, spec):
+                self.spec = spec
+
+            def validate_run_config(self, run_config):
+                return run_config
+
+            def generate(self, run_config):
+                return output_dir / "generations.jsonl"
+
+            def evaluate(self, generations_path, run_config):
+                raise ValueError("Benchmark report validation failed: bad row")
+
+        runner = _Runner(benchmark.BENCHMARK_SPEC)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = pathlib.Path(tmpdir)
+            with patch.object(benchmark, "BENCHMARK_RUNNER", runner), \
+                 patch.object(benchmark, "test_model_connection", return_value=True), \
+                 patch.object(benchmark, "setup_output_dir", return_value=output_dir), \
+                 patch.object(benchmark.logger, "error") as log_error, \
+                 patch.object(sys, "argv", ["constitutional_compliance_benchmark.py"]):
+                with self.assertRaises(SystemExit) as exc:
+                    benchmark.main()
+
+        self.assertEqual(exc.exception.code, 1)
+        log_error.assert_any_call("Benchmark report validation failed: bad row")
+
 
 if __name__ == "__main__":
     unittest.main()

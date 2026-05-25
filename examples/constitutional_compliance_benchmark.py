@@ -389,10 +389,14 @@ def main():
 
     logger.info("")
     logger.info("PHASE 2: Evaluating completions...")
-    evaluations_path = BENCHMARK_RUNNER.evaluate(
-        generations_path,
-        run_config,
-    )
+    try:
+        evaluations_path = BENCHMARK_RUNNER.evaluate(
+            generations_path,
+            run_config,
+        )
+    except ValueError as e:
+        logger.error(str(e))
+        sys.exit(1)
 
     if "summary" in run_config.effective_analysis_lanes:
         logger.info("")
