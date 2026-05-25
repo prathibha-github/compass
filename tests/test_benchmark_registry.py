@@ -271,16 +271,16 @@ class BenchmarkRegistryTests(unittest.TestCase):
         ) as evaluate:
             with patch.object(
                 runner,
-                "validate_report",
+                "_validate_report_artifacts",
                 return_value=[],
-            ) as validate_report:
+            ) as validate_report_artifacts:
                 self.assertEqual(
                     runner.evaluate(Path("generations.jsonl"), run_config),
                     evaluations_path,
                 )
 
         evaluate.assert_called_once()
-        validate_report.assert_called_once_with(evaluations_path, run_config)
+        validate_report_artifacts.assert_called_once_with(evaluations_path, run_config)
 
     def test_shared_runner_evaluate_raises_on_invalid_report(self):
         spec = build_benchmark_spec(
@@ -301,7 +301,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
         ):
             with patch.object(
                 runner,
-                "validate_report",
+                "_validate_report_artifacts",
                 return_value=["evaluation row 1 missing quality fields: generation_visible_chars"],
             ):
                 with self.assertRaisesRegex(
@@ -309,6 +309,32 @@ class BenchmarkRegistryTests(unittest.TestCase):
                     "Benchmark report validation failed",
                 ):
                     runner.evaluate(Path("generations.jsonl"), run_config)
+
+    def test_shared_runner_validate_report_validates_run_config_once(self):
+        spec = build_benchmark_spec(
+            name="toy_validate_once",
+            version="0.1",
+            prompts_by_rubric={
+                "clarity": [
+                    {"id": "p1", "text": "Explain X", "task_type": "explanation"},
+                ]
+            },
+            rubrics_by_name={"clarity": RubricLibrary.clarity},
+        )
+        runner = SharedBenchmarkRunner(spec)
+        run_config = spec.make_run_config()
+        with patch.object(
+            runner,
+            "validate_run_config",
+            wraps=runner.validate_run_config,
+        ) as validate_run_config:
+            with patch(
+                "compass.benchmark.runner.validate_benchmark_report",
+                return_value=[],
+            ):
+                runner.validate_report(Path("evaluations.jsonl"), run_config)
+
+        validate_run_config.assert_called_once_with(run_config)
 
     def test_benchmark_list_contains_constitutional(self):
         self.assertIn("constitutional_compliance", list_benchmark_specs())

@@ -452,7 +452,7 @@ class SharedBenchmarkRunner:
             output_dir=setup_output_dir(config.output_dir),
             legacy_token_cap_threshold=config.legacy_token_cap_threshold,
         )
-        errors = self.validate_report(evaluations_path, config)
+        errors = self._validate_report_artifacts(evaluations_path, config)
         if errors:
             raise ValueError(
                 "Benchmark report validation failed: " + "; ".join(errors)
@@ -490,5 +490,13 @@ class SharedBenchmarkRunner:
         run_config: BenchmarkRunConfig,
     ) -> list:
         """Validate report artifacts for a benchmark run config."""
-        self.validate_run_config(run_config)
+        config = self.validate_run_config(run_config)
+        return self._validate_report_artifacts(evaluations_path, config)
+
+    def _validate_report_artifacts(
+        self,
+        evaluations_path: Path,
+        run_config: BenchmarkRunConfig,
+    ) -> list:
+        """Validate report artifacts for a prevalidated benchmark run config."""
         return validate_benchmark_report(evaluations_path)
