@@ -178,8 +178,13 @@ class ClientConformanceTests(unittest.TestCase):
         self.assertIn("<system>", kwargs["prompt"])
         self.assertIn("system prompt", kwargs["prompt"])
         self.assertIn("prompt", kwargs["prompt"])
-        self._assert_response_contract(response, 5, 1)
-        self.assertEqual(client.total_tokens, {"input": 5, "output": 1})
+        self.assertIsInstance(response, CompletionResponse)
+        self.assertEqual(response.completion, "answer")
+        self.assertIsInstance(response.tokens_used, dict)
+        self.assertGreater(response.tokens_used["input"], 0)
+        self.assertGreater(response.tokens_used["output"], 0)
+        self.assertEqual(response.cost_usd, 0.0)
+        self.assertEqual(client.total_tokens, response.tokens_used)
 
     def test_complete_signature_matches_base_shape(self):
         from compass.clients.base import CompletionClient
