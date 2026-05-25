@@ -2,10 +2,13 @@
 
 from typing import Any, Dict, Tuple
 
+from compass.schema_fields import (
+    BENCHMARK_RECORD_TYPE_FIELD,
+    BENCHMARK_SCHEMA_VERSION_FIELD,
+)
+
 LEGACY_BENCHMARK_SCHEMA_VERSION = 0
 BENCHMARK_SCHEMA_VERSION = 1
-BENCHMARK_SCHEMA_VERSION_FIELD = "benchmark_schema_version"
-BENCHMARK_RECORD_TYPE_FIELD = "benchmark_record_type"
 
 GENERATION_RECORD_TYPE = "generation"
 EVALUATION_RECORD_TYPE = "evaluation"

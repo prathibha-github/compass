@@ -4,6 +4,10 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Set, Tuple
 
+from compass.schema_fields import (
+    BENCHMARK_RECORD_TYPE_FIELD,
+    BENCHMARK_SCHEMA_VERSION_FIELD,
+)
 from compass.evaluation.record_schema import (
     checkpoint_identity,
     migrate_checkpoint_record,
@@ -12,14 +16,11 @@ from compass.evaluation.record_schema import (
 
 logger = logging.getLogger(__name__)
 
-_BENCHMARK_SCHEMA_VERSION_FIELD = "benchmark_schema_version"
-_BENCHMARK_RECORD_TYPE_FIELD = "benchmark_record_type"
-
 
 def _is_benchmark_output_record(record: Dict[str, Any]) -> bool:
     return (
-        _BENCHMARK_SCHEMA_VERSION_FIELD in record
-        or _BENCHMARK_RECORD_TYPE_FIELD in record
+        BENCHMARK_SCHEMA_VERSION_FIELD in record
+        or BENCHMARK_RECORD_TYPE_FIELD in record
     )
 
 
