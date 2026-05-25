@@ -7,6 +7,25 @@ on:
     branches: [main]
 
 jobs:
+  benchmark-test-delta:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Fetch base branch
+        run: |
+          git fetch origin "${{ github.base_ref }}":"refs/remotes/origin/${{ github.base_ref }}"
+      - name: Require benchmark test delta for benchmark logic changes
+        run: |
+          python scripts/check_benchmark_test_delta.py --base-ref "origin/${{ github.base_ref }}"
+
   example-smoke:
     runs-on: ubuntu-latest
 
