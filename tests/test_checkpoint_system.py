@@ -8,6 +8,8 @@ from pathlib import Path
 from compass.evaluation.checkpoint import CheckpointManager
 from compass.evaluation.record_schema import (
     CHECKPOINT_SCHEMA_VERSION,
+    CHECKPOINT_SCHEMA_VERSION_FIELD,
+    CHECKPOINT_RECORD_TYPE_FIELD,
     RECORD_TYPE_BENCHMARK,
     RECORD_TYPE_SUITE,
     VALID_RECORD_TYPES,
@@ -77,8 +79,8 @@ class TestCheckpointManager(unittest.TestCase):
         lines = self.checkpoint_path.read_text().strip().split('\n')
         self.assertEqual(len(lines), 1)
         saved = json.loads(lines[0])
-        self.assertEqual(saved["schema_version"], CHECKPOINT_SCHEMA_VERSION)
-        self.assertEqual(saved["record_type"], "suite_eval")
+        self.assertEqual(saved[CHECKPOINT_SCHEMA_VERSION_FIELD], CHECKPOINT_SCHEMA_VERSION)
+        self.assertEqual(saved[CHECKPOINT_RECORD_TYPE_FIELD], "suite_eval")
 
     def test_identity_tuple_format(self):
         """Identity tuple matches (model, suite, detector, prompt_id, condition, sample_idx)."""
@@ -157,6 +159,41 @@ class TestCheckpointManager(unittest.TestCase):
         self.assertIn(("gpt-4o", "task_focus", "d1", "p1", "c1", 0), completed)
         self.assertIn(("gpt-5-mini", "clarity", "p2", 3), completed)
         self.assertEqual(len(completed), 2)
+
+    def test_load_accepts_benchmark_output_schema_rows_without_checkpoint_tags(self):
+        line = (
+            '{"model":"gpt-5-mini","rubric":"clarity","prompt_id":"p2",'
+            '"sample_idx":"3","benchmark_schema_version":1,'
+            '"benchmark_record_type":"generation","completion":"ok"}'
+        )
+        self.checkpoint_path.write_text(line + "\n")
+
+        cp = CheckpointManager(str(self.checkpoint_path))
+        completed = cp.load()
+
+        self.assertIn(("gpt-5-mini", "clarity", "p2", 3), completed)
+        self.assertEqual(len(completed), 1)
+
+    def test_save_preserves_benchmark_output_schema_without_checkpoint_tags(self):
+        cp = CheckpointManager(str(self.checkpoint_path))
+
+        cp.save(
+            {
+                "model": "gpt-5-mini",
+                "rubric": "clarity",
+                "prompt_id": "p2",
+                "sample_idx": 0,
+                "benchmark_schema_version": 1,
+                "benchmark_record_type": "generation",
+                "completion": "ok",
+            }
+        )
+
+        saved = json.loads(self.checkpoint_path.read_text().strip())
+        self.assertEqual(saved["benchmark_schema_version"], 1)
+        self.assertEqual(saved["benchmark_record_type"], "generation")
+        self.assertNotIn(CHECKPOINT_SCHEMA_VERSION_FIELD, saved)
+        self.assertNotIn(CHECKPOINT_RECORD_TYPE_FIELD, saved)
 
     def test_inference_prefers_suite_shape_when_rubric_is_present(self):
         """Suite rows with an extra rubric key stay suite-shaped on load."""

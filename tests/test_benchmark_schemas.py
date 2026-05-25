@@ -4,6 +4,8 @@ import unittest
 
 from compass.benchmark.schemas import (
     BENCHMARK_SCHEMA_VERSION,
+    BENCHMARK_SCHEMA_VERSION_FIELD,
+    BENCHMARK_RECORD_TYPE_FIELD,
     EVALUATION_RECORD_TYPE,
     GENERATION_RECORD_TYPE,
     VALID_BENCHMARK_RECORD_TYPES,
@@ -11,6 +13,11 @@ from compass.benchmark.schemas import (
     generation_identity,
     migrate_evaluation_record,
     migrate_generation_record,
+)
+from compass.evaluation.record_schema import (
+    CHECKPOINT_RECORD_TYPE_FIELD,
+    CHECKPOINT_SCHEMA_VERSION_FIELD,
+    VALID_RECORD_TYPES,
 )
 
 
@@ -85,7 +92,21 @@ class TestBenchmarkSchemas(unittest.TestCase):
             frozenset({GENERATION_RECORD_TYPE, EVALUATION_RECORD_TYPE}),
         )
 
+    def test_benchmark_schema_field_names_are_distinct_from_checkpoint_fields(self):
+        self.assertNotEqual(
+            BENCHMARK_SCHEMA_VERSION_FIELD,
+            CHECKPOINT_SCHEMA_VERSION_FIELD,
+        )
+        self.assertNotEqual(
+            BENCHMARK_RECORD_TYPE_FIELD,
+            CHECKPOINT_RECORD_TYPE_FIELD,
+        )
+
+    def test_benchmark_record_type_domain_does_not_overlap_checkpoint_domain(self):
+        self.assertTrue(
+            VALID_BENCHMARK_RECORD_TYPES.isdisjoint(VALID_RECORD_TYPES)
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -4,6 +4,8 @@ from typing import Any, Dict, Tuple
 
 LEGACY_BENCHMARK_SCHEMA_VERSION = 0
 BENCHMARK_SCHEMA_VERSION = 1
+BENCHMARK_SCHEMA_VERSION_FIELD = "benchmark_schema_version"
+BENCHMARK_RECORD_TYPE_FIELD = "benchmark_record_type"
 
 GENERATION_RECORD_TYPE = "generation"
 EVALUATION_RECORD_TYPE = "evaluation"
@@ -41,12 +43,12 @@ def migrate_generation_record(record: Dict[str, Any]) -> Dict[str, Any]:
     data["sample_idx"] = _coerce_sample_idx(data.get("sample_idx", 0))
 
     schema_version = int(
-        data.get("benchmark_schema_version", LEGACY_BENCHMARK_SCHEMA_VERSION)
+        data.get(BENCHMARK_SCHEMA_VERSION_FIELD, LEGACY_BENCHMARK_SCHEMA_VERSION)
     )
     if schema_version not in _SUPPORTED_INPUT_SCHEMA_VERSIONS:
         raise ValueError(f"unsupported benchmark schema version: {schema_version}")
 
-    record_type = data.get("benchmark_record_type", GENERATION_RECORD_TYPE)
+    record_type = data.get(BENCHMARK_RECORD_TYPE_FIELD, GENERATION_RECORD_TYPE)
     if record_type != GENERATION_RECORD_TYPE:
         raise ValueError(
             f"expected generation record type, got {record_type!r}"
@@ -55,8 +57,8 @@ def migrate_generation_record(record: Dict[str, Any]) -> Dict[str, Any]:
     if "completion" not in data:
         raise ValueError("generation record missing completion")
 
-    data["benchmark_schema_version"] = BENCHMARK_SCHEMA_VERSION
-    data["benchmark_record_type"] = GENERATION_RECORD_TYPE
+    data[BENCHMARK_SCHEMA_VERSION_FIELD] = BENCHMARK_SCHEMA_VERSION
+    data[BENCHMARK_RECORD_TYPE_FIELD] = GENERATION_RECORD_TYPE
     return data
 
 
@@ -70,12 +72,12 @@ def migrate_evaluation_record(record: Dict[str, Any]) -> Dict[str, Any]:
     data["sample_idx"] = _coerce_sample_idx(data.get("sample_idx", 0))
 
     schema_version = int(
-        data.get("benchmark_schema_version", LEGACY_BENCHMARK_SCHEMA_VERSION)
+        data.get(BENCHMARK_SCHEMA_VERSION_FIELD, LEGACY_BENCHMARK_SCHEMA_VERSION)
     )
     if schema_version not in _SUPPORTED_INPUT_SCHEMA_VERSIONS:
         raise ValueError(f"unsupported benchmark schema version: {schema_version}")
 
-    record_type = data.get("benchmark_record_type")
+    record_type = data.get(BENCHMARK_RECORD_TYPE_FIELD)
     if record_type is None:
         # Legacy evaluation rows had no explicit type but always include score/hit.
         if "score" in data and "hit" in data:
@@ -91,8 +93,8 @@ def migrate_evaluation_record(record: Dict[str, Any]) -> Dict[str, Any]:
     if "score" not in data or "hit" not in data:
         raise ValueError("evaluation record missing score/hit")
 
-    data["benchmark_schema_version"] = BENCHMARK_SCHEMA_VERSION
-    data["benchmark_record_type"] = EVALUATION_RECORD_TYPE
+    data[BENCHMARK_SCHEMA_VERSION_FIELD] = BENCHMARK_SCHEMA_VERSION
+    data[BENCHMARK_RECORD_TYPE_FIELD] = EVALUATION_RECORD_TYPE
     return data
 
 
@@ -106,4 +108,3 @@ def evaluation_identity(record: Dict[str, Any]) -> Tuple[Any, ...]:
     """Canonical identity tuple for evaluation records."""
     row = migrate_evaluation_record(record)
     return (row["model"], row["rubric"], row["prompt_id"], row["sample_idx"])
-

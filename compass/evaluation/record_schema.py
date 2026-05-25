@@ -4,6 +4,8 @@ from typing import Any, Dict, Tuple
 
 CHECKPOINT_SCHEMA_VERSION = 1
 LEGACY_SCHEMA_VERSION = 0
+CHECKPOINT_SCHEMA_VERSION_FIELD = "schema_version"
+CHECKPOINT_RECORD_TYPE_FIELD = "record_type"
 
 # Persisted on-disk values: treat as frozen schema constants.
 RECORD_TYPE_SUITE = "suite_eval"
@@ -45,12 +47,12 @@ def migrate_checkpoint_record(record: Dict[str, Any]) -> Dict[str, Any]:
     data = dict(record)
     data["sample_idx"] = _coerce_sample_idx(data.get("sample_idx", 0))
 
-    schema_version_raw = data.get("schema_version", LEGACY_SCHEMA_VERSION)
+    schema_version_raw = data.get(CHECKPOINT_SCHEMA_VERSION_FIELD, LEGACY_SCHEMA_VERSION)
     schema_version = int(schema_version_raw)
     if schema_version not in _SUPPORTED_INPUT_SCHEMA_VERSIONS:
         raise ValueError(f"unsupported checkpoint schema_version={schema_version}")
 
-    record_type = data.get("record_type")
+    record_type = data.get(CHECKPOINT_RECORD_TYPE_FIELD)
     if record_type is None:
         # Prefer suite shape when fields overlap (some suite records may also
         # carry a rubric field for reporting).
@@ -69,15 +71,15 @@ def migrate_checkpoint_record(record: Dict[str, Any]) -> Dict[str, Any]:
     if record_type == RECORD_TYPE_SUITE and not _is_suite_shape(data):
         raise ValueError("suite_eval record missing required fields")
 
-    data["schema_version"] = CHECKPOINT_SCHEMA_VERSION
-    data["record_type"] = record_type
+    data[CHECKPOINT_SCHEMA_VERSION_FIELD] = CHECKPOINT_SCHEMA_VERSION
+    data[CHECKPOINT_RECORD_TYPE_FIELD] = record_type
     return data
 
 
 def checkpoint_identity(record: Dict[str, Any]) -> Tuple[Any, ...]:
     """Return canonical identity tuple for a normalized checkpoint record."""
     normalized = migrate_checkpoint_record(record)
-    if normalized["record_type"] == RECORD_TYPE_BENCHMARK:
+    if normalized[CHECKPOINT_RECORD_TYPE_FIELD] == RECORD_TYPE_BENCHMARK:
         return (
             normalized["model"],
             normalized["rubric"],

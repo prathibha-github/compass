@@ -118,6 +118,8 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
             row = json.loads(path.read_text().strip().splitlines()[0])
             self.assertIn("benchmark_schema_version", row)
             self.assertEqual(row["benchmark_record_type"], "generation")
+            self.assertNotIn("schema_version", row)
+            self.assertNotIn("record_type", row)
             self.assertIn("max_tokens_requested", row)
             self.assertIn("visible_chars", row)
             self.assertIn("visible_word_count", row)
@@ -215,6 +217,8 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
             self.assertIn("generation_quality_flagged", latest)
             self.assertIn("generation_hit_token_cap", latest)
             self.assertIn("generation_is_fragment", latest)
+            self.assertNotIn("schema_version", latest)
+            self.assertNotIn("record_type", latest)
 
     def test_evaluate_completions_reuses_evaluation_cache_for_duplicate_text(self):
         benchmark = _load_benchmark_module()
