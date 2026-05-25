@@ -79,6 +79,16 @@ class TestBenchmarkSchemas(unittest.TestCase):
                     "completion": "answer",
                 }
             )
+        with self.assertRaisesRegex(ValueError, "both benchmark_name and benchmark_version"):
+            migrate_generation_record(
+                {
+                    "benchmark_version": "1.0",
+                    "model": "llama3.1",
+                    "rubric": "clarity",
+                    "prompt_id": "p1",
+                    "completion": "answer",
+                }
+            )
 
     def test_generation_identity(self):
         identity = generation_identity(
