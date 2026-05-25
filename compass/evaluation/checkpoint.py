@@ -4,6 +4,10 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Set, Tuple
 
+from compass.schema_fields import (
+    BENCHMARK_RECORD_TYPE_FIELD,
+    BENCHMARK_SCHEMA_VERSION_FIELD,
+)
 from compass.evaluation.record_schema import (
     checkpoint_identity,
     migrate_checkpoint_record,
@@ -11,6 +15,27 @@ from compass.evaluation.record_schema import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _is_benchmark_output_record(record: Dict[str, Any]) -> bool:
+    return (
+        BENCHMARK_SCHEMA_VERSION_FIELD in record
+        or BENCHMARK_RECORD_TYPE_FIELD in record
+    )
+
+
+def _benchmark_output_identity(record: Dict[str, Any]) -> Tuple:
+    sample_idx = record.get("sample_idx", 0)
+    if sample_idx is None:
+        sample_idx = 0
+    if not isinstance(sample_idx, int):
+        sample_idx = int(sample_idx)
+    return (
+        record["model"],
+        record["rubric"],
+        record["prompt_id"],
+        sample_idx,
+    )
 
 
 class CheckpointManager:
@@ -71,7 +96,10 @@ class CheckpointManager:
                     continue
                 try:
                     result = json.loads(line)
-                    key = checkpoint_identity(result)
+                    if _is_benchmark_output_record(result):
+                        key = _benchmark_output_identity(result)
+                    else:
+                        key = checkpoint_identity(result)
                     completed.add(key)
 
                 except json.JSONDecodeError:
@@ -96,7 +124,10 @@ class CheckpointManager:
                    rationale, input_tokens, output_tokens
         """
         try:
-            normalized = migrate_checkpoint_record(result)
+            if _is_benchmark_output_record(result):
+                normalized = result
+            else:
+                normalized = migrate_checkpoint_record(result)
         except (TypeError, ValueError) as e:
             # Preserve save() best-effort behavior for callers that pass
             # non-standard checkpoint rows. load() will skip unreadable rows.

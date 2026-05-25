@@ -30,7 +30,9 @@ from compass.benchmark.runner import (
 )
 from compass.benchmark.schemas import (
     BENCHMARK_SCHEMA_VERSION,
+    BENCHMARK_SCHEMA_VERSION_FIELD,
     EVALUATION_RECORD_TYPE,
+    BENCHMARK_RECORD_TYPE_FIELD,
     GENERATION_RECORD_TYPE,
     evaluation_identity,
     generation_identity,
@@ -54,6 +56,8 @@ from compass.benchmark.validation import (
 
 __all__ = [
     "BENCHMARK_SCHEMA_VERSION",
+    "BENCHMARK_SCHEMA_VERSION_FIELD",
+    "BENCHMARK_RECORD_TYPE_FIELD",
     "GENERATION_RECORD_TYPE",
     "EVALUATION_RECORD_TYPE",
     "BenchmarkPolicyDefaults",
