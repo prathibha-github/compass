@@ -283,8 +283,6 @@ def main():
     logger.info("Samples per prompt: %d", requested_samples)
     logger.info("Output directory: %s", requested_output_dir)
     logger.info("Default token budget config: %s", dict(preset.policy.token_budgets))
-    logger.info("Quality filter policy: %s", preset.policy.quality_filter_mode)
-    logger.info("Analysis lanes: %s", ", ".join(preset.policy.analysis_lanes))
     logger.info("Legacy token-cap threshold: %d", requested_legacy_threshold)
 
     total_evals = BENCHMARK_SPEC.total_evaluations(
@@ -354,6 +352,8 @@ def main():
     except ValueError as e:
         logger.error(str(e))
         sys.exit(2)
+    logger.info("Quality filter policy: %s", run_config.quality_filter_mode)
+    logger.info("Analysis lanes: %s", ", ".join(run_config.effective_analysis_lanes))
 
     if not args.skip_generation:
         token_budget_by_model = validate_token_budget_policy(
@@ -394,10 +394,11 @@ def main():
         run_config,
     )
 
-    logger.info("")
-    logger.info("PHASE 3: Analyzing results...")
-    stats = BENCHMARK_RUNNER.analyze(evaluations_path, run_config)
-    print_summary(stats, evaluations_path)
+    if "summary" in run_config.effective_analysis_lanes:
+        logger.info("")
+        logger.info("PHASE 3: Analyzing results...")
+        stats = BENCHMARK_RUNNER.analyze(evaluations_path, run_config)
+        print_summary(stats, evaluations_path)
 
     if "pairwise" in run_config.effective_analysis_lanes:
         logger.info("PHASE 4: Pairwise model comparison...")

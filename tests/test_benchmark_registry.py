@@ -1,6 +1,8 @@
 """Contract tests for benchmark specs and registry."""
 
+from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from compass.benchmark import (
     BenchmarkPolicyDefaults,
@@ -164,6 +166,90 @@ class BenchmarkRegistryTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "does not match registration target"):
             register_benchmark_spec(spec, runner=SharedBenchmarkRunner(other_spec))
+
+    def test_shared_runner_skips_summary_when_lane_disabled(self):
+        spec = build_benchmark_spec(
+            name="toy_pairwise_only",
+            version="0.1",
+            prompts_by_rubric={
+                "clarity": [
+                    {"id": "p1", "text": "Explain X", "task_type": "explanation"},
+                ]
+            },
+            rubrics_by_name={"clarity": RubricLibrary.clarity},
+            run_presets={
+                "default": BenchmarkRunPreset(
+                    models=("llama3.1",),
+                    samples=1,
+                    judge_model="llama3.1",
+                    output_dir="results/toy_pairwise_only",
+                    policy=BenchmarkPolicyDefaults(analysis_lanes=("pairwise",)),
+                )
+            },
+        )
+        runner = SharedBenchmarkRunner(spec)
+        run_config = spec.make_run_config()
+        with patch("compass.benchmark.runner.analyze_results") as analyze:
+            self.assertEqual(runner.analyze(Path("evaluations.jsonl"), run_config), {})
+        analyze.assert_not_called()
+
+    def test_shared_runner_skips_pairwise_when_lane_disabled(self):
+        spec = build_benchmark_spec(
+            name="toy_summary_only",
+            version="0.1",
+            prompts_by_rubric={
+                "clarity": [
+                    {"id": "p1", "text": "Explain X", "task_type": "explanation"},
+                ]
+            },
+            rubrics_by_name={"clarity": RubricLibrary.clarity},
+            run_presets={
+                "default": BenchmarkRunPreset(
+                    models=("llama3.1",),
+                    samples=1,
+                    judge_model="llama3.1",
+                    output_dir="results/toy_summary_only",
+                    policy=BenchmarkPolicyDefaults(analysis_lanes=("summary",)),
+                )
+            },
+        )
+        runner = SharedBenchmarkRunner(spec)
+        run_config = spec.make_run_config()
+        with patch("compass.benchmark.runner.rank_models") as rank:
+            runner.rank(Path("evaluations.jsonl"), run_config)
+        rank.assert_not_called()
+
+    def test_shared_runner_forwards_quality_filter_mode(self):
+        spec = build_benchmark_spec(
+            name="toy_quality_policy",
+            version="0.1",
+            prompts_by_rubric={
+                "clarity": [
+                    {"id": "p1", "text": "Explain X", "task_type": "explanation"},
+                ]
+            },
+            rubrics_by_name={"clarity": RubricLibrary.clarity},
+            run_presets={
+                "default": BenchmarkRunPreset(
+                    models=("llama3.1",),
+                    samples=1,
+                    judge_model="llama3.1",
+                    output_dir="results/toy_quality_policy",
+                    policy=BenchmarkPolicyDefaults(
+                        quality_filter_mode="exclude_flagged",
+                    ),
+                )
+            },
+        )
+        runner = SharedBenchmarkRunner(spec)
+        run_config = spec.make_run_config()
+        with patch("compass.benchmark.runner.analyze_results", return_value={}) as analyze:
+            runner.analyze(Path("evaluations.jsonl"), run_config)
+        with patch("compass.benchmark.runner.rank_models") as rank:
+            runner.rank(Path("evaluations.jsonl"), run_config)
+
+        self.assertEqual(analyze.call_args.kwargs["quality_filter_mode"], "exclude_flagged")
+        self.assertEqual(rank.call_args.kwargs["quality_filter_mode"], "exclude_flagged")
 
     def test_benchmark_list_contains_constitutional(self):
         self.assertIn("constitutional_compliance", list_benchmark_specs())

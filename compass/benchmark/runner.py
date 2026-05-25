@@ -456,18 +456,26 @@ class SharedBenchmarkRunner:
     def analyze(self, evaluations_path: Path, run_config: BenchmarkRunConfig) -> dict:
         """Analyze benchmark results for a run config."""
         config = self.validate_run_config(run_config)
+        if "summary" not in config.effective_analysis_lanes:
+            logger.info("Skipping summary analysis for preset %s", config.preset_name)
+            return {}
         return analyze_results(
             evaluations_path,
             Path(config.output_dir),
+            quality_filter_mode=config.quality_filter_mode,
         )
 
     def rank(self, evaluations_path: Path, run_config: BenchmarkRunConfig) -> None:
         """Run pairwise ranking for a benchmark run config."""
         config = self.validate_run_config(run_config)
+        if "pairwise" not in config.effective_analysis_lanes:
+            logger.info("Skipping pairwise ranking for preset %s", config.preset_name)
+            return
         rank_models(
             evaluations_path,
             self.spec,
             Path(config.output_dir),
+            quality_filter_mode=config.quality_filter_mode,
         )
 
     def validate_report(

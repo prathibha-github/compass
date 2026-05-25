@@ -4,6 +4,7 @@ import contextlib
 import importlib.util
 import io
 import pathlib
+import sys
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -469,6 +470,70 @@ class BenchmarkTokenBudgetCliParsingTests(unittest.TestCase):
         )
         self.assertTrue(enabled.allow_mixed_token_budgets)
         self.assertFalse(disabled.allow_mixed_token_budgets)
+
+
+class BenchmarkMainOrchestrationTests(unittest.TestCase):
+    def test_main_skips_summary_when_preset_disables_it(self):
+        import tempfile
+
+        from compass.benchmark import BenchmarkPolicyDefaults, BenchmarkRunPreset, build_benchmark_spec
+
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        custom_spec = build_benchmark_spec(
+            name=benchmark.BENCHMARK_SPEC.name,
+            version=benchmark.BENCHMARK_SPEC.version,
+            prompts_by_rubric=benchmark.PROMPTS,
+            rubrics_by_name=benchmark.BENCHMARK_SPEC.rubrics_by_name,
+            run_presets={
+                "default": BenchmarkRunPreset(
+                    models=("llama3.1",),
+                    samples=1,
+                    judge_model="llama3.1",
+                    output_dir="results/test_pairwise_only",
+                    policy=BenchmarkPolicyDefaults(analysis_lanes=("pairwise",)),
+                )
+            },
+            pairwise_segment_field=benchmark.BENCHMARK_SPEC.pairwise_segment_field,
+        )
+        output_dir = None
+
+        class _Runner:
+            def __init__(self, spec):
+                self.spec = spec
+                self.analyze_calls = 0
+                self.rank_calls = 0
+
+            def validate_run_config(self, run_config):
+                return run_config
+
+            def generate(self, run_config):
+                return output_dir / "generations.jsonl"
+
+            def evaluate(self, generations_path, run_config):
+                return output_dir / "evaluations.jsonl"
+
+            def analyze(self, evaluations_path, run_config):
+                self.analyze_calls += 1
+                return {"unexpected": True}
+
+            def rank(self, evaluations_path, run_config):
+                self.rank_calls += 1
+
+        runner = _Runner(custom_spec)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = pathlib.Path(tmpdir)
+            with patch.object(benchmark, "BENCHMARK_SPEC", custom_spec), \
+                 patch.object(benchmark, "BENCHMARK_RUNNER", runner), \
+                 patch.object(benchmark, "test_model_connection", return_value=True), \
+                 patch.object(benchmark, "setup_output_dir", return_value=output_dir), \
+                 patch.object(benchmark, "print_summary") as print_summary, \
+                 patch.object(sys, "argv", ["constitutional_compliance_benchmark.py"]):
+                benchmark.main()
+
+        self.assertEqual(runner.analyze_calls, 0)
+        self.assertEqual(runner.rank_calls, 1)
+        print_summary.assert_not_called()
 
 
 if __name__ == "__main__":
