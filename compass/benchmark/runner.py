@@ -30,6 +30,11 @@ _TOKEN_CAP_FINISH_REASONS = {"length", "max_tokens", "max_output_tokens", "token
 _warned_legacy_token_cap_thresholds = set()
 
 
+def _reset_warned_legacy_token_cap_thresholds() -> None:
+    """Test helper for resetting once-per-process legacy warning state."""
+    _warned_legacy_token_cap_thresholds.clear()
+
+
 def _compute_generation_quality(
     completion: str,
     output_tokens: int,

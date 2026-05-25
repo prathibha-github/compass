@@ -318,6 +318,9 @@ class BenchmarkQualityGuardrailTests(unittest.TestCase):
 
     def test_legacy_rows_warn_when_token_cap_is_inferred(self):
         benchmark = _load_example("constitutional_compliance_benchmark")
+        from compass.benchmark.runner import _reset_warned_legacy_token_cap_thresholds
+
+        _reset_warned_legacy_token_cap_thresholds()
         with self.assertLogs("compass.benchmark.runner", level="WARNING") as logs:
             quality = benchmark._generation_quality_from_record(
                 {

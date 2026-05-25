@@ -267,10 +267,10 @@ def main():
     logger.info("Cost: %s", cost_note)
     logger.info("")
 
-    output_dir = setup_output_dir(args.output_dir)
     if args.legacy_token_cap_threshold <= 0:
         logger.error("--legacy-token-cap-threshold must be > 0")
         sys.exit(2)
+    output_dir = setup_output_dir(args.output_dir)
 
     logger.info("Checking model availability...")
     available_models = [m for m in args.models if test_model_connection(m)]
