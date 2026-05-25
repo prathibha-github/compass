@@ -333,6 +333,7 @@ See `examples/constitutional_compliance_benchmark.py` for a larger local-vs-clou
 ## Documentation
 
 - `docs/api.md`: Full API reference
+- `docs/CLIENT_ADAPTERS.md`: Shared client adapter contract and provider behavior
 - `docs/rubric_design.md`: How to write good rubrics
 - `docs/reproducibility.md`: How reproducibility works
 - `docs/CHECKPOINT_SYSTEM.md`: Resumable evaluations guide
