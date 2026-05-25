@@ -9,6 +9,8 @@ from compass.schema_fields import (
 
 LEGACY_BENCHMARK_SCHEMA_VERSION = 0
 BENCHMARK_SCHEMA_VERSION = 1
+BENCHMARK_NAME_FIELD = "benchmark_name"
+BENCHMARK_VERSION_FIELD = "benchmark_version"
 
 GENERATION_RECORD_TYPE = "generation"
 EVALUATION_RECORD_TYPE = "evaluation"
@@ -36,6 +38,18 @@ def _validate_base_shape(record: Dict[str, Any]) -> None:
         raise ValueError(f"missing required fields: {missing}")
 
 
+def _validate_benchmark_identity(record: Dict[str, Any]) -> None:
+    name = record.get(BENCHMARK_NAME_FIELD)
+    version = record.get(BENCHMARK_VERSION_FIELD)
+    if name is None and version is None:
+        return
+    if not name or not version:
+        raise ValueError(
+            "benchmark record must include both benchmark_name and "
+            "benchmark_version when either is present"
+        )
+
+
 def migrate_generation_record(record: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize a generation result record to benchmark schema v1."""
     if not isinstance(record, dict):
@@ -43,6 +57,7 @@ def migrate_generation_record(record: Dict[str, Any]) -> Dict[str, Any]:
 
     data = dict(record)
     _validate_base_shape(data)
+    _validate_benchmark_identity(data)
     data["sample_idx"] = _coerce_sample_idx(data.get("sample_idx", 0))
 
     schema_version = int(
@@ -72,6 +87,7 @@ def migrate_evaluation_record(record: Dict[str, Any]) -> Dict[str, Any]:
 
     data = dict(record)
     _validate_base_shape(data)
+    _validate_benchmark_identity(data)
     data["sample_idx"] = _coerce_sample_idx(data.get("sample_idx", 0))
 
     schema_version = int(

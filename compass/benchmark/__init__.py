@@ -29,8 +29,10 @@ from compass.benchmark.runner import (
     validate_token_budget_policy,
 )
 from compass.benchmark.schemas import (
+    BENCHMARK_NAME_FIELD,
     BENCHMARK_SCHEMA_VERSION,
     BENCHMARK_SCHEMA_VERSION_FIELD,
+    BENCHMARK_VERSION_FIELD,
     EVALUATION_RECORD_TYPE,
     BENCHMARK_RECORD_TYPE_FIELD,
     GENERATION_RECORD_TYPE,
@@ -55,8 +57,10 @@ from compass.benchmark.validation import (
 )
 
 __all__ = [
+    "BENCHMARK_NAME_FIELD",
     "BENCHMARK_SCHEMA_VERSION",
     "BENCHMARK_SCHEMA_VERSION_FIELD",
+    "BENCHMARK_VERSION_FIELD",
     "BENCHMARK_RECORD_TYPE_FIELD",
     "GENERATION_RECORD_TYPE",
     "EVALUATION_RECORD_TYPE",
