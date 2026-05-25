@@ -216,6 +216,74 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
             self.assertIn("generation_hit_token_cap", latest)
             self.assertIn("generation_is_fragment", latest)
 
+    def test_evaluate_completions_reuses_evaluation_cache_for_duplicate_text(self):
+        benchmark = _load_benchmark_module()
+
+        class _JudgeClient:
+            def __init__(self):
+                self.calls = 0
+
+            def complete(self, prompt, max_tokens, temperature, system):
+                self.calls += 1
+                return SimpleNamespace(
+                    completion='{"score": 0.8, "confidence": 0.9, "rationale": "cached"}',
+                    tokens_used={"input": 8, "output": 12},
+                    cost_usd=0.0,
+                )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out = pathlib.Path(tmpdir)
+            generations_path = out / "generations.jsonl"
+            rows = [
+                migrate_generation_record(
+                    {
+                        "model": "llama3.1",
+                        "rubric": "clarity",
+                        "prompt_id": "p1",
+                        "task_type": "general",
+                        "sample_idx": 0,
+                        "completion": "same completion text",
+                        "tokens_used": {"input": 1, "output": 20},
+                    }
+                ),
+                migrate_generation_record(
+                    {
+                        "model": "llama3.1",
+                        "rubric": "clarity",
+                        "prompt_id": "p2",
+                        "task_type": "general",
+                        "sample_idx": 0,
+                        "completion": "same completion text",
+                        "tokens_used": {"input": 1, "output": 20},
+                    }
+                ),
+            ]
+            generations_path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+
+            judge_client = _JudgeClient()
+            with patch(
+                "compass.benchmark.runner.OllamaClient",
+                return_value=judge_client,
+            ):
+                evaluations_path = benchmark.evaluate_completions(
+                    generations_path,
+                    "llama3.1",
+                    out,
+                )
+
+            saved = [
+                json.loads(line)
+                for line in evaluations_path.read_text().splitlines()
+                if line.strip()
+            ]
+            cache_files = list((out / ".cache").glob("*.json"))
+
+        self.assertEqual(judge_client.calls, 1)
+        self.assertEqual(len(saved), 2)
+        self.assertEqual(len(cache_files), 1)
+        self.assertEqual(saved[0]["score"], 0.8)
+        self.assertEqual(saved[1]["score"], 0.8)
+
     def test_analyze_results_reports_quality_filtered_rate(self):
         benchmark = _load_benchmark_module()
         with tempfile.TemporaryDirectory() as tmpdir:
