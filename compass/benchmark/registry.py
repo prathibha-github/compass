@@ -2,9 +2,27 @@
 
 from typing import Dict, Tuple
 
-from compass.benchmark.specs import BenchmarkPrompt, BenchmarkSpec
+from compass.benchmark.runner import SharedBenchmarkRunner
+from compass.benchmark.specs import (
+    BenchmarkPolicyDefaults,
+    BenchmarkPrompt,
+    BenchmarkRunPreset,
+    BenchmarkRunner,
+    BenchmarkSpec,
+)
 from compass.rubrics.library import RubricLibrary
 
+CONSTITUTIONAL_COMPLIANCE_PRESET = BenchmarkRunPreset(
+    models=("llama3.1", "mistral", "phi"),
+    samples=3,
+    judge_model="llama3.1",
+    output_dir="results/constitutional_compliance_benchmark",
+    policy=BenchmarkPolicyDefaults(
+        allow_mixed_token_budgets=False,
+        quality_filter_mode="annotate",
+        analysis_lanes=("summary", "pairwise"),
+    ),
+)
 
 CONSTITUTIONAL_COMPLIANCE_BENCHMARK = BenchmarkSpec(
     name="constitutional_compliance",
@@ -153,18 +171,41 @@ CONSTITUTIONAL_COMPLIANCE_BENCHMARK = BenchmarkSpec(
         "therapy_speak": RubricLibrary.therapy_speak,
         "clarity": RubricLibrary.clarity,
     },
+    run_presets={"default": CONSTITUTIONAL_COMPLIANCE_PRESET},
+    default_preset="default",
+)
+CONSTITUTIONAL_COMPLIANCE_RUNNER = SharedBenchmarkRunner(
+    CONSTITUTIONAL_COMPLIANCE_BENCHMARK
 )
 
-_BENCHMARK_REGISTRY: Dict[str, BenchmarkSpec] = {
-    CONSTITUTIONAL_COMPLIANCE_BENCHMARK.name: CONSTITUTIONAL_COMPLIANCE_BENCHMARK
-}
+_BENCHMARK_REGISTRY: Dict[str, BenchmarkSpec] = {}
+_BENCHMARK_RUNNERS: Dict[str, BenchmarkRunner] = {}
 
 
-def register_benchmark_spec(spec: BenchmarkSpec) -> None:
-    """Register a benchmark spec for lookup by name."""
+def _validate_runner_registration(
+    spec: BenchmarkSpec,
+    runner: BenchmarkRunner,
+) -> None:
+    if not isinstance(runner, BenchmarkRunner):
+        raise TypeError("benchmark runner must satisfy the BenchmarkRunner contract")
+    if runner.spec.name != spec.name or runner.spec.version != spec.version:
+        raise ValueError(
+            "benchmark runner spec does not match registration target: "
+            f"{runner.spec.name}@{runner.spec.version} != {spec.name}@{spec.version}"
+        )
+
+
+def register_benchmark_spec(
+    spec: BenchmarkSpec,
+    runner: BenchmarkRunner = None,
+) -> None:
+    """Register a benchmark spec and compatible runner for lookup by name."""
     if spec.name in _BENCHMARK_REGISTRY:
         raise ValueError(f"Benchmark spec already registered: {spec.name}")
+    resolved_runner = runner or SharedBenchmarkRunner(spec)
+    _validate_runner_registration(spec, resolved_runner)
     _BENCHMARK_REGISTRY[spec.name] = spec
+    _BENCHMARK_RUNNERS[spec.name] = resolved_runner
 
 
 def get_benchmark_spec(name: str) -> BenchmarkSpec:
@@ -177,6 +218,22 @@ def get_benchmark_spec(name: str) -> BenchmarkSpec:
         ) from exc
 
 
+def get_benchmark_runner(name: str) -> BenchmarkRunner:
+    """Return a benchmark runner by name."""
+    try:
+        return _BENCHMARK_RUNNERS[name]
+    except KeyError as exc:
+        raise ValueError(
+            f"Unknown benchmark runner: {name}. Available: {sorted(_BENCHMARK_RUNNERS)}"
+        ) from exc
+
+
 def list_benchmark_specs() -> Tuple[str, ...]:
     """List registered benchmark names."""
     return tuple(sorted(_BENCHMARK_REGISTRY))
+
+
+register_benchmark_spec(
+    CONSTITUTIONAL_COMPLIANCE_BENCHMARK,
+    runner=CONSTITUTIONAL_COMPLIANCE_RUNNER,
+)

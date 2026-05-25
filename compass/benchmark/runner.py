@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+from typing import Mapping, Optional
 
 from compass import (
     CheckpointManager,
@@ -11,15 +12,18 @@ from compass import (
     OllamaClient,
 )
 from compass.benchmark.config import (
+    DEFAULT_TOKEN_BUDGETS,
     LEGACY_TOKEN_CAP_FALLBACK,
     default_max_tokens_for_model,
 )
 from compass.benchmark.io import load_generation_records
+from compass.benchmark.reporting import analyze_results, rank_models
 from compass.benchmark.schemas import (
     migrate_evaluation_record,
     migrate_generation_record,
 )
-from compass.benchmark.specs import BenchmarkSpec
+from compass.benchmark.specs import BenchmarkRunConfig, BenchmarkSpec
+from compass.benchmark.validation import validate_benchmark_report
 from compass.clients import AnthropicClient, GoogleAIClient, OpenAIClient
 
 logger = logging.getLogger(__name__)
@@ -101,22 +105,37 @@ def _generation_quality_from_record(
     )
 
 
-def _default_max_tokens_for_model(model: str) -> int:
+def _default_max_tokens_for_model(
+    model: str,
+    token_budgets: Mapping[str, int] = DEFAULT_TOKEN_BUDGETS,
+) -> int:
     """Backward-compatible wrapper around benchmark token budget config."""
-    return default_max_tokens_for_model(model)
+    return default_max_tokens_for_model(model, token_budgets=token_budgets)
 
 
-def compute_token_budget_by_model(models: list) -> dict:
+def compute_token_budget_by_model(
+    models: list,
+    token_budgets: Mapping[str, int] = DEFAULT_TOKEN_BUDGETS,
+) -> dict:
     """Return effective max token budget by model."""
-    return {model: _default_max_tokens_for_model(model) for model in models}
+    return {
+        model: _default_max_tokens_for_model(model, token_budgets=token_budgets)
+        for model in models
+    }
 
 
 def validate_token_budget_policy(
-    models: list, allow_mixed: bool, max_tokens_by_model: dict = None
+    models: list,
+    allow_mixed: bool,
+    max_tokens_by_model: Optional[dict] = None,
+    token_budget_defaults: Mapping[str, int] = DEFAULT_TOKEN_BUDGETS,
 ) -> dict:
     """Validate token-budget fairness policy and return effective budgets."""
     if max_tokens_by_model is None:
-        budgets = compute_token_budget_by_model(models)
+        budgets = compute_token_budget_by_model(
+            models,
+            token_budgets=token_budget_defaults,
+        )
     else:
         budgets = {}
         for model in models:
@@ -176,6 +195,7 @@ def generate_completions(
     output_dir: Path,
     max_tokens_by_model: dict = None,
     allow_mixed_token_budgets: bool = False,
+    token_budget_defaults: Mapping[str, int] = DEFAULT_TOKEN_BUDGETS,
 ) -> Path:
     """Generate benchmark completions."""
     checkpoint_path = output_dir / "generations.jsonl"
@@ -202,6 +222,7 @@ def generate_completions(
         models,
         allow_mixed=allow_mixed_token_budgets,
         max_tokens_by_model=max_tokens_by_model,
+        token_budget_defaults=token_budget_defaults,
     )
     clients_by_model = {model: _create_client(model) for model in models}
 
@@ -368,3 +389,92 @@ def evaluate_completions(
 
     logger.info("✓ Evaluated %d completions", count)
     return checkpoint_path
+
+
+class SharedBenchmarkRunner:
+    """Shared benchmark runner backed by the core benchmark helpers."""
+
+    def __init__(self, spec: BenchmarkSpec):
+        self.spec = spec
+
+    def validate_run_config(self, run_config: BenchmarkRunConfig) -> BenchmarkRunConfig:
+        """Validate a resolved benchmark run config for this benchmark."""
+        if run_config.benchmark_name != self.spec.name:
+            raise ValueError(
+                "benchmark run config name does not match runner: "
+                f"{run_config.benchmark_name!r} != {self.spec.name!r}"
+            )
+        if run_config.benchmark_version != self.spec.version:
+            raise ValueError(
+                "benchmark run config version does not match runner: "
+                f"{run_config.benchmark_version!r} != {self.spec.version!r}"
+            )
+        validate_token_budget_policy(
+            list(run_config.models),
+            allow_mixed=run_config.allow_mixed_token_budgets,
+            max_tokens_by_model=(
+                dict(run_config.max_tokens_by_model)
+                if run_config.max_tokens_by_model is not None
+                else None
+            ),
+            token_budget_defaults=run_config.token_budget_defaults,
+        )
+        return run_config
+
+    def generate(self, run_config: BenchmarkRunConfig) -> Path:
+        """Generate completions for a benchmark run config."""
+        config = self.validate_run_config(run_config)
+        return generate_completions(
+            models=list(config.models),
+            benchmark_spec=self.spec,
+            samples=config.samples,
+            output_dir=setup_output_dir(config.output_dir),
+            max_tokens_by_model=(
+                dict(config.max_tokens_by_model)
+                if config.max_tokens_by_model is not None
+                else None
+            ),
+            allow_mixed_token_budgets=config.allow_mixed_token_budgets,
+            token_budget_defaults=config.token_budget_defaults,
+        )
+
+    def evaluate(
+        self,
+        generations_path: Path,
+        run_config: BenchmarkRunConfig,
+    ) -> Path:
+        """Evaluate completions for a benchmark run config."""
+        config = self.validate_run_config(run_config)
+        return evaluate_completions(
+            generations_path=generations_path,
+            benchmark_spec=self.spec,
+            judge_model=config.judge_model,
+            output_dir=setup_output_dir(config.output_dir),
+            legacy_token_cap_threshold=config.legacy_token_cap_threshold,
+        )
+
+    def analyze(self, evaluations_path: Path, run_config: BenchmarkRunConfig) -> dict:
+        """Analyze benchmark results for a run config."""
+        config = self.validate_run_config(run_config)
+        return analyze_results(
+            evaluations_path,
+            Path(config.output_dir),
+        )
+
+    def rank(self, evaluations_path: Path, run_config: BenchmarkRunConfig) -> None:
+        """Run pairwise ranking for a benchmark run config."""
+        config = self.validate_run_config(run_config)
+        rank_models(
+            evaluations_path,
+            self.spec,
+            Path(config.output_dir),
+        )
+
+    def validate_report(
+        self,
+        evaluations_path: Path,
+        run_config: BenchmarkRunConfig,
+    ) -> list:
+        """Validate report artifacts for a benchmark run config."""
+        self.validate_run_config(run_config)
+        return validate_benchmark_report(evaluations_path)

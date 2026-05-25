@@ -437,6 +437,39 @@ class BenchmarkTokenBudgetCliParsingTests(unittest.TestCase):
         )
         self.assertEqual(args.legacy_token_cap_threshold, 300)
 
+    def test_parser_defaults_to_benchmark_owned_preset(self):
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        args = benchmark.create_parser().parse_args([])
+        preset = benchmark.BENCHMARK_SPEC.get_run_preset(args.preset)
+        run_config = benchmark.BENCHMARK_SPEC.make_run_config(
+            preset_name=args.preset,
+            models=args.models,
+            samples=args.samples,
+            judge_model=args.judge_model,
+            output_dir=args.output_dir,
+            allow_mixed_token_budgets=args.allow_mixed_token_budgets,
+            legacy_token_cap_threshold=args.legacy_token_cap_threshold,
+        )
+        self.assertEqual(run_config.models, preset.models)
+        self.assertEqual(run_config.samples, preset.samples)
+        self.assertEqual(run_config.judge_model, preset.judge_model)
+        self.assertEqual(run_config.output_dir, preset.output_dir)
+        self.assertEqual(
+            run_config.allow_mixed_token_budgets,
+            preset.policy.allow_mixed_token_budgets,
+        )
+
+    def test_parser_supports_boolean_override_for_mixed_token_budgets(self):
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        enabled = benchmark.create_parser().parse_args(
+            ["--allow-mixed-token-budgets"]
+        )
+        disabled = benchmark.create_parser().parse_args(
+            ["--no-allow-mixed-token-budgets"]
+        )
+        self.assertTrue(enabled.allow_mixed_token_budgets)
+        self.assertFalse(disabled.allow_mixed_token_budgets)
+
 
 if __name__ == "__main__":
     unittest.main()
