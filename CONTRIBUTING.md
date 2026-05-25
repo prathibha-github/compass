@@ -102,6 +102,22 @@ def test_new_feature(self):
 - Update `docs/api.md` for new public APIs
 - Add migration notes to `CHANGELOG.md` for breaking changes
 
+### Benchmark Changes
+
+If your change touches benchmark logic or benchmark outputs:
+
+- read `docs/BENCHMARK_PLAYBOOK.md` before changing runner, registry, or report code
+- keep CLI wrappers thin and move reusable behavior into `compass/benchmark/`
+- update at least one benchmark test when benchmark logic changes
+- validate changed benchmark evaluation reports before merging:
+  `python scripts/validate_changed_benchmark_reports.py path/to/evaluations.jsonl`
+- validate any benchmark report directly with:
+  `python scripts/validate_benchmark_report.py path/to/evaluations.jsonl`
+
+The pull-request CI will enforce two benchmark-specific rules:
+- benchmark logic changes require a benchmark test change
+- changed benchmark evaluation reports must pass report validation
+
 ## Commit Messages
 
 Write clear commit messages that explain the "why" not just the "what":
@@ -127,6 +143,13 @@ This is useful for evaluating large completions that may take longer.
 6. Link any related issues
 7. Wait for CI to pass
 8. Request review
+
+For benchmark-heavy PRs, run the benchmark-focused checks locally when relevant:
+
+```bash
+pytest tests/test_benchmark_*.py tests/test_constitutional_benchmark_core.py -v
+python scripts/validate_benchmark_report.py tests/fixtures/benchmark_evaluations_valid.jsonl
+```
 
 ## Project Structure
 
