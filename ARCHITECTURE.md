@@ -109,3 +109,5 @@ flowchart TD
 - Downstream repos should import Compass primitives instead of forking them.
 - Shared suites, rubrics, and benchmark core primitives belong here.
 - Project-specific orchestration belongs outside this repo.
+- Provider-specific request quirks belong inside client adapters; the shared
+  adapter contract is documented in `docs/CLIENT_ADAPTERS.md`.

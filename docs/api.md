@@ -2,6 +2,8 @@
 
 Complete reference for the Compass evaluation framework.
 
+For shared provider-adapter behavior, see `docs/CLIENT_ADAPTERS.md`.
+
 ## Core Classes
 
 ### Rubric
