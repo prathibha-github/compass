@@ -10,8 +10,9 @@ from compass.judges.base import EvaluationResult
 class EvaluationCache:
     """Persistent cache for judge evaluation results.
 
-    Cache keys are deterministic hashes of (rubric_hash, text_hash, judge_model),
-    so the same evaluation always produces the same cache hit.
+    Cache keys are deterministic hashes of the judge configuration, input text,
+    and prompt template version. The same evaluation contract always produces
+    the same cache hit.
     """
 
     def __init__(self, cache_dir: Optional[str] = None):
@@ -21,24 +22,24 @@ class EvaluationCache:
             str, EvaluationResult
         ] = {}  # In-memory cache for this session
 
-    def _cache_key(self, rubric_hash: str, text_hash: str, judge_model: str) -> str:
+    def _cache_key(self, config_hash: str, text_hash: str, prompt_version: str) -> str:
         """Deterministic cache key from inputs.
 
         Truncates SHA256 to 12 characters. Balances collision resistance (12 chars = ~2^48
         theoretical space) with reasonable filename length. For ~10k evaluations, collision
         risk is negligible.
         """
-        key_str = f"{rubric_hash}_{text_hash}_{judge_model}"
+        key_str = f"{config_hash}_{text_hash}_{prompt_version}"
         return hashlib.sha256(key_str.encode()).hexdigest()[:12]
 
     def get(
-        self, rubric_hash: str, text_hash: str, judge_model: str
+        self, config_hash: str, text_hash: str, prompt_version: str
     ) -> Optional[EvaluationResult]:
         """Get cached result if available.
 
         Checks in-memory cache first, then disk.
         """
-        key = self._cache_key(rubric_hash, text_hash, judge_model)
+        key = self._cache_key(config_hash, text_hash, prompt_version)
 
         # Check memory first
         if key in self.memory:
@@ -58,13 +59,13 @@ class EvaluationCache:
 
     def put(
         self,
-        rubric_hash: str,
+        config_hash: str,
         text_hash: str,
-        judge_model: str,
+        prompt_version: str,
         result: EvaluationResult,
     ) -> None:
         """Store result in cache (memory and disk)."""
-        key = self._cache_key(rubric_hash, text_hash, judge_model)
+        key = self._cache_key(config_hash, text_hash, prompt_version)
         self.memory[key] = result
 
         cache_file = self.cache_dir / f"{key}.json"

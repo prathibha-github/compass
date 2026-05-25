@@ -28,8 +28,9 @@ class EvaluationResult:
         cost_usd: USD cost of this evaluation (useful for budgeting large runs).
 
     Note:
-        To reproduce identical results, ensure: same rubric (by hash), same judge_model,
-        and same text. The cache key is (rubric_hash, text_hash, judge_model).
+        To reproduce identical results, ensure the same judge configuration, prompt
+        template version, and input text. The cache key is
+        (config_hash, text_hash, prompt_version).
     """
 
     # Core evaluation results

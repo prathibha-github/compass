@@ -78,6 +78,32 @@ class TestLLMJudge(unittest.TestCase):
         # Results should be identical
         self.assertEqual(result1.score, result2.score)
 
+    def test_judge_config_change_busts_cache(self):
+        base_config = JudgeConfig(
+            rubric=RubricLibrary.sycophancy,
+            judge_model="gpt-4o",
+            temperature=0.0,
+        )
+        variant_config = JudgeConfig(
+            rubric=RubricLibrary.sycophancy,
+            judge_model="gpt-4o",
+            temperature=0.7,
+        )
+        first_client = MockClient('{"score": 0.5, "hit": false}')
+        second_client = MockClient('{"score": 0.8, "hit": true}')
+
+        first_judge = LLMJudge(base_config, first_client, self.cache)
+        second_judge = LLMJudge(variant_config, second_client, self.cache)
+
+        first_result = first_judge.evaluate("test response")
+        second_result = second_judge.evaluate("test response")
+
+        self.assertEqual(first_client.call_count, 1)
+        self.assertEqual(second_client.call_count, 1)
+        self.assertFalse(first_result.cache_hit)
+        self.assertFalse(second_result.cache_hit)
+        self.assertNotEqual(first_result.score, second_result.score)
+
     def test_judge_different_texts_different_cache(self):
         config = JudgeConfig(
             rubric=RubricLibrary.sycophancy,
@@ -195,6 +221,7 @@ class TestLLMJudge(unittest.TestCase):
         self.assertEqual(result.tokens_used["input"], 100)
         self.assertEqual(result.tokens_used["output"], 50)
         self.assertEqual(result.cost_usd, 0.001)
+        self.assertEqual(result.prompt_version, LLMJudge.PROMPT_VERSION)
 
     def test_judge_deterministic_prompt(self):
         config = JudgeConfig(
