@@ -316,6 +316,37 @@ class BenchmarkQualityGuardrailTests(unittest.TestCase):
         self.assertTrue(quality["token_cap_inferred_legacy"])
         self.assertTrue(quality["quality_flagged"])
 
+    def test_legacy_rows_warn_when_token_cap_is_inferred(self):
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        from compass.benchmark.runner import _reset_warned_legacy_token_cap_thresholds
+
+        _reset_warned_legacy_token_cap_thresholds()
+        with self.assertLogs("compass.benchmark.runner", level="WARNING") as logs:
+            quality = benchmark._generation_quality_from_record(
+                {
+                    "model": "gpt-5.4-mini",
+                    "completion": "At its core, a",
+                    "tokens_used": {"output": 301},
+                },
+                legacy_token_cap_threshold=301,
+            )
+
+        self.assertTrue(quality["token_cap_inferred_legacy"])
+        self.assertIn("Override with --legacy-token-cap-threshold", logs.output[0])
+
+    def test_legacy_rows_allow_custom_token_cap_threshold(self):
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        quality = benchmark._generation_quality_from_record(
+            {
+                "model": "gpt-5.4-mini",
+                "completion": "Longer answer",
+                "tokens_used": {"output": 300},
+            },
+            legacy_token_cap_threshold=300,
+        )
+        self.assertTrue(quality["hit_token_cap"])
+        self.assertTrue(quality["token_cap_inferred_legacy"])
+
     def test_finish_reason_can_mark_token_cap(self):
         benchmark = _load_example("constitutional_compliance_benchmark")
         quality = benchmark._compute_generation_quality(
@@ -363,6 +394,21 @@ class BenchmarkTokenBudgetPolicyTests(unittest.TestCase):
         )
         self.assertEqual(set(budgets.values()), {150})
 
+    def test_default_max_tokens_prefers_longest_matching_prefix(self):
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        budgets = {
+            "default": 150,
+            "gemini": 2000,
+            "gemini-2.5": 5000,
+        }
+        self.assertEqual(
+            benchmark.default_max_tokens_for_model(
+                "gemini-2.5-flash",
+                token_budgets=budgets,
+            ),
+            5000,
+        )
+
 class BenchmarkTokenBudgetCliParsingTests(unittest.TestCase):
     def test_parse_max_tokens_by_model_args(self):
         benchmark = _load_example("constitutional_compliance_benchmark")
@@ -383,6 +429,13 @@ class BenchmarkTokenBudgetCliParsingTests(unittest.TestCase):
             benchmark._parse_max_tokens_by_model_args(["bad-entry"])
         with self.assertRaisesRegex(ValueError, "must be > 0"):
             benchmark._parse_max_tokens_by_model_args(["llama3.1=0"])
+
+    def test_parser_accepts_legacy_token_cap_threshold(self):
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        args = benchmark.create_parser().parse_args(
+            ["--legacy-token-cap-threshold", "300"]
+        )
+        self.assertEqual(args.legacy_token_cap_threshold, 300)
 
 
 if __name__ == "__main__":
