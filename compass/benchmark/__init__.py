@@ -33,6 +33,11 @@ from compass.benchmark.specs import (
     BenchmarkSpec,
     build_benchmark_spec,
 )
+from compass.benchmark.validation import (
+    validate_benchmark_report,
+    validate_evaluation_records_for_quality,
+    validate_stats_for_quality,
+)
 
 __all__ = [
     "BENCHMARK_SCHEMA_VERSION",
@@ -60,4 +65,7 @@ __all__ = [
     "analyze_results",
     "print_summary",
     "rank_models",
+    "validate_evaluation_records_for_quality",
+    "validate_stats_for_quality",
+    "validate_benchmark_report",
 ]

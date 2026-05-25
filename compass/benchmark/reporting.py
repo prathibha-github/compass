@@ -11,6 +11,46 @@ from compass.benchmark.specs import BenchmarkSpec
 logger = logging.getLogger(__name__)
 
 
+def format_summary(stats: dict, evaluations_path: Path) -> str:
+    """Render a stable textual summary for benchmark results."""
+    lines = [
+        "",
+        "=" * 100,
+        "EVALUATION SUMMARY",
+        "=" * 100,
+        "",
+        (
+            f"{'Model':<15} | {'Rubric':<15} | {'Hit Rate':>9} | {'Q-Flag':>7} | "
+            f"{'Cap':>5} | {'Frag':>5} | {'LegacyCap':>9} | {'QF Hit':>7} | {'Samples':>7}"
+        ),
+        "-" * 100,
+    ]
+
+    for key in sorted(stats.keys()):
+        s = stats[key]
+        qf_hit_text = (
+            f"{s['quality_filtered_hit_rate']:.1f}%"
+            if s["quality_filtered_hit_rate"] is not None
+            else "n/a"
+        )
+        lines.append(
+            f"{s['model']:<15} | {s['rubric']:<15} | {s['hit_rate']:>8.1f}% | "
+            f"{s['quality_flagged_pct']:>6.1f}% | {s['token_cap_pct']:>4.1f}% | "
+            f"{s['fragment_pct']:>4.1f}% | {s['legacy_cap_inferred_pct']:>8.1f}% | "
+            f"{qf_hit_text:>7} | {s['total']:>7}"
+        )
+
+    lines.extend(
+        [
+            "",
+            f"Results saved: {evaluations_path}",
+            "=" * 100,
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def analyze_results(evaluations_path: Path, output_dir: Path) -> dict:
     """Analyze evaluation results and generate report data."""
     # Reserved for future report artifact paths; kept for API compatibility.
@@ -61,35 +101,8 @@ def analyze_results(evaluations_path: Path, output_dir: Path) -> dict:
 
 def print_summary(stats: dict, evaluations_path: Path) -> None:
     """Print summary report."""
-    logger.info("")
-    logger.info("=" * 100)
-    logger.info("EVALUATION SUMMARY")
-    logger.info("=" * 100)
-    logger.info("")
-    logger.info(
-        f"{'Model':<15} | {'Rubric':<15} | {'Hit Rate':>9} | {'Q-Flag':>7} | "
-        f"{'Cap':>5} | {'Frag':>5} | {'LegacyCap':>9} | {'QF Hit':>7} | {'Samples':>7}"
-    )
-    logger.info("-" * 100)
-
-    for key in sorted(stats.keys()):
-        s = stats[key]
-        qf_hit_text = (
-            f"{s['quality_filtered_hit_rate']:.1f}%"
-            if s["quality_filtered_hit_rate"] is not None
-            else "n/a"
-        )
-        logger.info(
-            f"{s['model']:<15} | {s['rubric']:<15} | {s['hit_rate']:>8.1f}% | "
-            f"{s['quality_flagged_pct']:>6.1f}% | {s['token_cap_pct']:>4.1f}% | "
-            f"{s['fragment_pct']:>4.1f}% | {s['legacy_cap_inferred_pct']:>8.1f}% | "
-            f"{qf_hit_text:>7} | {s['total']:>7}"
-        )
-
-    logger.info("")
-    logger.info("Results saved: %s", evaluations_path)
-    logger.info("=" * 100)
-    logger.info("")
+    for line in format_summary(stats, evaluations_path).splitlines():
+        logger.info(line)
 
 
 def rank_models(
