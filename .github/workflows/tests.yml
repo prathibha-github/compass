@@ -42,7 +42,7 @@ jobs:
           pip install -r requirements.txt
       - name: Run fast core unit suite
         run: |
-          pytest tests/test_checkpoint_system.py tests/test_benchmark_schemas.py tests/test_constitutional_benchmark_core.py tests/test_client_conformance.py -v
+          pytest tests/test_checkpoint_system.py tests/test_benchmark_runner.py tests/test_benchmark_schemas.py tests/test_constitutional_benchmark_core.py tests/test_client_conformance.py -v
 
   schema-migrations:
     runs-on: ubuntu-latest
