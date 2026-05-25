@@ -31,10 +31,10 @@ The same score and reasoning will be produced every time, whether:
 The cache key is built from:
 
 ```python
-cache_key = (rubric_hash, text_hash, judge_model)
+cache_key = (config_hash, text_hash, prompt_version)
 ```
 
-Since rubrics are immutable and hashed, and texts don't change, the same key will always map to the same evaluation result.
+Since judge configs are immutable and texts don't change, the same evaluation contract will always map to the same cache entry.
 
 ### 2. Deterministic Prompts
 

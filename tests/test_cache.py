@@ -28,28 +28,28 @@ class TestEvaluationCache(unittest.TestCase):
             rubric_hash="abc123",
             judge_model="gpt-4o",
         )
-        self.cache.put("abc123", "text_hash", "gpt-4o", result)
+        self.cache.put("config123", "text_hash", "1.0", result)
 
-        retrieved = self.cache.get("abc123", "text_hash", "gpt-4o")
+        retrieved = self.cache.get("config123", "text_hash", "1.0")
         self.assertIsNotNone(retrieved)
         self.assertEqual(retrieved.name, "test")
         self.assertEqual(retrieved.score, 0.75)
 
     def test_cache_miss_returns_none(self):
         """Cache returns None for missing key."""
-        result = self.cache.get("missing", "hash", "model")
+        result = self.cache.get("missing", "hash", "1.0")
         self.assertIsNone(result)
 
     def test_cache_key_deterministic(self):
         """Same inputs produce same cache key."""
-        key1 = self.cache._cache_key("abc", "def", "gpt-4o")
-        key2 = self.cache._cache_key("abc", "def", "gpt-4o")
+        key1 = self.cache._cache_key("config123", "def", "1.0")
+        key2 = self.cache._cache_key("config123", "def", "1.0")
         self.assertEqual(key1, key2)
 
     def test_cache_key_different_for_different_inputs(self):
         """Different inputs produce different keys."""
-        key1 = self.cache._cache_key("abc", "def", "gpt-4o")
-        key2 = self.cache._cache_key("abc", "def", "claude")
+        key1 = self.cache._cache_key("config123", "def", "1.0")
+        key2 = self.cache._cache_key("config123", "def", "1.1")
         self.assertNotEqual(key1, key2)
 
     def test_cache_persistence(self):
@@ -61,11 +61,11 @@ class TestEvaluationCache(unittest.TestCase):
             rubric_hash="hash1",
             judge_model="gpt-4o",
         )
-        self.cache.put("hash1", "text", "gpt-4o", result)
+        self.cache.put("config123", "text", "1.0", result)
 
         # Create new cache instance from same directory
         cache2 = EvaluationCache(cache_dir=self.tmpdir.name)
-        retrieved = cache2.get("hash1", "text", "gpt-4o")
+        retrieved = cache2.get("config123", "text", "1.0")
 
         self.assertIsNotNone(retrieved)
         self.assertEqual(retrieved.score, 0.5)
@@ -87,16 +87,16 @@ class TestEvaluationCache(unittest.TestCase):
             judge_model="gpt-4o",
         )
 
-        self.cache.put("hash1", "text", "gpt-4o", result1)
-        self.cache.put("hash2", "text", "gpt-4o", result2)
+        self.cache.put("config123", "text", "1.0", result1)
+        self.cache.put("config456", "text", "1.0", result2)
 
         # Get from memory
-        r1 = self.cache.get("hash1", "text", "gpt-4o")
+        r1 = self.cache.get("config123", "text", "1.0")
         self.assertIsNotNone(r1)
 
         # Get from disk after clearing memory
         self.cache.memory.clear()
-        r1_disk = self.cache.get("hash1", "text", "gpt-4o")
+        r1_disk = self.cache.get("config123", "text", "1.0")
         self.assertIsNotNone(r1_disk)
         self.assertEqual(r1_disk.name, "test1")
 
@@ -109,7 +109,7 @@ class TestEvaluationCache(unittest.TestCase):
             rubric_hash="hash1",
             judge_model="gpt-4o",
         )
-        self.cache.put("hash1", "text", "gpt-4o", result)
+        self.cache.put("config123", "text", "1.0", result)
 
         stats = self.cache.stats()
         self.assertEqual(stats["cached_files"], 1)
@@ -125,7 +125,7 @@ class TestEvaluationCache(unittest.TestCase):
             rubric_hash="hash1",
             judge_model="gpt-4o",
         )
-        self.cache.put("hash1", "text", "gpt-4o", result)
+        self.cache.put("config123", "text", "1.0", result)
 
         stats_before = self.cache.stats()
         self.assertGreater(stats_before["cached_files"], 0)
@@ -143,7 +143,7 @@ class TestEvaluationCache(unittest.TestCase):
         corrupt_file.write_text("{invalid json}")
 
         # Cache should handle this gracefully
-        result = self.cache.get("somekey", "hash", "model")
+        result = self.cache.get("somekey", "hash", "1.0")
         self.assertIsNone(result)
 
 

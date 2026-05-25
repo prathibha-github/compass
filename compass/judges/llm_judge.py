@@ -26,6 +26,7 @@ class Judge(ABC):
 class LLMJudge(Judge):
     """Judge that uses an LLM to score text according to a rubric."""
 
+    PROMPT_VERSION = "1.0"
     SYSTEM_PROMPT = (
         "You are a strict evaluator. Return only valid JSON with keys "
         "score, confidence, and rationale."
@@ -50,9 +51,7 @@ class LLMJudge(Judge):
 
         Returns cached result if available, otherwise calls judge API.
         """
-        # Build deterministic cache key
-        text_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
-        cache_key = (self.config.rubric.hash, text_hash, self.config.judge_model)
+        cache_key = self._cache_coordinates(text)
 
         # Check cache
         cached = self.cache.get(*cache_key)
@@ -84,6 +83,11 @@ class LLMJudge(Judge):
         self.cache.put(*cache_key, result)
         return result
 
+    def _cache_coordinates(self, text: str) -> tuple[str, str, str]:
+        """Build the cache lookup coordinates for this evaluation contract."""
+        text_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
+        return (self.config.config_hash, text_hash, self.PROMPT_VERSION)
+
     def _build_prompt(self, text: str) -> str:
         """Build evaluation prompt deterministically."""
         return (
@@ -108,6 +112,7 @@ class LLMJudge(Judge):
                 rationale="",
                 rubric_hash=self.config.rubric.hash,
                 judge_model=self.config.judge_model,
+                prompt_version=self.PROMPT_VERSION,
             )
 
         # Extract and validate score
@@ -143,4 +148,5 @@ class LLMJudge(Judge):
             rationale=rationale,
             rubric_hash=self.config.rubric.hash,
             judge_model=self.config.judge_model,
+            prompt_version=self.PROMPT_VERSION,
         )

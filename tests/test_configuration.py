@@ -228,8 +228,8 @@ class TestConfigHash(unittest.TestCase):
         )
         self.assertNotEqual(config1.config_hash, config2.config_hash)
 
-    def test_config_hash_ignores_temperature(self):
-        """Config hash ignores temperature (non-deterministic param)."""
+    def test_config_hash_changes_with_temperature(self):
+        """Config hash changes when judge sampling config changes."""
         config1 = JudgeConfig(
             rubric=RubricLibrary.sycophancy,
             judge_model="gpt-4o",
@@ -240,8 +240,7 @@ class TestConfigHash(unittest.TestCase):
             judge_model="gpt-4o",
             temperature=0.7,
         )
-        # Note: This test documents current behavior,
-        # may differ if temperature affects determinism
+        self.assertNotEqual(config1.config_hash, config2.config_hash)
 
 
 class TestConfigImmutability(unittest.TestCase):
