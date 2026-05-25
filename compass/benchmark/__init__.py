@@ -1,5 +1,10 @@
 """Benchmark schemas and shared helpers."""
 
+from compass.benchmark.config import (
+    DEFAULT_TOKEN_BUDGETS,
+    LEGACY_TOKEN_CAP_FALLBACK,
+    default_max_tokens_for_model,
+)
 from compass.benchmark.io import load_evaluation_records, load_generation_records
 from compass.benchmark.registry import (
     CONSTITUTIONAL_COMPLIANCE_BENCHMARK,
@@ -46,7 +51,10 @@ __all__ = [
     "BenchmarkPrompt",
     "BenchmarkSpec",
     "CONSTITUTIONAL_COMPLIANCE_BENCHMARK",
+    "DEFAULT_TOKEN_BUDGETS",
+    "LEGACY_TOKEN_CAP_FALLBACK",
     "build_benchmark_spec",
+    "default_max_tokens_for_model",
     "get_benchmark_spec",
     "list_benchmark_specs",
     "register_benchmark_spec",

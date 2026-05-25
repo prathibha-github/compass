@@ -10,6 +10,10 @@ from compass import (
     LLMJudge,
     OllamaClient,
 )
+from compass.benchmark.config import (
+    LEGACY_TOKEN_CAP_FALLBACK,
+    default_max_tokens_for_model,
+)
 from compass.benchmark.io import load_generation_records
 from compass.benchmark.schemas import (
     migrate_evaluation_record,
@@ -66,8 +70,8 @@ def _generation_quality_from_record(record: dict) -> dict:
     raw_max_tokens = record.get("max_tokens_requested")
     max_tokens_requested = int(raw_max_tokens or 0)
     token_cap_inferred_legacy = False
-    if not max_tokens_requested and output_tokens >= 150:
-        max_tokens_requested = 150
+    if not max_tokens_requested and output_tokens >= LEGACY_TOKEN_CAP_FALLBACK:
+        max_tokens_requested = LEGACY_TOKEN_CAP_FALLBACK
         token_cap_inferred_legacy = True
     finish_reason = str(record.get("finish_reason") or "")
     return _compute_generation_quality(
@@ -80,13 +84,8 @@ def _generation_quality_from_record(record: dict) -> dict:
 
 
 def _default_max_tokens_for_model(model: str) -> int:
-    # Gemini thinking models generally need larger output budgets to avoid
-    # truncating the visible answer.
-    #
-    # Note: non-Gemini default remains 150 for historical comparability with
-    # prior runs; this may still truncate some cloud models. Use the preflight
-    # policy and quality flags to surface that explicitly.
-    return 2000 if model.startswith("gemini") else 150
+    """Backward-compatible wrapper around benchmark token budget config."""
+    return default_max_tokens_for_model(model)
 
 
 def compute_token_budget_by_model(models: list) -> dict:

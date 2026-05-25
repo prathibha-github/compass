@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from compass.benchmark import (
+    DEFAULT_TOKEN_BUDGETS,
     _compute_generation_quality,
     _default_max_tokens_for_model,
     _generation_quality_from_record,
@@ -50,6 +51,32 @@ def _coerce_spec(prompts_by_rubric: dict):
         },
         pairwise_segment_field=BENCHMARK_SPEC.pairwise_segment_field,
     )
+
+
+def _parse_max_tokens_by_model_args(items):
+    """Parse CLI entries like model=1000 into a token-budget map."""
+    budgets = {}
+    for item in items or []:
+        if "=" not in item:
+            raise ValueError(
+                f"Invalid --max-tokens-by-model entry {item!r}; expected MODEL=TOKENS."
+            )
+        model, raw_budget = item.split("=", 1)
+        model = model.strip()
+        if not model:
+            raise ValueError("Model name cannot be empty in --max-tokens-by-model.")
+        try:
+            budget = int(raw_budget)
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid token budget {raw_budget!r} for model {model!r}."
+            ) from exc
+        if budget <= 0:
+            raise ValueError(
+                f"Invalid token budget {budget!r} for model {model!r}; must be > 0."
+            )
+        budgets[model] = budget
+    return budgets
 
 
 def generate_completions(
@@ -108,6 +135,14 @@ Examples:
 
   # Custom output directory
   python examples/local_benchmark.py --output-dir results/constitutional
+
+  # Uniform generous token budget for all models
+  python examples/constitutional_compliance_benchmark.py --samples 5 --max-tokens 1000
+
+  # Explicit per-model budgets
+  python examples/constitutional_compliance_benchmark.py --samples 5 \
+    --max-tokens-by-model claude-haiku-4-5=1000 \
+    --max-tokens-by-model gpt-5.4-mini=1000
         """,
     )
     parser.add_argument(
@@ -143,6 +178,26 @@ Examples:
         "--skip-ranking",
         action="store_true",
         help="Skip pairwise ranking analysis",
+    )
+    budget_group = parser.add_mutually_exclusive_group()
+    budget_group.add_argument(
+        "--max-tokens",
+        type=int,
+        default=None,
+        help=(
+            "Use the same max token budget for every evaluated model. "
+            "Overrides benchmark defaults."
+        ),
+    )
+    budget_group.add_argument(
+        "--max-tokens-by-model",
+        action="append",
+        default=None,
+        metavar="MODEL=TOKENS",
+        help=(
+            "Explicit per-model max token budget. Repeat for multiple models. "
+            "Requires --allow-mixed-token-budgets when budgets differ."
+        ),
     )
     parser.add_argument(
         "--allow-mixed-token-budgets",
@@ -183,6 +238,7 @@ def main():
     logger.info("Rubrics: %s", ", ".join(BENCHMARK_SPEC.rubric_names))
     logger.info("Samples per prompt: %d", args.samples)
     logger.info("Output directory: %s", args.output_dir)
+    logger.info("Default token budget config: %s", dict(DEFAULT_TOKEN_BUDGETS))
 
     total_evals = BENCHMARK_SPEC.total_evaluations(len(args.models), args.samples)
     if args.judge_model in ("llama3.1", "mistral", "phi", "neural-chat", "dolphin-mixtral"):
@@ -205,10 +261,29 @@ def main():
     logger.info("")
 
     if not args.skip_generation:
+        if args.max_tokens is not None and args.max_tokens <= 0:
+            logger.error("--max-tokens must be > 0")
+            sys.exit(2)
+        try:
+            custom_budget_by_model = _parse_max_tokens_by_model_args(
+                args.max_tokens_by_model
+            )
+        except ValueError as e:
+            logger.error(str(e))
+            sys.exit(2)
+
+        if args.max_tokens is not None:
+            token_budget_input = {model: args.max_tokens for model in available_models}
+        elif custom_budget_by_model:
+            token_budget_input = custom_budget_by_model
+        else:
+            token_budget_input = None
+
         try:
             token_budget_by_model = validate_token_budget_policy(
                 available_models,
                 allow_mixed=args.allow_mixed_token_budgets,
+                max_tokens_by_model=token_budget_input,
             )
         except ValueError as e:
             logger.error(str(e))
