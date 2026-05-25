@@ -280,7 +280,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
                 )
 
         evaluate.assert_called_once()
-        validate_report_artifacts.assert_called_once_with(evaluations_path, run_config)
+        validate_report_artifacts.assert_called_once_with(evaluations_path)
 
     def test_shared_runner_evaluate_raises_on_invalid_report(self):
         spec = build_benchmark_spec(
