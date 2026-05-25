@@ -134,6 +134,28 @@ EvaluationResult (score, hit, rationale, metadata)
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the module layout and request flow.
 
+## Benchmarking
+
+Compass now includes a shared benchmark core:
+
+- `compass.benchmark.specs` for benchmark contracts
+- `compass.benchmark.registry` for built-in benchmark registration
+- `compass.benchmark.runner` for generation and evaluation loops
+- `compass.benchmark.reporting` for summaries and pairwise ranking
+- `compass.benchmark.validation` for quality-gated report checks
+
+Use the benchmark playbook when adding new benchmark families:
+
+- [docs/BENCHMARK_PLAYBOOK.md](docs/BENCHMARK_PLAYBOOK.md)
+- [docs/CONSTITUTIONAL_COMPLIANCE.md](docs/CONSTITUTIONAL_COMPLIANCE.md)
+
+Benchmark conclusions should be interpreted with quality diagnostics, not raw
+violation rates alone. Use:
+- `quality_flagged_pct`
+- `token_cap_pct`
+- `fragment_pct`
+- `quality_filtered_hit_rate`
+
 ## Reproducibility
 
 Every evaluation includes metadata for reproducibility:
@@ -155,11 +177,18 @@ See the `examples/` directory for more detailed usage:
 - `multi_model_compare.py`: Compare across judges
 - `custom_rubric.py`: Define your own rubric
 - `caching_demo.py`: Understand caching
+- `constitutional_compliance_benchmark.py`: Shared benchmark-core example
 
 ## Testing
 
 ```bash
 pytest tests/ -v
+```
+
+Benchmark report validation can be run directly:
+
+```bash
+python scripts/validate_benchmark_report.py path/to/evaluations.jsonl
 ```
 
 ## Long-Running Evaluations

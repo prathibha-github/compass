@@ -37,17 +37,17 @@ Evaluate Ollama models (llama3.1, mistral, phi) on all 5 Constitutional principl
 ### Run Benchmark
 
 ```bash
-# Quick test (3 models, 3 samples = 24 evaluations)
-python examples/local_benchmark.py --samples 3
+# Quick test
+python examples/constitutional_compliance_benchmark.py --samples 3
 
-# More thorough (5 samples per prompt = 40 evaluations)
-python examples/local_benchmark.py --samples 5
+# More thorough
+python examples/constitutional_compliance_benchmark.py --samples 5
 
 # Custom subset
-python examples/local_benchmark.py --models llama3.1 mistral --samples 5
+python examples/constitutional_compliance_benchmark.py --models llama3.1 mistral --samples 5
 
 # Custom output directory
-python examples/local_benchmark.py --output-dir results/my_benchmark --samples 5
+python examples/constitutional_compliance_benchmark.py --output-dir results/my_benchmark --samples 5
 ```
 
 ## What Gets Evaluated
@@ -86,7 +86,7 @@ python examples/local_benchmark.py --output-dir results/my_benchmark --samples 5
 PHASE 1: Generate Completions
 ├─ For each model, rubric, prompt, sample:
 │  ├─ Call Ollama model with prompt
-│  ├─ Get completion (max 150 tokens)
+│  ├─ Get completion (model-specific token budget)
 │  └─ Save to generations.jsonl (resumable)
 │
 PHASE 2: Evaluate Completions
@@ -94,10 +94,10 @@ PHASE 2: Evaluate Completions
 │  ├─ Call judge model (gpt-4o-mini by default)
 │  ├─ Judge evaluates on rubric scale (0.0-1.0)
 │  ├─ Get score + hit status
-│  └─ Save to evaluations.jsonl (resumable)
+│  └─ Save to evaluations_<judge>.jsonl (resumable)
 │
 PHASE 3: Analyze Results
-├─ Aggregate hit rates and mean scores
+├─ Aggregate hit rates and quality-gated metrics
 ├─ Print summary table
 └─ Save statistics
 │
@@ -110,19 +110,19 @@ PHASE 4: Pairwise Ranking
 
 ## Output
 
-Results are saved to `results/local_benchmark/` by default:
+Results are saved to `results/constitutional_compliance_benchmark/` by default:
 
 ```
-results/local_benchmark/
+results/constitutional_compliance_benchmark/
 ├── generations.jsonl      # Generated completions (resumable checkpoint)
-├── evaluations.jsonl      # Evaluation scores (resumable checkpoint)
+├── evaluations_<judge>.jsonl  # Evaluation scores (resumable checkpoint)
 ├── .cache/                # Judge model cache (speeds up re-evaluation)
 └── README.txt             # This output path
 ```
 
 Each JSONL file is line-delimited JSON, one record per line.
 
-### Sample Record (evaluations.jsonl)
+### Sample Record (`evaluations_<judge>.jsonl`)
 
 ```json
 {
@@ -145,14 +145,15 @@ Each JSONL file is line-delimited JSON, one record per line.
 EVALUATION SUMMARY
 ==============================================================================================
 
-Model           | Rubric          | Hit Rate   | Mean Score | Samples
-----------------------------------------------------------------------------------------------
-llama3.1        | task_focus      |     20.0%  |      0.201 |      10
-llama3.1        | truthfulness    |     10.0%  |      0.102 |      10
-mistral         | task_focus      |     30.0%  |      0.298 |      10
-mistral         | truthfulness    |     20.0%  |      0.199 |      10
-phi             | task_focus      |     25.0%  |      0.251 |      10
-phi             | truthfulness    |     15.0%  |      0.151 |      10
+Model           | Rubric          |  Hit Rate |  Q-Flag |   Cap |  Frag | LegacyCap |  QF Hit | Samples
+----------------------------------------------------------------------------------------------------
+llama3.1        | task_focus      |     20.0% |   10.0% | 10.0% | 10.0% |      0.0% |   11.1% |      10
+```
+
+Validate report quality before interpreting results:
+
+```bash
+python scripts/validate_benchmark_report.py results/constitutional_compliance_benchmark/evaluations_gpt-4o-mini.jsonl
 ```
 
 **Lower scores are better** (0.0 = excellent compliance, 1.0 = severe violation).
@@ -163,11 +164,11 @@ If interrupted, simply re-run the same command—it will resume from the checkpo
 
 ```bash
 # Run 1: Interrupted after 50 evaluations
-python examples/local_benchmark.py --samples 5
+python examples/constitutional_compliance_benchmark.py --samples 5
 # ... stopped mid-way ...
 
 # Run 2: Automatically resumes from checkpoint
-python examples/local_benchmark.py --samples 5
+python examples/constitutional_compliance_benchmark.py --samples 5
 # Resumes: 50 prior evaluations
 # Generates remaining 50
 ```
@@ -199,12 +200,12 @@ By default, uses **gpt-4o-mini** (cheapest gpt-4 variant, good for Constitutiona
 
 ```bash
 # Use Claude instead
-python examples/local_benchmark.py \
+python examples/constitutional_compliance_benchmark.py \
   --samples 5 \
   --judge-model claude-haiku-4-5
 
 # Use GPT-4o (slower, more expensive but higher quality)
-python examples/local_benchmark.py \
+python examples/constitutional_compliance_benchmark.py \
   --samples 5 \
   --judge-model gpt-4o
 ```
@@ -249,24 +250,24 @@ Lower scores win (fewer violations = better).
 
 ```bash
 # Generate once
-python examples/local_benchmark.py --samples 5
+python examples/constitutional_compliance_benchmark.py --samples 5
 
 # Try different judge later (reuses generations)
-python examples/local_benchmark.py --skip-generation --judge-model gpt-4o
+python examples/constitutional_compliance_benchmark.py --skip-generation --judge-model gpt-4o
 ```
 
 ### Skip Ranking (faster for large runs)
 
 ```bash
 # Skip pairwise comparison analysis
-python examples/local_benchmark.py --samples 10 --skip-ranking
+python examples/constitutional_compliance_benchmark.py --samples 10 --skip-ranking
 ```
 
 ### Custom Subset
 
 ```bash
 # Only evaluate llama3.1 (fastest)
-python examples/local_benchmark.py --models llama3.1 --samples 5
+python examples/constitutional_compliance_benchmark.py --models llama3.1 --samples 5
 
 # Only truthfulness rubric (manual: edit PROMPTS dict in script)
 ```
@@ -307,7 +308,7 @@ echo $ANTHROPIC_API_KEY
 
 ## Next Steps
 
-1. **Run benchmark**: `python examples/local_benchmark.py --samples 5`
+1. **Run benchmark**: `python examples/constitutional_compliance_benchmark.py --samples 5`
 2. **Compare with cloud models**: Use same script on GPT/Claude (future)
 3. **Investigate failures**: Read highest-scoring (worst) evaluations
 4. **Fine-tune**: Identify prompt/model pairs that fail most frequently
@@ -333,7 +334,7 @@ See `docs/CHECKPOINT_SYSTEM.md`, `docs/JUDGE_RELIABILITY.md`, `docs/PAIRWISE_COM
 2026-05-22 14:30:01 | INFO     | Models: llama3.1, mistral, phi
 2026-05-22 14:30:01 | INFO     | Samples per prompt: 5
 2026-05-22 14:30:01 | INFO     | Judge model: gpt-4o-mini
-2026-05-22 14:30:01 | INFO     | Output directory: results/local_benchmark
+2026-05-22 14:30:01 | INFO     | Output directory: results/constitutional_compliance_benchmark
 2026-05-22 14:30:01 | INFO     |
 2026-05-22 14:30:01 | INFO     | Checking Ollama models...
 2026-05-22 14:30:02 | INFO     | ✓ llama3.1 available (test: {'input': 7, 'output': 5})
@@ -370,7 +371,7 @@ See `docs/CHECKPOINT_SYSTEM.md`, `docs/JUDGE_RELIABILITY.md`, `docs/PAIRWISE_COM
 2026-05-22 14:33:12 | INFO     | phi            | task_focus      |     30.0%  |      0.298 |      20
 2026-05-22 14:33:12 | INFO     | phi            | truthfulness    |     25.0%  |      0.248 |      20
 2026-05-22 14:33:12 | INFO     |
-2026-05-22 14:33:12 | INFO     | Results saved: results/local_benchmark/evaluations.jsonl
+2026-05-22 14:33:12 | INFO     | Results saved: results/constitutional_compliance_benchmark/evaluations_gpt-4o-mini.jsonl
 2026-05-22 14:33:12 | INFO     | ============================================================================================
 2026-05-22 14:33:12 | INFO     |
 2026-05-22 14:33:12 | INFO     | PHASE 4: Pairwise model comparison...
@@ -388,5 +389,5 @@ See `docs/CHECKPOINT_SYSTEM.md`, `docs/JUDGE_RELIABILITY.md`, `docs/PAIRWISE_COM
 2026-05-22 14:33:12 | INFO     |   2. mistral      1.0/3 wins ( 33.3%)
 2026-05-22 14:33:12 | INFO     |   3. phi          0.0/3 wins (  0.0%)
 2026-05-22 14:33:12 | INFO     |
-2026-05-22 14:33:12 | INFO     | ✓ Benchmark complete. Results in results/local_benchmark/
+2026-05-22 14:33:12 | INFO     | ✓ Benchmark complete. Results in results/constitutional_compliance_benchmark/
 ```
