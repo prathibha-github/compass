@@ -1,5 +1,6 @@
 """Core benchmark execution helpers."""
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -208,6 +209,51 @@ def _probe_ollama_model(client: OllamaClient, model: str) -> None:
         if candidate == model or candidate_base == requested_base:
             return
     raise RuntimeError(f"Ollama model not installed: {model}")
+
+
+def _write_benchmark_run_policy_artifact(
+    output_dir: Path,
+    run_config: BenchmarkRunConfig,
+) -> Path:
+    """Persist the resolved benchmark run policy beside benchmark outputs."""
+    policy_path = output_dir / "benchmark_run_policy.json"
+    effective_token_budgets = validate_token_budget_policy(
+        list(run_config.models),
+        allow_mixed=run_config.allow_mixed_token_budgets,
+        max_tokens_by_model=(
+            dict(run_config.max_tokens_by_model)
+            if run_config.max_tokens_by_model is not None
+            else None
+        ),
+        token_budget_defaults=run_config.token_budget_defaults,
+    )
+    payload = {
+        "benchmark_name": run_config.benchmark_name,
+        "benchmark_version": run_config.benchmark_version,
+        "preset_name": run_config.preset_name,
+        "models": list(run_config.models),
+        "samples": run_config.samples,
+        "judge_model": run_config.judge_model,
+        "output_dir": run_config.output_dir,
+        "token_budget_defaults": dict(run_config.token_budget_defaults),
+        "max_tokens_by_model_overrides": (
+            dict(run_config.max_tokens_by_model)
+            if run_config.max_tokens_by_model is not None
+            else None
+        ),
+        "effective_max_tokens_by_model": effective_token_budgets,
+        "allow_mixed_token_budgets": run_config.allow_mixed_token_budgets,
+        "quality_filter_mode": run_config.quality_filter_mode,
+        "analysis_lanes": list(run_config.analysis_lanes),
+        "effective_analysis_lanes": list(run_config.effective_analysis_lanes),
+        "legacy_token_cap_threshold": run_config.legacy_token_cap_threshold,
+        "skip_generation": run_config.skip_generation,
+        "skip_ranking": run_config.skip_ranking,
+    }
+    temp_path = policy_path.with_suffix(".json.tmp")
+    temp_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    temp_path.replace(policy_path)
+    return policy_path
 
 
 def test_model_connection(model: str) -> bool:
@@ -501,11 +547,13 @@ class SharedBenchmarkRunner:
     def generate(self, run_config: BenchmarkRunConfig) -> Path:
         """Generate completions for a benchmark run config."""
         config = self._require_validated_run_config(run_config)
+        output_dir = setup_output_dir(config.output_dir)
+        _write_benchmark_run_policy_artifact(output_dir, config)
         return generate_completions(
             models=list(config.models),
             benchmark_spec=self.spec,
             samples=config.samples,
-            output_dir=setup_output_dir(config.output_dir),
+            output_dir=output_dir,
             max_tokens_by_model=(
                 dict(config.max_tokens_by_model)
                 if config.max_tokens_by_model is not None
@@ -522,11 +570,13 @@ class SharedBenchmarkRunner:
     ) -> Path:
         """Evaluate completions for a benchmark run config."""
         config = self._require_validated_run_config(run_config)
+        output_dir = setup_output_dir(config.output_dir)
+        _write_benchmark_run_policy_artifact(output_dir, config)
         evaluations_path = evaluate_completions(
             generations_path=generations_path,
             benchmark_spec=self.spec,
             judge_model=config.judge_model,
-            output_dir=setup_output_dir(config.output_dir),
+            output_dir=output_dir,
             legacy_token_cap_threshold=config.legacy_token_cap_threshold,
         )
         errors = self._validate_report_artifacts(evaluations_path)
