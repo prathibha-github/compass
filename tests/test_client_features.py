@@ -459,10 +459,26 @@ class TestGoogleAIClientFeatures(unittest.TestCase):
         self.assertNotIn("safety_settings", captured["config"])
 
     def test_google_ai_client_enforces_max_requests(self):
-        client, _, _ = self._make_client()
-        client._request_count = get_pricing("gemini-2.0-flash").max_requests
+        client, _, _ = self._make_client(max_requests_per_window=3)
+        client._request_count = 3
         with self.assertRaisesRegex(RuntimeError, "Reached max_requests"):
             client.complete("prompt")
+
+    def test_google_ai_client_does_not_enforce_pricing_cap_by_default(self):
+        client, _, _ = self._make_client()
+        client._request_count = get_pricing("gemini-2.0-flash").max_requests
+        response_mock = MagicMock()
+        response_mock.text = "answer"
+        response_mock.usage_metadata = MagicMock(
+            prompt_token_count=10,
+            candidates_token_count=5,
+        )
+        client.client.models.generate_content.return_value = response_mock
+
+        with patch("time.sleep"):
+            response = client.complete("prompt")
+
+        self.assertEqual(response.tokens_used, {"input": 10, "output": 5})
 
     def test_google_ai_client_requires_usage_metadata_by_default(self):
         client, _, _ = self._make_client()

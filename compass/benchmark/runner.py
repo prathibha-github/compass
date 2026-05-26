@@ -26,6 +26,7 @@ from compass.benchmark.schemas import (
 from compass.benchmark.specs import BenchmarkRunConfig, BenchmarkSpec
 from compass.benchmark.validation import validate_benchmark_report
 from compass.clients import AnthropicClient, GoogleAIClient, OpenAIClient
+from compass.clients.pricing import get_pricing
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +173,7 @@ def _create_client(model: str):
         return GoogleAIClient(
             model=model,
             allow_estimated_usage=True,
+            max_requests_per_window=get_pricing(model).max_requests,
         )
     if model.startswith("gpt") or model.startswith("o4"):
         required_temperature = None

@@ -61,7 +61,7 @@ includes these named behaviors:
 - `OpenAIResponsesClient`: explicit output-token multiplier, explicit
   estimated-usage fallback, unsupported `temperature`, unsupported `logprobs`
 - `AnthropicClient`: retry/backoff behavior, unsupported `logprobs`
-- `GoogleAIClient`: free-tier request ceiling, explicit estimated-usage
+- `GoogleAIClient`: explicit request ceiling, explicit estimated-usage
   fallback, optional safety override, unsupported `logprobs`
 - `OllamaClient`: system-prompt wrapping, token estimation, unsupported
   `logprobs`
@@ -100,6 +100,8 @@ explicit enough to audit.
 ### Google AI
 
 - Maps the shared request into `generate_content(...)`.
+- Applies a request ceiling only when the caller configures
+  `max_requests_per_window`.
 - Requires provider usage metadata unless the caller opts into
   `allow_estimated_usage=True`.
 - Rejects unsupported `logprobs` requests explicitly.
