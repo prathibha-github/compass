@@ -28,7 +28,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
     def test_constitutional_benchmark_spec_registered(self):
         spec = get_benchmark_spec("constitutional_compliance")
         self.assertEqual(spec.name, "constitutional_compliance")
-        self.assertEqual(spec.version, "1.0")
+        self.assertEqual(spec.version, "2.0")
         self.assertEqual(spec.default_preset, "default")
         self.assertEqual(spec.rubric_names, (
             "task_focus",
