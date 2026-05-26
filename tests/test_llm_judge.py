@@ -104,6 +104,108 @@ class TestLLMJudge(unittest.TestCase):
         self.assertFalse(second_result.cache_hit)
         self.assertNotEqual(first_result.score, second_result.score)
 
+    def test_judge_rubric_change_busts_cache(self):
+        base_config = JudgeConfig(
+            rubric=RubricLibrary.sycophancy,
+            judge_model="gpt-4o",
+        )
+        variant_config = JudgeConfig(
+            rubric=RubricLibrary.clarity,
+            judge_model="gpt-4o",
+        )
+        first_client = MockClient('{"score": 0.5, "hit": false}')
+        second_client = MockClient('{"score": 0.8, "hit": true}')
+
+        first_judge = LLMJudge(base_config, first_client, self.cache)
+        second_judge = LLMJudge(variant_config, second_client, self.cache)
+
+        first_result = first_judge.evaluate("test response")
+        second_result = second_judge.evaluate("test response")
+
+        self.assertEqual(first_client.call_count, 1)
+        self.assertEqual(second_client.call_count, 1)
+        self.assertFalse(first_result.cache_hit)
+        self.assertFalse(second_result.cache_hit)
+        self.assertNotEqual(first_result.rubric_hash, second_result.rubric_hash)
+
+    def test_judge_seed_change_busts_cache(self):
+        base_config = JudgeConfig(
+            rubric=RubricLibrary.sycophancy,
+            judge_model="gpt-4o",
+            seed=42,
+        )
+        variant_config = JudgeConfig(
+            rubric=RubricLibrary.sycophancy,
+            judge_model="gpt-4o",
+            seed=99,
+        )
+        first_client = MockClient('{"score": 0.5, "hit": false}')
+        second_client = MockClient('{"score": 0.8, "hit": true}')
+
+        first_judge = LLMJudge(base_config, first_client, self.cache)
+        second_judge = LLMJudge(variant_config, second_client, self.cache)
+
+        first_result = first_judge.evaluate("test response")
+        second_result = second_judge.evaluate("test response")
+
+        self.assertEqual(first_client.call_count, 1)
+        self.assertEqual(second_client.call_count, 1)
+        self.assertFalse(first_result.cache_hit)
+        self.assertFalse(second_result.cache_hit)
+        self.assertNotEqual(first_judge.config.config_hash, second_judge.config.config_hash)
+
+    def test_judge_max_tokens_change_busts_cache(self):
+        base_config = JudgeConfig(
+            rubric=RubricLibrary.sycophancy,
+            judge_model="gpt-4o",
+            max_tokens=180,
+        )
+        variant_config = JudgeConfig(
+            rubric=RubricLibrary.sycophancy,
+            judge_model="gpt-4o",
+            max_tokens=250,
+        )
+        first_client = MockClient('{"score": 0.5, "hit": false}')
+        second_client = MockClient('{"score": 0.8, "hit": true}')
+
+        first_judge = LLMJudge(base_config, first_client, self.cache)
+        second_judge = LLMJudge(variant_config, second_client, self.cache)
+
+        first_result = first_judge.evaluate("test response")
+        second_result = second_judge.evaluate("test response")
+
+        self.assertEqual(first_client.call_count, 1)
+        self.assertEqual(second_client.call_count, 1)
+        self.assertFalse(first_result.cache_hit)
+        self.assertFalse(second_result.cache_hit)
+        self.assertNotEqual(first_judge.config.config_hash, second_judge.config.config_hash)
+
+    def test_prompt_version_change_busts_cache(self):
+        class _VersionedJudge(LLMJudge):
+            PROMPT_VERSION = "2.0"
+
+        config = JudgeConfig(
+            rubric=RubricLibrary.sycophancy,
+            judge_model="gpt-4o",
+        )
+        first_client = MockClient('{"score": 0.5, "hit": false}')
+        second_client = MockClient('{"score": 0.8, "hit": true}')
+
+        first_judge = LLMJudge(config, first_client, self.cache)
+        second_judge = _VersionedJudge(config, second_client, self.cache)
+
+        first_result = first_judge.evaluate("test response")
+        second_result = second_judge.evaluate("test response")
+
+        self.assertEqual(first_client.call_count, 1)
+        self.assertEqual(second_client.call_count, 1)
+        self.assertFalse(first_result.cache_hit)
+        self.assertFalse(second_result.cache_hit)
+        self.assertNotEqual(
+            first_judge._cache_coordinates("test response"),
+            second_judge._cache_coordinates("test response"),
+        )
+
     def test_judge_different_texts_different_cache(self):
         config = JudgeConfig(
             rubric=RubricLibrary.sycophancy,
