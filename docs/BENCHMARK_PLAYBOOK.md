@@ -132,7 +132,29 @@ Minimum persisted guarantees:
 - `benchmark_record_type`
 - stable identity fields (`model`, `rubric`, `prompt_id`, `sample_idx`)
 
-### 5. Include quality diagnostics
+### 5. Make artifact semantics explicit
+
+Benchmark outputs should be self-describing and operationally predictable.
+
+Write and document these artifacts:
+- `generations.jsonl`
+  Append-only generation checkpoint. Resume and evaluation paths may salvage a
+  valid prefix and warn on malformed rows; treat it as an operational
+  checkpoint, not as a silently self-healing final report.
+- `evaluations_<judge>.jsonl`
+  Append-only evaluation checkpoint. Shared summary, ranking, and report
+  validation paths read this strictly and fail on malformed rows.
+- `benchmark_run_policy.json`
+  Atomic sidecar artifact that records the resolved preset and effective run
+  policy used to produce the outputs.
+
+Runtime failure behavior should also be explicit:
+- generation and evaluation runtime failures are logged per row
+- the run emits a final warning when failures occurred
+- benchmark artifacts contain successful rows only; do not treat missing rows as
+  silent success
+
+### 6. Include quality diagnostics
 
 Benchmark outputs are not valid unless they carry quality-gate metadata.
 
@@ -153,7 +175,7 @@ Required aggregated metrics:
 - `quality_filtered_total`
 - `quality_filtered_hit_rate`
 
-### 6. Add tests before claiming the benchmark is integrated
+### 7. Add tests before claiming the benchmark is integrated
 
 Minimum test set:
 - spec/registry contract test

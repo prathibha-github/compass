@@ -156,6 +156,15 @@ violation rates alone. Use:
 - `fragment_pct`
 - `quality_filtered_hit_rate`
 
+Benchmark output directories also carry the run policy and artifact semantics:
+- `generations.jsonl` and `evaluations_<judge>.jsonl` are append-only
+  checkpoints
+- `benchmark_run_policy.json` records the resolved preset and effective policy
+- shared benchmark analysis reads report artifacts strictly and fails on
+  malformed rows rather than skipping them
+- runtime model failures are logged and warned about explicitly; successful rows
+  are still preserved for resume and inspection
+
 ## Reproducibility
 
 Every evaluation includes metadata for reproducibility:
