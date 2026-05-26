@@ -58,8 +58,8 @@ includes these named behaviors:
 
 - `OpenAIClient`: explicit required-temperature policy; retry and quota-pause
   behavior
-- `OpenAIResponsesClient`: explicit output-token multiplier, default
-  instructions, ignored temperature, usage fallback, unsupported `logprobs`
+- `OpenAIResponsesClient`: explicit output-token multiplier, usage fallback,
+  unsupported `temperature`, unsupported `logprobs`
 - `AnthropicClient`: retry/backoff behavior, unsupported `logprobs`
 - `GoogleAIClient`: free-tier request ceiling, usage fallback, optional safety
   override, unsupported `logprobs`
@@ -82,6 +82,8 @@ explicit enough to audit.
 - Uses the Responses API instead of Chat Completions.
 - Applies any larger output-token budget only when the caller configures
   `max_output_token_multiplier` explicitly.
+- Omits `instructions` unless the caller supplies a `system` prompt.
+- Rejects non-zero `temperature` values instead of silently ignoring them.
 - Preserves the shared completion contract even though the upstream request
   shape differs.
 - Rejects `logprobs` because the current adapter contract does not support them

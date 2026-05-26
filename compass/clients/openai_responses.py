@@ -118,14 +118,14 @@ class OpenAIResponsesClient(CompletionClient):
         Generate completion via OpenAI Responses API with retry/backoff on 429.
 
         The configured ``max_output_token_multiplier`` is applied to ``max_tokens``
-        before making the request. The temperature parameter is accepted for
-        interface compatibility but not forwarded to the Responses API.
+        before making the request. Non-zero temperatures are rejected because
+        the Responses API path does not forward temperature.
 
         Args:
             prompt: Input prompt
             max_tokens: Maximum output tokens before applying the configured
                 output-token multiplier
-            temperature: Accepted for interface compatibility; not forwarded.
+            temperature: Must remain 0.0 for this adapter path
             system: Optional system/instructions prompt
 
         Returns:
@@ -139,9 +139,19 @@ class OpenAIResponsesClient(CompletionClient):
                 f"{self.__class__.__name__} does not support logprobs"
             )
         del top_logprobs
+        if temperature != 0.0:
+            raise ValueError(
+                f"{self.__class__.__name__} does not support temperature overrides"
+            )
 
         actual_max_tokens = max_tokens * self._max_output_token_multiplier
-        instructions = system or "You are a helpful assistant."
+        request_kwargs = dict(
+            model=self.model,
+            input=prompt,
+            max_output_tokens=actual_max_tokens,
+        )
+        if system is not None:
+            request_kwargs["instructions"] = system
 
         max_attempts = 10
         for attempt in range(max_attempts):
@@ -149,12 +159,7 @@ class OpenAIResponsesClient(CompletionClient):
             self._last_call_at = time.monotonic()
 
             try:
-                resp = self.client.responses.create(
-                    model=self.model,
-                    instructions=instructions,
-                    input=prompt,
-                    max_output_tokens=actual_max_tokens,
-                )
+                resp = self.client.responses.create(**request_kwargs)
 
                 completion = resp.output_text or ""
                 usage = getattr(resp, "usage", None)
