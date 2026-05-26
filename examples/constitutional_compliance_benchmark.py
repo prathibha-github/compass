@@ -17,8 +17,11 @@ from compass.benchmark import (
     load_evaluation_records,
     load_generation_records,
     log_and_exit,
+    log_token_budget_policy,
     print_summary,
+    require_available_models,
     require_or_exit,
+    resolve_token_budget_overrides,
     run_or_exit,
     setup_output_dir,
     test_model_connection,
@@ -59,32 +62,6 @@ def _runner_for_spec(benchmark_spec):
     if benchmark_spec == BENCHMARK_SPEC:
         return BENCHMARK_RUNNER
     return SharedBenchmarkRunner(benchmark_spec)
-
-
-def _parse_max_tokens_by_model_args(items):
-    """Parse CLI entries like model=1000 into a token-budget map."""
-    budgets = {}
-    for item in items or []:
-        if "=" not in item:
-            raise ValueError(
-                f"Invalid --max-tokens-by-model entry {item!r}; expected MODEL=TOKENS."
-            )
-        model, raw_budget = item.split("=", 1)
-        model = model.strip()
-        if not model:
-            raise ValueError("Model name cannot be empty in --max-tokens-by-model.")
-        try:
-            budget = int(raw_budget)
-        except ValueError as exc:
-            raise ValueError(
-                f"Invalid token budget {raw_budget!r} for model {model!r}."
-            ) from exc
-        if budget <= 0:
-            raise ValueError(
-                f"Invalid token budget {budget!r} for model {model!r}; must be > 0."
-            )
-        budgets[model] = budget
-    return budgets
 
 
 def generate_completions(
@@ -319,35 +296,22 @@ def main():
     output_dir = setup_output_dir(requested_output_dir)
 
     logger.info("Checking model availability...")
-    available_models = [m for m in requested_models if test_model_connection(m)]
-    require_or_exit(
-        bool(available_models),
+    available_models = require_available_models(
+        requested_models,
+        test_model_connection,
         logger,
-        "No models available. Check Ollama is running or API keys are set.",
         exit_code=1,
+        unavailable_message="No models available. Check Ollama is running or API keys are set.",
     )
     logger.info("")
 
-    require_or_exit(
-        args.max_tokens is None or args.max_tokens > 0,
-        logger,
-        "--max-tokens must be > 0",
-        exit_code=2,
-    )
-    custom_budget_by_model = run_or_exit(
-        lambda: _parse_max_tokens_by_model_args(
-            args.max_tokens_by_model
-        ),
+    token_budget_input = resolve_token_budget_overrides(
+        available_models,
+        args.max_tokens,
+        args.max_tokens_by_model,
         logger,
         exit_code=2,
     )
-
-    if args.max_tokens is not None:
-        token_budget_input = {model: args.max_tokens for model in available_models}
-    elif custom_budget_by_model:
-        token_budget_input = custom_budget_by_model
-    else:
-        token_budget_input = None
 
     def _build_run_config():
         run_config = BENCHMARK_SPEC.make_run_config(
@@ -379,18 +343,7 @@ def main():
             ),
             token_budget_defaults=run_config.token_budget_defaults,
         )
-        distinct_budgets = sorted(set(token_budget_by_model.values()))
-        if len(distinct_budgets) == 1:
-            logger.info(
-                "Token budget policy: uniform max_tokens=%d across %d models.",
-                distinct_budgets[0],
-                len(token_budget_by_model),
-            )
-        else:
-            logger.warning(
-                "Token budget policy: mixed budgets enabled: %s",
-                token_budget_by_model,
-            )
+        log_token_budget_policy(logger, token_budget_by_model)
         logger.info("")
         logger.info("PHASE 1: Generating completions...")
         generations_path = BENCHMARK_RUNNER.generate(run_config)

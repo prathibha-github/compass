@@ -427,8 +427,9 @@ class BenchmarkTokenBudgetPolicyTests(unittest.TestCase):
 
 class BenchmarkTokenBudgetCliParsingTests(unittest.TestCase):
     def test_parse_max_tokens_by_model_args(self):
-        benchmark = _load_example("constitutional_compliance_benchmark")
-        budgets = benchmark._parse_max_tokens_by_model_args(
+        from compass.benchmark import parse_max_tokens_by_model_args
+
+        budgets = parse_max_tokens_by_model_args(
             ["claude-haiku-4-5=1000", "gpt-5.4-mini=1000"]
         )
         self.assertEqual(
@@ -440,11 +441,12 @@ class BenchmarkTokenBudgetCliParsingTests(unittest.TestCase):
         )
 
     def test_parse_max_tokens_by_model_args_rejects_invalid_entries(self):
-        benchmark = _load_example("constitutional_compliance_benchmark")
+        from compass.benchmark import parse_max_tokens_by_model_args
+
         with self.assertRaisesRegex(ValueError, "expected MODEL=TOKENS"):
-            benchmark._parse_max_tokens_by_model_args(["bad-entry"])
+            parse_max_tokens_by_model_args(["bad-entry"])
         with self.assertRaisesRegex(ValueError, "must be > 0"):
-            benchmark._parse_max_tokens_by_model_args(["llama3.1=0"])
+            parse_max_tokens_by_model_args(["llama3.1=0"])
 
     def test_parser_accepts_legacy_token_cap_threshold(self):
         benchmark = _load_example("constitutional_compliance_benchmark")
