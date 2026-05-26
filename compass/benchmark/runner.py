@@ -1,6 +1,7 @@
 """Core benchmark execution helpers."""
 
 import logging
+import os
 from pathlib import Path
 from typing import Mapping, Optional
 
@@ -176,12 +177,46 @@ def _create_client(model: str):
     return OllamaClient(model=model)
 
 
+def _require_api_key(env_var: str, provider: str) -> None:
+    if not os.environ.get(env_var):
+        raise RuntimeError(f"{provider} probe requires {env_var} to be set")
+
+
+def _probe_ollama_model(client: OllamaClient, model: str) -> None:
+    listing = client.api_client.list()
+    models = listing.get("models", []) if isinstance(listing, dict) else []
+    available_names = {
+        entry.get("model") or entry.get("name")
+        for entry in models
+        if isinstance(entry, dict)
+    }
+    available_names.discard(None)
+    requested_base = model.split(":", 1)[0]
+    for candidate in available_names:
+        candidate_base = candidate.split(":", 1)[0]
+        if candidate == model or candidate_base == requested_base:
+            return
+    raise RuntimeError(f"Ollama model not installed: {model}")
+
+
 def test_model_connection(model: str) -> bool:
-    """Test if model is available (Ollama or cloud)."""
+    """Run a lightweight model readiness probe without spending generation budget."""
     try:
         client = _create_client(model)
-        response = client.complete("test", max_tokens=10)
-        logger.info("✓ %s available (test: %s)", model, response.tokens_used)
+        if model.startswith("gemini"):
+            _require_api_key("GOOGLE_API_KEY", "Google AI")
+            logger.info("✓ %s available (lightweight Google AI readiness check)", model)
+            return True
+        if model.startswith("gpt"):
+            _require_api_key("OPENAI_API_KEY", "OpenAI")
+            logger.info("✓ %s available (lightweight OpenAI readiness check)", model)
+            return True
+        if model.startswith("claude"):
+            _require_api_key("ANTHROPIC_API_KEY", "Anthropic")
+            logger.info("✓ %s available (lightweight Anthropic readiness check)", model)
+            return True
+        _probe_ollama_model(client, model)
+        logger.info("✓ %s available (Ollama model probe)", model)
         return True
     except Exception as e:
         logger.error("✗ %s unavailable: %s", model, e)
@@ -227,6 +262,7 @@ def generate_completions(
     clients_by_model = {model: _create_client(model) for model in models}
 
     count = 0
+    failure_count = 0
     for rubric, prompts in benchmark_spec.prompts_by_rubric.items():
         for prompt in prompts:
             for model in models:
@@ -285,6 +321,7 @@ def generate_completions(
                             logger.info("  Generated %d/%d", count, total_to_generate)
 
                     except Exception as e:
+                        failure_count += 1
                         logger.error(
                             "  Failed to generate %s/%s/%s: %s",
                             model,
@@ -294,6 +331,11 @@ def generate_completions(
                         )
 
     logger.info("✓ Generated %d completions", count)
+    if failure_count:
+        logger.warning(
+            "Generation completed with %d runtime failures; see logged errors above.",
+            failure_count,
+        )
     return checkpoint_path
 
 
@@ -336,6 +378,7 @@ def evaluate_completions(
     }
 
     count = 0
+    failure_count = 0
     for (model, rubric, prompt_id, sample_idx), gen in generations_by_key.items():
         identity = (model, rubric, prompt_id, sample_idx)
         if identity in completed:
@@ -383,6 +426,7 @@ def evaluate_completions(
                 logger.info("  Evaluated %d/%d", count, total_to_evaluate)
 
         except Exception as e:
+            failure_count += 1
             logger.error(
                 "  Failed to evaluate %s/%s/%s: %s",
                 model,
@@ -392,6 +436,11 @@ def evaluate_completions(
             )
 
     logger.info("✓ Evaluated %d completions", count)
+    if failure_count:
+        logger.warning(
+            "Evaluation completed with %d runtime failures; see logged errors above.",
+            failure_count,
+        )
     return checkpoint_path
 
 

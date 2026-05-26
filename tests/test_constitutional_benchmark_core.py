@@ -128,6 +128,26 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
             self.assertIn("hit_token_cap", row)
             self.assertIn("quality_flagged", row)
 
+    def test_generate_completions_logs_runtime_failure_summary(self):
+        benchmark = _load_benchmark_module()
+        prompts = {
+            "clarity": [
+                {"id": "p1", "text": "explain", "task_type": "general"},
+            ]
+        }
+
+        class _Client:
+            def complete(self, prompt, max_tokens, temperature):
+                raise RuntimeError("boom")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out = pathlib.Path(tmpdir)
+            with patch("compass.benchmark.runner.OllamaClient", return_value=_Client()):
+                with self.assertLogs("compass.benchmark.runner", level="WARNING") as logs:
+                    benchmark.generate_completions(["llama3.1"], prompts, 1, out)
+
+        self.assertIn("Generation completed with 1 runtime failures", logs.output[-1])
+
     def test_evaluate_completions_skips_completed_and_records_quality(self):
         benchmark = _load_benchmark_module()
 
@@ -223,6 +243,47 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
             self.assertIn("generation_is_fragment", latest)
             self.assertNotIn("schema_version", latest)
             self.assertNotIn("record_type", latest)
+
+    def test_evaluate_completions_logs_runtime_failure_summary(self):
+        benchmark = _load_benchmark_module()
+
+        class _FakeJudge:
+            def __init__(self, config, client, cache):
+                self.config = config
+
+            def evaluate(self, text):
+                raise RuntimeError("judge failed")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out = pathlib.Path(tmpdir)
+            generations_path = out / "generations.jsonl"
+            generations_path.write_text(
+                json.dumps(
+                    migrate_generation_record(
+                        {
+                            "model": "llama3.1",
+                            "rubric": "clarity",
+                            "prompt_id": "p1",
+                            "task_type": "general",
+                            "sample_idx": 0,
+                            "completion": "At its core,",
+                            "tokens_used": {"input": 1, "output": 150},
+                        }
+                    )
+                )
+                + "\n"
+            )
+
+            with patch("compass.benchmark.runner.LLMJudge", side_effect=_FakeJudge), patch(
+                "compass.benchmark.runner.OllamaClient", return_value=SimpleNamespace()
+            ), patch(
+                "compass.benchmark.runner.validate_benchmark_report",
+                return_value=[],
+            ):
+                with self.assertLogs("compass.benchmark.runner", level="WARNING") as logs:
+                    benchmark.evaluate_completions(generations_path, "llama3.1", out)
+
+        self.assertIn("Evaluation completed with 1 runtime failures", logs.output[-1])
 
     def test_evaluate_completions_reuses_evaluation_cache_for_duplicate_text(self):
         benchmark = _load_benchmark_module()
