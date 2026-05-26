@@ -84,10 +84,10 @@ _CLIENT_POLICY_TRANSLATIONS = (
     ClientPolicyTranslation(
         adapter="GoogleAIClient",
         category="max_request_cap",
-        trigger="request_count reaches pricing.max_requests",
+        trigger="max_requests_per_window is configured and the request count reaches it",
         behavior="fails early using a client-side free-tier request ceiling",
-        explicit_to_caller=False,
-        tested_by=("tests/test_client_features.py",),
+        explicit_to_caller=True,
+        tested_by=("tests/test_client_features.py", "tests/test_benchmark_runner.py"),
     ),
     ClientPolicyTranslation(
         adapter="GoogleAIClient",

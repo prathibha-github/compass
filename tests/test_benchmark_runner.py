@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from compass.benchmark import runner
+from compass.clients.pricing import get_pricing
 
 
 class BenchmarkRunnerClientRoutingTests(unittest.TestCase):
@@ -28,6 +29,7 @@ class BenchmarkRunnerClientRoutingTests(unittest.TestCase):
                     client_ctor.assert_called_once_with(
                         model=model,
                         allow_estimated_usage=True,
+                        max_requests_per_window=get_pricing(model).max_requests,
                     )
                 elif client_name == "OpenAIClient" and model in {"gpt-5-mini", "o4-mini"}:
                     client_ctor.assert_called_once_with(

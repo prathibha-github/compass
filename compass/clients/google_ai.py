@@ -34,6 +34,7 @@ class GoogleAIClient(CompletionClient):
         request_interval: float = 0.1,
         disable_safety_filters: bool = False,
         allow_estimated_usage: bool = False,
+        max_requests_per_window: Optional[int] = None,
     ):
         """
         Initialize Google AI (Gemini) client.
@@ -45,6 +46,7 @@ class GoogleAIClient(CompletionClient):
             disable_safety_filters: Whether to disable Gemini safety settings.
             allow_estimated_usage: Whether to estimate token usage when Gemini
                 omits usage metadata.
+            max_requests_per_window: Explicit client-side request ceiling.
 
         Raises:
             ImportError: If google-genai package is not installed
@@ -74,6 +76,7 @@ class GoogleAIClient(CompletionClient):
         self._request_count = 0
         self._disable_safety_filters = disable_safety_filters
         self._allow_estimated_usage = allow_estimated_usage
+        self._max_requests_per_window = max_requests_per_window
 
         logger.info(f"Using {model} (google-genai)")
 
@@ -126,9 +129,12 @@ class GoogleAIClient(CompletionClient):
             )
         del top_logprobs
 
-        if self._pricing.max_requests and self._request_count >= self._pricing.max_requests:
+        if (
+            self._max_requests_per_window is not None
+            and self._request_count >= self._max_requests_per_window
+        ):
             raise RuntimeError(
-                f"Reached max_requests={self._pricing.max_requests} for {self.model}. "
+                f"Reached max_requests={self._max_requests_per_window} for {self.model}. "
                 "Use a paid-tier key or lower request volume."
             )
         self._request_count += 1
