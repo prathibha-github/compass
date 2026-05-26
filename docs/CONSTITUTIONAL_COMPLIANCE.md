@@ -21,6 +21,42 @@ Before using results to compare models, validate the report:
 python scripts/validate_benchmark_report.py path/to/evaluations.jsonl
 ```
 
+## Output Artifacts
+
+A benchmark run writes three operationally important artifacts in the output
+directory:
+
+- `generations.jsonl`
+  Successful generation rows. This is an append-only checkpoint, so interrupted
+  runs can resume from a valid prefix.
+- `evaluations_<judge>.jsonl`
+  Successful evaluation rows for a specific judge model.
+- `benchmark_run_policy.json`
+  The resolved benchmark policy for the run, including preset name, benchmark
+  identity, effective token budgets, analysis lanes, and legacy token-cap
+  threshold.
+
+Treat `benchmark_run_policy.json` as part of the benchmark result, not optional
+metadata. It records the policy context needed to interpret the rows later.
+
+## Validation and Failure Semantics
+
+The shared benchmark analysis and validation paths read evaluation artifacts in
+strict mode:
+
+- malformed or truncated evaluation rows fail validation
+- summary and pairwise analysis do not silently skip bad rows
+- lenient loading is only for resume/debug paths, not for user-facing reports
+
+Runtime model failures are handled differently from malformed artifacts:
+
+- generation or evaluation failures are logged at the point they happen
+- the run emits a final warning if any runtime failures occurred
+- only successful rows are written to the JSONL artifacts
+
+That means a partially completed run may still produce valid artifacts, but you
+should inspect the run logs before treating the output set as complete.
+
 ## What We Measure
 
 ### Task Focus
