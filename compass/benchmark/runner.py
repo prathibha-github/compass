@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Optional
 
@@ -40,6 +41,14 @@ from compass.clients import AnthropicClient, GoogleAIClient, OpenAIClient
 from compass.clients.pricing import get_pricing
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class PhaseOutcome:
+    path: Path
+    successful: int
+    runtime_failures: int
+
 
 MIN_VISIBLE_CHARS = 80
 _SENTENCE_ENDINGS = (".", "!", "?", "\"", "'")
@@ -275,6 +284,7 @@ def _write_benchmark_run_outcome_artifact(
     expected_rows: int,
     successful_rows: int,
     runtime_failures: int,
+    status: Optional[str] = None,
 ) -> Path:
     """Persist machine-readable benchmark phase outcome metadata."""
     outcome_path = output_dir / "benchmark_run_outcome.json"
@@ -287,7 +297,7 @@ def _write_benchmark_run_outcome_artifact(
             "phases": {},
         }
 
-    phase_status = (
+    phase_status = status or (
         "complete"
         if runtime_failures == 0 and successful_rows == expected_rows
         else "partial"
@@ -300,14 +310,13 @@ def _write_benchmark_run_outcome_artifact(
         "runtime_failures": runtime_failures,
         "status": phase_status,
     }
-    payload["overall_status"] = (
-        "partial"
-        if any(
-            phase_payload.get("status") == "partial"
-            for phase_payload in payload["phases"].values()
-        )
-        else "complete"
-    )
+    all_statuses = {p.get("status") for p in payload["phases"].values()}
+    if "failed" in all_statuses:
+        payload["overall_status"] = "failed"
+    elif "partial" in all_statuses:
+        payload["overall_status"] = "partial"
+    else:
+        payload["overall_status"] = "complete"
 
     temp_path = outcome_path.with_suffix(".json.tmp")
     temp_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
@@ -320,11 +329,6 @@ def _count_generation_rows(path: Path) -> int:
         return 0
     return len(load_generation_records(path, strict=True))
 
-
-def _count_evaluation_rows(path: Path) -> int:
-    if not path.exists():
-        return 0
-    return len(load_evaluation_records(path, strict=True))
 
 
 def test_model_connection(model: str) -> bool:
@@ -378,7 +382,7 @@ def generate_completions(
 
     if total_to_generate == 0:
         logger.info("All generations already complete")
-        return checkpoint_path
+        return PhaseOutcome(checkpoint_path, len(completed), 0)
 
     logger.info("Generating %d completions...", total_to_generate)
     max_tokens_by_model = validate_token_budget_policy(
@@ -464,7 +468,7 @@ def generate_completions(
             "Generation completed with %d runtime failures; see logged errors above.",
             failure_count,
         )
-    return checkpoint_path
+    return PhaseOutcome(checkpoint_path, len(completed) + count, failure_count)
 
 
 def evaluate_completions(
@@ -492,7 +496,7 @@ def evaluate_completions(
 
     if total_to_evaluate == 0:
         logger.info("All evaluations already complete")
-        return checkpoint_path
+        return PhaseOutcome(checkpoint_path, len(completed), 0)
 
     logger.info("Evaluating %d completions with %s...", total_to_evaluate, judge_model)
     judge_client = _create_client(judge_model)
@@ -569,7 +573,7 @@ def evaluate_completions(
             "Evaluation completed with %d runtime failures; see logged errors above.",
             failure_count,
         )
-    return checkpoint_path
+    return PhaseOutcome(checkpoint_path, len(completed) + count, failure_count)
 
 
 class SharedBenchmarkRunner:
@@ -620,31 +624,43 @@ class SharedBenchmarkRunner:
         config = self._require_validated_run_config(run_config)
         output_dir = setup_output_dir(config.output_dir)
         _write_benchmark_run_policy_artifact(output_dir, config)
-        generations_path = generate_completions(
-            models=list(config.models),
-            benchmark_spec=self.spec,
-            samples=config.samples,
-            output_dir=output_dir,
-            max_tokens_by_model=(
-                dict(config.max_tokens_by_model)
-                if config.max_tokens_by_model is not None
-                else None
-            ),
-            allow_mixed_token_budgets=config.allow_mixed_token_budgets,
-            token_budget_defaults=config.token_budget_defaults,
-        )
         expected_rows = self.spec.total_evaluations(len(config.models), config.samples)
-        successful_rows = _count_generation_rows(generations_path)
+        try:
+            result = generate_completions(
+                models=list(config.models),
+                benchmark_spec=self.spec,
+                samples=config.samples,
+                output_dir=output_dir,
+                max_tokens_by_model=(
+                    dict(config.max_tokens_by_model)
+                    if config.max_tokens_by_model is not None
+                    else None
+                ),
+                allow_mixed_token_budgets=config.allow_mixed_token_budgets,
+                token_budget_defaults=config.token_budget_defaults,
+            )
+        except Exception:
+            _write_benchmark_run_outcome_artifact(
+                output_dir,
+                benchmark_name=self.spec.name,
+                benchmark_version=self.spec.version,
+                phase="generation",
+                expected_rows=expected_rows,
+                successful_rows=0,
+                runtime_failures=expected_rows,
+                status="failed",
+            )
+            raise
         _write_benchmark_run_outcome_artifact(
             output_dir,
             benchmark_name=self.spec.name,
             benchmark_version=self.spec.version,
             phase="generation",
             expected_rows=expected_rows,
-            successful_rows=successful_rows,
-            runtime_failures=max(expected_rows - successful_rows, 0),
+            successful_rows=result.successful,
+            runtime_failures=result.runtime_failures,
         )
-        return generations_path
+        return result.path
 
     def evaluate(
         self,
@@ -656,30 +672,42 @@ class SharedBenchmarkRunner:
         output_dir = setup_output_dir(config.output_dir)
         _write_benchmark_run_policy_artifact(output_dir, config)
         expected_rows = _count_generation_rows(generations_path)
-        evaluations_path = evaluate_completions(
-            generations_path=generations_path,
-            benchmark_spec=self.spec,
-            judge_model=config.judge_model,
-            output_dir=output_dir,
-            legacy_token_cap_threshold=config.legacy_token_cap_threshold,
-        )
-        successful_rows = _count_evaluation_rows(evaluations_path)
+        try:
+            result = evaluate_completions(
+                generations_path=generations_path,
+                benchmark_spec=self.spec,
+                judge_model=config.judge_model,
+                output_dir=output_dir,
+                legacy_token_cap_threshold=config.legacy_token_cap_threshold,
+            )
+        except Exception:
+            _write_benchmark_run_outcome_artifact(
+                output_dir,
+                benchmark_name=self.spec.name,
+                benchmark_version=self.spec.version,
+                phase="evaluation",
+                expected_rows=expected_rows,
+                successful_rows=0,
+                runtime_failures=expected_rows,
+                status="failed",
+            )
+            raise
         _write_benchmark_run_outcome_artifact(
             output_dir,
             benchmark_name=self.spec.name,
             benchmark_version=self.spec.version,
             phase="evaluation",
             expected_rows=expected_rows,
-            successful_rows=successful_rows,
-            runtime_failures=max(expected_rows - successful_rows, 0),
+            successful_rows=result.successful,
+            runtime_failures=result.runtime_failures,
         )
-        errors = self._validate_report_artifacts(evaluations_path)
+        errors = self._validate_report_artifacts(result.path)
         if errors:
             raise ValueError(
                 "Benchmark report validation failed: "
                 + "; ".join(str(error) for error in errors)
             )
-        return evaluations_path
+        return result.path
 
     def analyze(
         self,
