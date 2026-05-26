@@ -13,6 +13,11 @@ class ClientConformanceTests(unittest.TestCase):
         self.assertIsInstance(response.completion, str)
         self.assertTrue(response.completion)
         self.assertEqual(response.tokens_used, {"input": input_tokens, "output": output_tokens})
+        self.assertEqual(set(response.tokens_used.keys()), {"input", "output"})
+        self.assertIsInstance(response.tokens_used["input"], int)
+        self.assertIsInstance(response.tokens_used["output"], int)
+        self.assertGreaterEqual(response.tokens_used["input"], 0)
+        self.assertGreaterEqual(response.tokens_used["output"], 0)
         self.assertIsInstance(response.cost_usd, float)
         self.assertGreaterEqual(response.cost_usd, 0.0)
 
@@ -182,12 +187,14 @@ class ClientConformanceTests(unittest.TestCase):
         self.assertIn("<system>", kwargs["prompt"])
         self.assertIn("system prompt", kwargs["prompt"])
         self.assertIn("prompt", kwargs["prompt"])
-        self.assertIsInstance(response, CompletionResponse)
         self.assertEqual(response.completion, "answer")
-        self.assertIsInstance(response.tokens_used, dict)
+        self._assert_response_contract(
+            response,
+            response.tokens_used["input"],
+            response.tokens_used["output"],
+        )
         self.assertGreater(response.tokens_used["input"], 0)
         self.assertGreater(response.tokens_used["output"], 0)
-        self.assertEqual(response.cost_usd, 0.0)
         self.assertEqual(client.total_tokens, response.tokens_used)
 
     def test_complete_signature_matches_base_shape(self):
