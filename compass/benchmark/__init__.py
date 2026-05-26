@@ -51,6 +51,7 @@ from compass.benchmark.specs import (
     build_benchmark_spec,
 )
 from compass.benchmark.validation import (
+    BenchmarkValidationIssue,
     validate_benchmark_report,
     validate_evaluation_records_for_quality,
     validate_stats_for_quality,
@@ -70,6 +71,7 @@ __all__ = [
     "BenchmarkRunPreset",
     "BenchmarkRunner",
     "BenchmarkSpec",
+    "BenchmarkValidationIssue",
     "CONSTITUTIONAL_COMPLIANCE_BENCHMARK",
     "CONSTITUTIONAL_COMPLIANCE_PRESET",
     "CONSTITUTIONAL_COMPLIANCE_RUNNER",

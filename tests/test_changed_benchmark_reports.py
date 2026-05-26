@@ -5,6 +5,8 @@ import pathlib
 import tempfile
 import unittest
 
+from compass.benchmark.validation import BenchmarkValidationIssue
+
 
 def _load_module():
     path = (
@@ -46,7 +48,13 @@ class ChangedBenchmarkReportsTests(unittest.TestCase):
 
             def fake_validator(path):
                 self.assertEqual(path, report_path)
-                return ["missing quality fields"]
+                return [
+                    BenchmarkValidationIssue(
+                        code="missing_evaluation_quality_fields",
+                        location="evaluation row 1",
+                        message="missing quality fields",
+                    )
+                ]
 
             errors = self.module.validate_changed_reports(
                 [str(report_path)],
@@ -55,7 +63,7 @@ class ChangedBenchmarkReportsTests(unittest.TestCase):
 
         self.assertEqual(
             errors,
-            [f"{report_path}: missing quality fields"],
+            [f"{report_path}: evaluation row 1: missing quality fields"],
         )
 
     def test_validate_changed_reports_passes_valid_reports(self):

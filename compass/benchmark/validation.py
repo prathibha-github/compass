@@ -1,5 +1,6 @@
 """Benchmark report validation helpers."""
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Mapping
 
@@ -26,9 +27,23 @@ REQUIRED_STATS_QUALITY_FIELDS = (
 )
 
 
-def validate_evaluation_records_for_quality(records: Iterable[dict]) -> List[str]:
+@dataclass(frozen=True)
+class BenchmarkValidationIssue:
+    code: str
+    message: str
+    location: str
+
+    def __str__(self) -> str:
+        if not self.location:
+            return self.message
+        return f"{self.location}: {self.message}"
+
+
+def validate_evaluation_records_for_quality(
+    records: Iterable[dict],
+) -> List[BenchmarkValidationIssue]:
     """Return validation errors for benchmark evaluation rows."""
-    errors: List[str] = []
+    errors: List[BenchmarkValidationIssue] = []
     any_rows = False
     for idx, record in enumerate(records, 1):
         any_rows = True
@@ -37,20 +52,36 @@ def validate_evaluation_records_for_quality(records: Iterable[dict]) -> List[str
         ]
         if missing:
             errors.append(
-                f"evaluation row {idx} missing quality fields: {', '.join(missing)}"
+                BenchmarkValidationIssue(
+                    code="missing_evaluation_quality_fields",
+                    location=f"evaluation row {idx}",
+                    message=f"missing quality fields: {', '.join(missing)}",
+                )
             )
     if not any_rows:
-        errors.append("no evaluation rows found")
+        errors.append(
+            BenchmarkValidationIssue(
+                code="no_evaluation_rows",
+                location="evaluation report",
+                message="no evaluation rows found",
+            )
+        )
     return errors
 
 
 def validate_stats_for_quality(
     stats: Mapping[str, BenchmarkSummaryRow],
-) -> List[str]:
+) -> List[BenchmarkValidationIssue]:
     """Return validation errors for aggregated benchmark stats."""
-    errors: List[str] = []
+    errors: List[BenchmarkValidationIssue] = []
     if not stats:
-        return ["no benchmark stats generated"]
+        return [
+            BenchmarkValidationIssue(
+                code="no_benchmark_stats",
+                location="summary stats",
+                message="no benchmark stats generated",
+            )
+        ]
 
     for key, row in stats.items():
         missing = [
@@ -60,12 +91,18 @@ def validate_stats_for_quality(
         ]
         if missing:
             errors.append(
-                f"stats row {key!r} missing quality fields: {', '.join(missing)}"
+                BenchmarkValidationIssue(
+                    code="missing_summary_quality_fields",
+                    location=f"stats row {key!r}",
+                    message=f"missing quality fields: {', '.join(missing)}",
+                )
             )
     return errors
 
 
-def validate_benchmark_report(evaluations_path: Path) -> List[str]:
+def validate_benchmark_report(
+    evaluations_path: Path,
+) -> List[BenchmarkValidationIssue]:
     """Validate that a benchmark report includes required quality diagnostics."""
     rows = load_evaluation_records(evaluations_path, strict=True)
     errors = validate_evaluation_records_for_quality(rows)
