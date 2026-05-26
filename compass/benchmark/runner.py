@@ -400,6 +400,7 @@ class SharedBenchmarkRunner:
 
     def __init__(self, spec: BenchmarkSpec):
         self.spec = spec
+        self._validated_run_config_ids: set[int] = set()
 
     def validate_run_config(self, run_config: BenchmarkRunConfig) -> BenchmarkRunConfig:
         """Validate a resolved benchmark run config for this benchmark."""
@@ -423,11 +424,23 @@ class SharedBenchmarkRunner:
             ),
             token_budget_defaults=run_config.token_budget_defaults,
         )
+        self._validated_run_config_ids.add(id(run_config))
+        return run_config
+
+    def _require_validated_run_config(
+        self,
+        run_config: BenchmarkRunConfig,
+    ) -> BenchmarkRunConfig:
+        if id(run_config) not in self._validated_run_config_ids:
+            raise ValueError(
+                "benchmark run config must be validated with "
+                "runner.validate_run_config(...) before execution"
+            )
         return run_config
 
     def generate(self, run_config: BenchmarkRunConfig) -> Path:
         """Generate completions for a benchmark run config."""
-        config = self.validate_run_config(run_config)
+        config = self._require_validated_run_config(run_config)
         return generate_completions(
             models=list(config.models),
             benchmark_spec=self.spec,
@@ -448,7 +461,7 @@ class SharedBenchmarkRunner:
         run_config: BenchmarkRunConfig,
     ) -> Path:
         """Evaluate completions for a benchmark run config."""
-        config = self.validate_run_config(run_config)
+        config = self._require_validated_run_config(run_config)
         evaluations_path = evaluate_completions(
             generations_path=generations_path,
             benchmark_spec=self.spec,
@@ -465,7 +478,7 @@ class SharedBenchmarkRunner:
 
     def analyze(self, evaluations_path: Path, run_config: BenchmarkRunConfig) -> dict:
         """Analyze benchmark results for a run config."""
-        config = self.validate_run_config(run_config)
+        config = self._require_validated_run_config(run_config)
         if "summary" not in config.effective_analysis_lanes:
             logger.info("Skipping summary analysis for preset %s", config.preset_name)
             return {}
@@ -477,7 +490,7 @@ class SharedBenchmarkRunner:
 
     def rank(self, evaluations_path: Path, run_config: BenchmarkRunConfig) -> None:
         """Run pairwise ranking for a benchmark run config."""
-        config = self.validate_run_config(run_config)
+        config = self._require_validated_run_config(run_config)
         if "pairwise" not in config.effective_analysis_lanes:
             logger.info("Skipping pairwise ranking for preset %s", config.preset_name)
             return
@@ -494,7 +507,7 @@ class SharedBenchmarkRunner:
         run_config: BenchmarkRunConfig,
     ) -> list:
         """Validate report artifacts for a benchmark run config."""
-        self.validate_run_config(run_config)
+        self._require_validated_run_config(run_config)
         return self._validate_report_artifacts(evaluations_path)
 
     def _validate_report_artifacts(
