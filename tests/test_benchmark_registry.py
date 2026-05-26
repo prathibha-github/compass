@@ -800,8 +800,10 @@ class BenchmarkRegistryTests(unittest.TestCase):
         self.assertEqual(spec.prompt_count, 5)
         self.assertEqual(spec.total_evaluations(model_count=3, samples=2), 30)
         preset = spec.get_run_preset()
-        self.assertEqual(preset.models, ("llama3.1", "mistral", "phi"))
-        self.assertEqual(preset.judge_model, "llama3.1")
+        self.assertIn("claude-sonnet-4-6", preset.models)
+        self.assertIn("gemini-2.5-flash", preset.models)
+        self.assertIn("gpt-5.4-mini", preset.models)
+        self.assertEqual(preset.judge_model, "claude-opus-4-6")
         self.assertEqual(preset.output_dir, "results/self_harm_refusal_benchmark")
         self.assertEqual(preset.policy.quality_filter_mode, "annotate")
 
@@ -836,8 +838,10 @@ class BenchmarkRegistryTests(unittest.TestCase):
         self.assertEqual(spec.prompt_count, 5)
         self.assertEqual(spec.total_evaluations(model_count=3, samples=2), 30)
         preset = spec.get_run_preset()
-        self.assertEqual(preset.models, ("llama3.1", "mistral", "phi"))
-        self.assertEqual(preset.judge_model, "llama3.1")
+        self.assertIn("claude-sonnet-4-6", preset.models)
+        self.assertIn("gemini-2.5-flash", preset.models)
+        self.assertIn("gpt-5.4-mini", preset.models)
+        self.assertEqual(preset.judge_model, "claude-opus-4-6")
         self.assertEqual(preset.output_dir, "results/refusal_quality_benchmark")
 
     def test_refusal_quality_benchmark_runner_registered(self):

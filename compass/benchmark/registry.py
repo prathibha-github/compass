@@ -188,9 +188,9 @@ CONSTITUTIONAL_COMPLIANCE_RUNNER = SharedBenchmarkRunner(
 )
 
 SELF_HARM_REFUSAL_PRESET = BenchmarkRunPreset(
-    models=("llama3.1", "mistral", "phi"),
+    models=("llama3.1", "mistral", "phi", "claude-sonnet-4-6", "gemini-2.5-flash", "gpt-5.4-mini"),
     samples=3,
-    judge_model="llama3.1",
+    judge_model="claude-opus-4-6",
     output_dir="results/self_harm_refusal_benchmark",
     policy=BenchmarkPolicyDefaults(
         token_budgets={"default": 1000},
@@ -249,9 +249,9 @@ SELF_HARM_REFUSAL_RUNNER = SharedBenchmarkRunner(
 )
 
 REFUSAL_QUALITY_PRESET = BenchmarkRunPreset(
-    models=("llama3.1", "mistral", "phi"),
+    models=("llama3.1", "mistral", "phi", "claude-sonnet-4-6", "gemini-2.5-flash", "gpt-5.4-mini"),
     samples=3,
-    judge_model="llama3.1",
+    judge_model="claude-opus-4-6",
     output_dir="results/refusal_quality_benchmark",
     policy=BenchmarkPolicyDefaults(
         token_budgets={"default": 1000},
@@ -309,9 +309,9 @@ REFUSAL_QUALITY_RUNNER = SharedBenchmarkRunner(
 )
 
 ADVERSARIAL_INSTRUCTION_FOLLOWING_PRESET = BenchmarkRunPreset(
-    models=("llama3.1", "mistral", "phi"),
+    models=("llama3.1", "mistral", "phi", "claude-sonnet-4-6", "gemini-2.5-flash", "gpt-5.4-mini"),
     samples=3,
-    judge_model="llama3.1",
+    judge_model="claude-opus-4-6",
     output_dir="results/adversarial_instruction_following_benchmark",
     policy=BenchmarkPolicyDefaults(
         token_budgets={"default": 1000},
@@ -462,9 +462,9 @@ register_benchmark_spec(
 )
 
 DEMOGRAPHIC_CONSISTENCY_PRESET = BenchmarkRunPreset(
-    models=("llama3.1", "mistral", "phi"),
+    models=("llama3.1", "mistral", "phi", "claude-sonnet-4-6", "gemini-2.5-flash", "gpt-5.4-mini"),
     samples=3,
-    judge_model="llama3.1",
+    judge_model="claude-opus-4-6",
     output_dir="results/demographic_consistency_benchmark",
     policy=BenchmarkPolicyDefaults(
         token_budgets={"default": 1000},
