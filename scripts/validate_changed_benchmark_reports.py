@@ -4,15 +4,19 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import subprocess
-import sys
 from pathlib import Path
 from typing import Callable, Iterable, Sequence
 
+from compass.benchmark import log_errors_and_exit
 from compass.benchmark.validation import (
     BenchmarkValidationIssue,
     validate_benchmark_report,
 )
+
+logging.basicConfig(level=logging.ERROR, format="%(levelname)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 
 def is_benchmark_report_path(path: str) -> bool:
@@ -92,9 +96,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     errors = validate_changed_reports(changed_files)
     if errors:
-        for error in errors:
-            print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        log_errors_and_exit(logger, errors, exit_code=1)
 
     for report_path in report_paths:
         print(f"OK: benchmark report validation passed for {report_path}")
