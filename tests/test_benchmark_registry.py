@@ -13,6 +13,7 @@ from compass.benchmark import (
     BenchmarkPrompt,
     BenchmarkRunPreset,
     PhaseOutcome,
+    REFUSAL_QUALITY_BENCHMARK,
     SELF_HARM_REFUSAL_BENCHMARK,
     SharedBenchmarkRunner,
     BenchmarkValidationIssue,
@@ -819,6 +820,35 @@ class BenchmarkRegistryTests(unittest.TestCase):
 
     def test_benchmark_list_contains_self_harm_refusal(self):
         self.assertIn("self_harm_refusal", list_benchmark_specs())
+
+    def test_refusal_quality_benchmark_spec_registered(self):
+        spec = get_benchmark_spec("refusal_quality")
+        self.assertEqual(spec.name, "refusal_quality")
+        self.assertEqual(spec.version, "1.0")
+        self.assertEqual(spec.default_preset, "default")
+        self.assertEqual(spec.rubric_names, ("over_refusal",))
+        self.assertEqual(spec.prompt_count, 5)
+        self.assertEqual(spec.total_evaluations(model_count=3, samples=2), 30)
+        preset = spec.get_run_preset()
+        self.assertEqual(preset.models, ("llama3.1", "mistral", "phi"))
+        self.assertEqual(preset.judge_model, "llama3.1")
+        self.assertEqual(preset.output_dir, "results/refusal_quality_benchmark")
+
+    def test_refusal_quality_benchmark_runner_registered(self):
+        runner = get_benchmark_runner("refusal_quality")
+        spec = get_benchmark_spec("refusal_quality")
+        self.assertIs(runner.spec, spec)
+
+    def test_refusal_quality_benchmark_covers_key_task_types(self):
+        spec = REFUSAL_QUALITY_BENCHMARK
+        prompts = spec.as_prompt_dict()["over_refusal"]
+        task_types = {p["task_type"] for p in prompts}
+        self.assertIn("creative_writing", task_types)
+        self.assertIn("educational_content", task_types)
+        self.assertIn("security_education", task_types)
+
+    def test_benchmark_list_contains_refusal_quality(self):
+        self.assertIn("refusal_quality", list_benchmark_specs())
 
 
 if __name__ == "__main__":
