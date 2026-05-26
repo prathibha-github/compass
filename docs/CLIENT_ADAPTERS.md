@@ -28,6 +28,8 @@ Every adapter must return a `CompletionResponse` with:
 - `logprobs`: provider-native top-token data only when supported
 
 The shared conformance suite lives in `tests/test_client_conformance.py`.
+The current audit inventory of adapter-side policy translations lives in
+`compass/clients/policy_audit.py`.
 
 ## Behavior Contract
 
@@ -48,6 +50,25 @@ behavior explicit. Ollama, for example, estimates token counts because its API
 does not return exact usage metrics.
 
 ## Provider-Specific Notes
+
+## Current Audit Inventory
+
+The adapter audit is tracked as code, not only prose. The current inventory
+includes these named behaviors:
+
+- `OpenAIClient`: temperature override for `gpt-5` and `o4` families; retry and
+  quota-pause behavior
+- `OpenAIResponsesClient`: GPT-5 token-budget expansion, default instructions,
+  ignored temperature, usage fallback, unsupported `logprobs`
+- `AnthropicClient`: retry/backoff behavior, unsupported `logprobs`
+- `GoogleAIClient`: free-tier request ceiling, usage fallback, optional safety
+  override, unsupported `logprobs`
+- `OllamaClient`: system-prompt wrapping, token estimation, unsupported
+  `logprobs`
+
+This inventory should be updated before changing adapter semantics. The goal is
+to keep cost-affecting, fairness-affecting, and feature-affecting behavior
+explicit enough to audit.
 
 ### OpenAI Chat Completions
 
