@@ -43,12 +43,14 @@ class OpenAIClient(CompletionClient):
         model: str,
         api_key: Optional[str] = None,
         request_interval: float = 0.0,
+        required_temperature: Optional[float] = None,
     ):
         """
         Args:
             model: Model name (e.g., 'gpt-4o-mini', 'gpt-4o', 'o4-mini')
             api_key: OpenAI API key. If None, reads from OPENAI_API_KEY env var.
             request_interval: Minimum seconds between API calls (0 = no throttle).
+            required_temperature: Explicit temperature to send on every request.
         """
         try:
             import openai as _openai
@@ -66,6 +68,7 @@ class OpenAIClient(CompletionClient):
         self._output_tokens = 0
         self._request_interval = request_interval
         self._last_call_at: float = 0.0
+        self._required_temperature = required_temperature
 
     @property
     def total_tokens(self) -> dict:
@@ -124,12 +127,13 @@ class OpenAIClient(CompletionClient):
         """
         Generate completion via OpenAI Chat Completions API with retry/backoff on 429.
 
-        gpt-5 and o4 models have temperature forced to 1.0 regardless of the caller's value.
+        If ``required_temperature`` is configured, it overrides the caller-supplied
+        ``temperature`` when building the provider request.
 
         Args:
             prompt: Input prompt
             max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature (0.0 = deterministic; ignored for gpt-5/o4)
+            temperature: Sampling temperature (0.0 = deterministic)
             system: Optional system prompt
             logprobs: Whether to request top-token log probabilities for the first token
             top_logprobs: Number of top-token log probabilities to request
@@ -140,9 +144,9 @@ class OpenAIClient(CompletionClient):
         Raises:
             RuntimeError: If the API call fails after all retries
         """
-        # gpt-5 and o4 models require temperature=1.0
         actual_temperature = (
-            1.0 if (self.model.startswith("gpt-5") or self.model.startswith("o4"))
+            self._required_temperature
+            if self._required_temperature is not None
             else temperature
         )
 

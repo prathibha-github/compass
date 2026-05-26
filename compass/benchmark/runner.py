@@ -170,8 +170,14 @@ def setup_output_dir(output_dir: str) -> Path:
 def _create_client(model: str):
     if model.startswith("gemini"):
         return GoogleAIClient(model=model)
-    if model.startswith("gpt"):
-        return OpenAIClient(model=model)
+    if model.startswith("gpt") or model.startswith("o4"):
+        required_temperature = None
+        if model.startswith("gpt-5") or model.startswith("o4"):
+            required_temperature = 1.0
+        return OpenAIClient(
+            model=model,
+            required_temperature=required_temperature,
+        )
     if model.startswith("claude"):
         return AnthropicClient(model=model)
     return OllamaClient(model=model)
@@ -207,7 +213,7 @@ def test_model_connection(model: str) -> bool:
             _require_api_key("GOOGLE_API_KEY", "Google AI")
             logger.info("✓ %s available (lightweight Google AI readiness check)", model)
             return True
-        if model.startswith("gpt"):
+        if model.startswith("gpt") or model.startswith("o4"):
             _require_api_key("OPENAI_API_KEY", "OpenAI")
             logger.info("✓ %s available (lightweight OpenAI readiness check)", model)
             return True

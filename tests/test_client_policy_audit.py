@@ -24,7 +24,7 @@ class ClientPolicyAuditTests(unittest.TestCase):
             (entry.adapter, entry.category): entry
             for entry in list_client_policy_translations()
         }
-        self.assertIn(("OpenAIClient", "temperature_override"), entries)
+        self.assertIn(("OpenAIClient", "required_temperature"), entries)
         self.assertIn(("OpenAIResponsesClient", "output_token_multiplier"), entries)
         self.assertIn(("GoogleAIClient", "max_request_cap"), entries)
         self.assertIn(("OllamaClient", "token_estimation"), entries)
@@ -34,6 +34,9 @@ class ClientPolicyAuditTests(unittest.TestCase):
             (entry.adapter, entry.category): entry
             for entry in list_client_policy_translations()
         }
+        self.assertTrue(
+            entries[("OpenAIClient", "required_temperature")].explicit_to_caller
+        )
         self.assertTrue(
             entries[("OpenAIResponsesClient", "output_token_multiplier")].explicit_to_caller
         )

@@ -56,8 +56,8 @@ does not return exact usage metrics.
 The adapter audit is tracked as code, not only prose. The current inventory
 includes these named behaviors:
 
-- `OpenAIClient`: temperature override for `gpt-5` and `o4` families; retry and
-  quota-pause behavior
+- `OpenAIClient`: explicit required-temperature policy; retry and quota-pause
+  behavior
 - `OpenAIResponsesClient`: explicit output-token multiplier, default
   instructions, ignored temperature, usage fallback, unsupported `logprobs`
 - `AnthropicClient`: retry/backoff behavior, unsupported `logprobs`
@@ -74,7 +74,8 @@ explicit enough to audit.
 
 - Uses Chat Completions request/response objects.
 - Handles provider rate limits inside the adapter with retry and backoff.
-- Forces temperature to `1.0` for model families that require it.
+- Applies a required temperature only when the caller configures one
+  explicitly.
 
 ### OpenAI Responses API
 

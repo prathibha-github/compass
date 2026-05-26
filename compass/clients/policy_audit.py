@@ -19,11 +19,11 @@ class ClientPolicyTranslation:
 _CLIENT_POLICY_TRANSLATIONS = (
     ClientPolicyTranslation(
         adapter="OpenAIClient",
-        category="temperature_override",
-        trigger="model starts with gpt-5 or o4",
-        behavior="forces temperature to 1.0",
-        explicit_to_caller=False,
-        tested_by=("tests/test_client_features.py",),
+        category="required_temperature",
+        trigger="required_temperature is configured",
+        behavior="sends the configured temperature on every request instead of the caller-provided temperature",
+        explicit_to_caller=True,
+        tested_by=("tests/test_client_features.py", "tests/test_benchmark_runner.py"),
     ),
     ClientPolicyTranslation(
         adapter="OpenAIClient",

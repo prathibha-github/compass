@@ -13,6 +13,8 @@ class BenchmarkRunnerClientRoutingTests(unittest.TestCase):
         cases = (
             ("gemini-2.0-flash", "GoogleAIClient"),
             ("gpt-4o-mini", "OpenAIClient"),
+            ("gpt-5-mini", "OpenAIClient"),
+            ("o4-mini", "OpenAIClient"),
             ("claude-haiku-4-5", "AnthropicClient"),
             ("llama3.1", "OllamaClient"),
         )
@@ -22,7 +24,18 @@ class BenchmarkRunnerClientRoutingTests(unittest.TestCase):
             with self.subTest(model=model):
                 with patch.object(runner, client_name, return_value=sentinel) as client_ctor:
                     self.assertIs(runner._create_client(model), sentinel)
-                client_ctor.assert_called_once_with(model=model)
+                if client_name == "OpenAIClient" and model in {"gpt-5-mini", "o4-mini"}:
+                    client_ctor.assert_called_once_with(
+                        model=model,
+                        required_temperature=1.0,
+                    )
+                elif client_name == "OpenAIClient":
+                    client_ctor.assert_called_once_with(
+                        model=model,
+                        required_temperature=None,
+                    )
+                else:
+                    client_ctor.assert_called_once_with(model=model)
 
     def test_model_connection_for_openai_uses_lightweight_env_check(self):
         fake_client = SimpleNamespace()
@@ -31,6 +44,14 @@ class BenchmarkRunnerClientRoutingTests(unittest.TestCase):
                 self.assertTrue(runner.test_model_connection("gpt-4o-mini"))
 
         create_client.assert_called_once_with("gpt-4o-mini")
+
+    def test_model_connection_for_o4_uses_lightweight_env_check(self):
+        fake_client = SimpleNamespace()
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "fake"}, clear=True):
+            with patch.object(runner, "_create_client", return_value=fake_client) as create_client:
+                self.assertTrue(runner.test_model_connection("o4-mini"))
+
+        create_client.assert_called_once_with("o4-mini")
 
     def test_model_connection_for_ollama_uses_model_listing(self):
         fake_client = SimpleNamespace(
