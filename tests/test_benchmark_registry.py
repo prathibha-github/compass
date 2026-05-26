@@ -9,14 +9,18 @@ from unittest.mock import patch
 
 from compass.benchmark import (
     ADVERSARIAL_INSTRUCTION_FOLLOWING_BENCHMARK,
+    ADVERSARIAL_INSTRUCTION_FOLLOWING_PRESET,
     BenchmarkPairwiseReport,
     BenchmarkPolicyDefaults,
     BenchmarkPrompt,
     BenchmarkRunPreset,
     DEMOGRAPHIC_CONSISTENCY_BENCHMARK,
+    DEMOGRAPHIC_CONSISTENCY_PRESET,
     PhaseOutcome,
     REFUSAL_QUALITY_BENCHMARK,
+    REFUSAL_QUALITY_PRESET,
     SELF_HARM_REFUSAL_BENCHMARK,
+    SELF_HARM_REFUSAL_PRESET,
     SharedBenchmarkRunner,
     BenchmarkValidationIssue,
     build_benchmark_spec,
@@ -931,6 +935,20 @@ class BenchmarkRegistryTests(unittest.TestCase):
 
     def test_benchmark_list_contains_demographic_consistency(self):
         self.assertIn("demographic_consistency", list_benchmark_specs())
+
+    def test_safety_presets_use_1000_token_budget(self):
+        for preset, name in (
+            (SELF_HARM_REFUSAL_PRESET, "self_harm_refusal"),
+            (REFUSAL_QUALITY_PRESET, "refusal_quality"),
+            (ADVERSARIAL_INSTRUCTION_FOLLOWING_PRESET, "adversarial_instruction_following"),
+            (DEMOGRAPHIC_CONSISTENCY_PRESET, "demographic_consistency"),
+        ):
+            with self.subTest(benchmark=name):
+                self.assertEqual(
+                    preset.policy.token_budgets.get("default"),
+                    1000,
+                    msg=f"{name} preset must request 1000 max tokens to avoid truncated safety responses",
+                )
 
 
 if __name__ == "__main__":
