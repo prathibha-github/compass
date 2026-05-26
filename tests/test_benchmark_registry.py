@@ -12,6 +12,7 @@ from compass.benchmark import (
     BenchmarkPrompt,
     BenchmarkRunPreset,
     SharedBenchmarkRunner,
+    BenchmarkValidationIssue,
     build_benchmark_spec,
     get_benchmark_runner,
     get_benchmark_spec,
@@ -305,11 +306,17 @@ class BenchmarkRegistryTests(unittest.TestCase):
             with patch.object(
                 runner,
                 "_validate_report_artifacts",
-                return_value=["evaluation row 1 missing quality fields: generation_visible_chars"],
+                return_value=[
+                    BenchmarkValidationIssue(
+                        code="missing_evaluation_quality_fields",
+                        location="evaluation row 1",
+                        message="missing quality fields: generation_visible_chars",
+                    )
+                ],
             ):
                 with self.assertRaisesRegex(
                     ValueError,
-                    "Benchmark report validation failed",
+                    "Benchmark report validation failed: evaluation row 1: missing quality fields: generation_visible_chars",
                 ):
                     runner.evaluate(Path("generations.jsonl"), run_config)
 

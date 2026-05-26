@@ -9,7 +9,10 @@ import sys
 from pathlib import Path
 from typing import Callable, Iterable, Sequence
 
-from compass.benchmark.validation import validate_benchmark_report
+from compass.benchmark.validation import (
+    BenchmarkValidationIssue,
+    validate_benchmark_report,
+)
 
 
 def is_benchmark_report_path(path: str) -> bool:
@@ -36,7 +39,9 @@ def changed_benchmark_report_paths(changed_files: Iterable[str]) -> list[Path]:
 def validate_changed_reports(
     changed_files: Iterable[str],
     *,
-    validator: Callable[[Path], list[str]] = validate_benchmark_report,
+    validator: Callable[[Path], Sequence[BenchmarkValidationIssue | str]] = (
+        validate_benchmark_report
+    ),
 ) -> list[str]:
     errors: list[str] = []
     for report_path in changed_benchmark_report_paths(changed_files):

@@ -25,7 +25,10 @@ from compass.benchmark.schemas import (
     migrate_generation_record,
 )
 from compass.benchmark.specs import BenchmarkRunConfig, BenchmarkSpec
-from compass.benchmark.validation import validate_benchmark_report
+from compass.benchmark.validation import (
+    BenchmarkValidationIssue,
+    validate_benchmark_report,
+)
 from compass.clients import AnthropicClient, GoogleAIClient, OpenAIClient
 from compass.clients.pricing import get_pricing
 
@@ -582,7 +585,8 @@ class SharedBenchmarkRunner:
         errors = self._validate_report_artifacts(evaluations_path)
         if errors:
             raise ValueError(
-                "Benchmark report validation failed: " + "; ".join(errors)
+                "Benchmark report validation failed: "
+                + "; ".join(str(error) for error in errors)
             )
         return evaluations_path
 
@@ -615,7 +619,7 @@ class SharedBenchmarkRunner:
         self,
         evaluations_path: Path,
         run_config: BenchmarkRunConfig,
-    ) -> list:
+    ) -> list[BenchmarkValidationIssue]:
         """Validate report artifacts for a benchmark run config."""
         self._require_validated_run_config(run_config)
         return self._validate_report_artifacts(evaluations_path)
@@ -623,6 +627,6 @@ class SharedBenchmarkRunner:
     def _validate_report_artifacts(
         self,
         evaluations_path: Path,
-    ) -> list:
+    ) -> list[BenchmarkValidationIssue]:
         """Validate report artifacts for a benchmark evaluation file."""
         return validate_benchmark_report(evaluations_path)

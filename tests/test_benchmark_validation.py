@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 from compass.benchmark import (
+    BenchmarkValidationIssue,
     analyze_results,
     get_benchmark_spec,
     rank_models,
@@ -35,7 +36,20 @@ class BenchmarkValidationTests(unittest.TestCase):
         path = FIXTURES_DIR / "benchmark_evaluations_invalid.jsonl"
         errors = validate_benchmark_report(path)
         self.assertTrue(errors)
-        self.assertIn("generation_visible_chars", errors[0])
+        self.assertIsInstance(errors[0], BenchmarkValidationIssue)
+        self.assertEqual(errors[0].code, "missing_evaluation_quality_fields")
+        self.assertIn("generation_visible_chars", str(errors[0]))
+
+    def test_benchmark_validation_issue_stringifies_to_stable_cli_message(self):
+        issue = BenchmarkValidationIssue(
+            code="missing_summary_quality_fields",
+            location="stats row 'llama3.1|clarity'",
+            message="missing quality fields: quality_filtered_total",
+        )
+        self.assertEqual(
+            str(issue),
+            "stats row 'llama3.1|clarity': missing quality fields: quality_filtered_total",
+        )
 
     def test_validate_benchmark_report_raises_for_malformed_rows(self):
         line = '{"model":"llama3.1","rubric":"clarity","prompt_id":"p2"}'
