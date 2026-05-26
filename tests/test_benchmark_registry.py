@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from compass.benchmark import (
+    BenchmarkPairwiseReport,
     BenchmarkPolicyDefaults,
     BenchmarkPrompt,
     BenchmarkRunPreset,
@@ -220,8 +221,10 @@ class BenchmarkRegistryTests(unittest.TestCase):
         runner = SharedBenchmarkRunner(spec)
         run_config = runner.validate_run_config(spec.make_run_config())
         with patch("compass.benchmark.runner.rank_models") as rank:
-            runner.rank(Path("evaluations.jsonl"), run_config)
+            report = runner.rank(Path("evaluations.jsonl"), run_config)
         rank.assert_not_called()
+        self.assertIsInstance(report, BenchmarkPairwiseReport)
+        self.assertEqual(report.rubrics, {})
 
     def test_shared_runner_forwards_quality_filter_mode(self):
         spec = build_benchmark_spec(
@@ -249,8 +252,16 @@ class BenchmarkRegistryTests(unittest.TestCase):
         run_config = runner.validate_run_config(spec.make_run_config())
         with patch("compass.benchmark.runner.analyze_results", return_value={}) as analyze:
             runner.analyze(Path("evaluations.jsonl"), run_config)
-        with patch("compass.benchmark.runner.rank_models") as rank:
-            runner.rank(Path("evaluations.jsonl"), run_config)
+        pairwise_report = BenchmarkPairwiseReport(
+            segment_field=spec.pairwise_segment_field,
+            quality_filter_mode="exclude_flagged",
+            rubrics={},
+        )
+        with patch(
+            "compass.benchmark.runner.rank_models",
+            return_value=pairwise_report,
+        ) as rank:
+            self.assertIs(runner.rank(Path("evaluations.jsonl"), run_config), pairwise_report)
 
         self.assertEqual(analyze.call_args.kwargs["quality_filter_mode"], "exclude_flagged")
         self.assertEqual(rank.call_args.kwargs["quality_filter_mode"], "exclude_flagged")

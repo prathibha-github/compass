@@ -19,7 +19,14 @@ from compass.benchmark.config import (
     default_max_tokens_for_model,
 )
 from compass.benchmark.io import load_generation_records
-from compass.benchmark.reporting import analyze_results, rank_models
+from compass.benchmark.reporting import (
+    BenchmarkPairwiseReport,
+    BenchmarkSummaryRow,
+    analyze_results,
+    empty_pairwise_report,
+    print_pairwise_report,
+    rank_models,
+)
 from compass.benchmark.schemas import (
     migrate_evaluation_record,
     migrate_generation_record,
@@ -590,7 +597,11 @@ class SharedBenchmarkRunner:
             )
         return evaluations_path
 
-    def analyze(self, evaluations_path: Path, run_config: BenchmarkRunConfig) -> dict:
+    def analyze(
+        self,
+        evaluations_path: Path,
+        run_config: BenchmarkRunConfig,
+    ) -> dict[str, BenchmarkSummaryRow]:
         """Analyze benchmark results for a run config."""
         config = self._require_validated_run_config(run_config)
         if "summary" not in config.effective_analysis_lanes:
@@ -602,18 +613,27 @@ class SharedBenchmarkRunner:
             quality_filter_mode=config.quality_filter_mode,
         )
 
-    def rank(self, evaluations_path: Path, run_config: BenchmarkRunConfig) -> None:
+    def rank(
+        self,
+        evaluations_path: Path,
+        run_config: BenchmarkRunConfig,
+    ) -> BenchmarkPairwiseReport:
         """Run pairwise ranking for a benchmark run config."""
         config = self._require_validated_run_config(run_config)
         if "pairwise" not in config.effective_analysis_lanes:
             logger.info("Skipping pairwise ranking for preset %s", config.preset_name)
-            return
-        rank_models(
+            return empty_pairwise_report(
+                segment_field=self.spec.pairwise_segment_field,
+                quality_filter_mode=config.quality_filter_mode,
+            )
+        report = rank_models(
             evaluations_path,
             self.spec,
             Path(config.output_dir),
             quality_filter_mode=config.quality_filter_mode,
         )
+        print_pairwise_report(report)
+        return report
 
     def validate_report(
         self,
