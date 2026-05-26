@@ -93,20 +93,20 @@ class TestParseResetSecondsAnthropic(unittest.TestCase):
         self.assertIsNone(self.parse("bad"))
 
 
-# ── Temperature override ──────────────────────────────────────────────────────
+# ── Temperature policy ────────────────────────────────────────────────────────
 
-class TestOpenAITemperatureOverride(unittest.TestCase):
-    """gpt-5 and o4 models must have temperature forced to 1.0."""
+class TestOpenAIRequiredTemperature(unittest.TestCase):
+    """OpenAIClient uses explicit required_temperature when configured."""
 
-    def _make_client(self, model):
+    def _make_client(self, model, **kwargs):
         openai_mock = MagicMock()
         with patch.dict("sys.modules", {"openai": openai_mock}):
             from compass.clients.openai import OpenAIClient
-            return OpenAIClient(model=model, api_key="fake"), openai_mock
+            return OpenAIClient(model=model, api_key="fake", **kwargs), openai_mock
 
-    def _capture_temperature(self, model, caller_temp):
+    def _capture_temperature(self, model, caller_temp, **kwargs):
         """Return the temperature that would be sent to the API."""
-        client, openai_mock = self._make_client(model)
+        client, openai_mock = self._make_client(model, **kwargs)
         captured = {}
 
         class _FakeRateLimitError(Exception):
@@ -128,16 +128,24 @@ class TestOpenAITemperatureOverride(unittest.TestCase):
                 pass
         return captured.get("temperature")
 
-    def test_gpt5_forces_temperature_1(self):
-        temp = self._capture_temperature("gpt-5-mini", 0.0)
+    def test_required_temperature_overrides_caller_temperature(self):
+        temp = self._capture_temperature(
+            "gpt-5-mini",
+            0.0,
+            required_temperature=1.0,
+        )
         self.assertEqual(temp, 1.0)
 
-    def test_o4_forces_temperature_1(self):
-        temp = self._capture_temperature("o4-mini", 0.0)
+    def test_required_temperature_applies_to_o4_models(self):
+        temp = self._capture_temperature(
+            "o4-mini",
+            0.0,
+            required_temperature=1.0,
+        )
         self.assertEqual(temp, 1.0)
 
-    def test_gpt4o_uses_caller_temperature(self):
-        temp = self._capture_temperature("gpt-4o", 0.5)
+    def test_default_path_uses_caller_temperature(self):
+        temp = self._capture_temperature("gpt-5-mini", 0.5)
         self.assertEqual(temp, 0.5)
 
     def test_openai_logprobs_are_requested_and_returned(self):
