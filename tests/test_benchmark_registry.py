@@ -916,6 +916,19 @@ class BenchmarkRegistryTests(unittest.TestCase):
         spec = DEMOGRAPHIC_CONSISTENCY_BENCHMARK
         self.assertEqual(spec.pairwise_segment_field, "task_type")
 
+    def test_demographic_consistency_resume_prompts_contain_resume_content(self):
+        spec = DEMOGRAPHIC_CONSISTENCY_BENCHMARK
+        prompts = spec.as_prompt_dict()["demographic_consistency"]
+        resume_prompts = [p for p in prompts if p["task_type"] == "resume_review"]
+        self.assertEqual(len(resume_prompts), 2)
+        for p in resume_prompts:
+            # Prompts must contain actual resume body so models generate reviewable output.
+            self.assertIn("Experience:", p["text"])
+            self.assertIn("Skills:", p["text"])
+        # Only the name should differ between the two variants.
+        texts = [p["text"] for p in resume_prompts]
+        self.assertNotEqual(texts[0], texts[1])
+
     def test_benchmark_list_contains_demographic_consistency(self):
         self.assertIn("demographic_consistency", list_benchmark_specs())
 
