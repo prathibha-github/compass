@@ -2,14 +2,33 @@
 
 import logging
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List
+from typing import Dict, Iterable, List, Mapping, Optional
 
 from compass import PairwiseRanker
 from compass.benchmark.io import load_evaluation_records
 from compass.benchmark.specs import BenchmarkSpec
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class BenchmarkSummaryRow:
+    model: str
+    rubric: str
+    hit_rate: float
+    mean_score: float
+    hits: int
+    total: int
+    quality_flagged_pct: float
+    token_cap_pct: float
+    fragment_pct: float
+    legacy_cap_inferred_pct: float
+    quality_filtered_total: int
+    quality_filtered_hit_rate: Optional[float]
+    quality_filter_mode: str
+    raw_total: int
 
 
 def _quality_filtered_results(results: Iterable[dict]) -> List[dict]:
@@ -22,7 +41,10 @@ def _scored_results_for_policy(results: List[dict], quality_filter_mode: str) ->
     return list(results)
 
 
-def format_summary(stats: dict, evaluations_path: Path) -> str:
+def format_summary(
+    stats: Mapping[str, BenchmarkSummaryRow],
+    evaluations_path: Path,
+) -> str:
     """Render a stable textual summary for benchmark results."""
     lines = [
         "",
@@ -40,15 +62,15 @@ def format_summary(stats: dict, evaluations_path: Path) -> str:
     for key in sorted(stats.keys()):
         s = stats[key]
         qf_hit_text = (
-            f"{s['quality_filtered_hit_rate']:.1f}%"
-            if s["quality_filtered_hit_rate"] is not None
+            f"{s.quality_filtered_hit_rate:.1f}%"
+            if s.quality_filtered_hit_rate is not None
             else "n/a"
         )
         lines.append(
-            f"{s['model']:<15} | {s['rubric']:<15} | {s['hit_rate']:>8.1f}% | "
-            f"{s['quality_flagged_pct']:>6.1f}% | {s['token_cap_pct']:>4.1f}% | "
-            f"{s['fragment_pct']:>4.1f}% | {s['legacy_cap_inferred_pct']:>8.1f}% | "
-            f"{qf_hit_text:>7} | {s['total']:>7}"
+            f"{s.model:<15} | {s.rubric:<15} | {s.hit_rate:>8.1f}% | "
+            f"{s.quality_flagged_pct:>6.1f}% | {s.token_cap_pct:>4.1f}% | "
+            f"{s.fragment_pct:>4.1f}% | {s.legacy_cap_inferred_pct:>8.1f}% | "
+            f"{qf_hit_text:>7} | {s.total:>7}"
         )
 
     lines.extend(
@@ -66,7 +88,7 @@ def analyze_results(
     evaluations_path: Path,
     output_dir: Path,
     quality_filter_mode: str = "annotate",
-) -> dict:
+) -> Dict[str, BenchmarkSummaryRow]:
     """Analyze evaluation results and generate report data."""
     # Reserved for future report artifact paths; kept for API compatibility.
     results_by_key = defaultdict(list)
@@ -74,7 +96,7 @@ def analyze_results(
         key = (result["model"], result["rubric"])
         results_by_key[key].append(result)
 
-    stats = {}
+    stats: Dict[str, BenchmarkSummaryRow] = {}
     for (model, rubric), results in results_by_key.items():
         scored_results = _scored_results_for_policy(results, quality_filter_mode)
         quality_filtered = _quality_filtered_results(results)
@@ -96,29 +118,32 @@ def analyze_results(
         raw_total = len(results)
 
         key_str = f"{model}|{rubric}"
-        stats[key_str] = {
-            "model": model,
-            "rubric": rubric,
-            "hit_rate": hit_rate,
-            "mean_score": mean_score,
-            "hits": hits,
-            "total": total,
-            "quality_flagged_pct": (flagged / raw_total * 100) if raw_total > 0 else 0.0,
-            "token_cap_pct": (token_cap_hits / raw_total * 100) if raw_total > 0 else 0.0,
-            "fragment_pct": (fragments / raw_total * 100) if raw_total > 0 else 0.0,
-            "legacy_cap_inferred_pct": (
+        stats[key_str] = BenchmarkSummaryRow(
+            model=model,
+            rubric=rubric,
+            hit_rate=hit_rate,
+            mean_score=mean_score,
+            hits=hits,
+            total=total,
+            quality_flagged_pct=(flagged / raw_total * 100) if raw_total > 0 else 0.0,
+            token_cap_pct=(token_cap_hits / raw_total * 100) if raw_total > 0 else 0.0,
+            fragment_pct=(fragments / raw_total * 100) if raw_total > 0 else 0.0,
+            legacy_cap_inferred_pct=(
                 legacy_cap_inferred / raw_total * 100
             ) if raw_total > 0 else 0.0,
-            "quality_filtered_total": qf_total,
-            "quality_filtered_hit_rate": qf_hit_rate,
-            "quality_filter_mode": quality_filter_mode,
-            "raw_total": raw_total,
-        }
+            quality_filtered_total=qf_total,
+            quality_filtered_hit_rate=qf_hit_rate,
+            quality_filter_mode=quality_filter_mode,
+            raw_total=raw_total,
+        )
 
     return stats
 
 
-def print_summary(stats: dict, evaluations_path: Path) -> None:
+def print_summary(
+    stats: Mapping[str, BenchmarkSummaryRow],
+    evaluations_path: Path,
+) -> None:
     """Print summary report."""
     for line in format_summary(stats, evaluations_path).splitlines():
         logger.info(line)
