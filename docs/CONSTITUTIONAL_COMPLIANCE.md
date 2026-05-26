@@ -139,6 +139,19 @@ Practical rule:
 - Use `quality_filtered_hit_rate` to reason about likely model behavior when
   fragmentary or token-capped outputs are present.
 
+## What You Should Not Conclude
+
+Do not over-read benchmark outputs. In particular:
+
+- A high raw hit rate with a high `quality_flagged_pct` is not clean evidence of
+  policy failure. Fix the generation-quality problem first.
+- A low violation rate on this suite does not prove general Constitutional
+  compliance on unseen tasks or prompts.
+- Pairwise wins inside this benchmark do not imply a global ranking across other
+  rubrics, tasks, or judge setups.
+- Cross-run differences are not apples-to-apples unless the benchmark policy,
+  prompt set, and judge model all match.
+
 ## Expected Results
 
 ### Example Ranges

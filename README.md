@@ -165,6 +165,10 @@ Benchmark output directories also carry the run policy and artifact semantics:
 - runtime model failures are logged and warned about explicitly; successful rows
   are still preserved for resume and inspection
 
+Do not treat a benchmark win as a blanket model-quality claim. Interpretation
+is benchmark-local and depends on the prompt set, rubric design, judge model,
+and artifact quality diagnostics.
+
 ## Reproducibility
 
 Every evaluation includes metadata for reproducibility:
