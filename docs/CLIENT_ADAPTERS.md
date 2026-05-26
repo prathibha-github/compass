@@ -58,8 +58,8 @@ includes these named behaviors:
 
 - `OpenAIClient`: temperature override for `gpt-5` and `o4` families; retry and
   quota-pause behavior
-- `OpenAIResponsesClient`: GPT-5 token-budget expansion, default instructions,
-  ignored temperature, usage fallback, unsupported `logprobs`
+- `OpenAIResponsesClient`: explicit output-token multiplier, default
+  instructions, ignored temperature, usage fallback, unsupported `logprobs`
 - `AnthropicClient`: retry/backoff behavior, unsupported `logprobs`
 - `GoogleAIClient`: free-tier request ceiling, usage fallback, optional safety
   override, unsupported `logprobs`
@@ -79,6 +79,8 @@ explicit enough to audit.
 ### OpenAI Responses API
 
 - Uses the Responses API instead of Chat Completions.
+- Applies any larger output-token budget only when the caller configures
+  `max_output_token_multiplier` explicitly.
 - Preserves the shared completion contract even though the upstream request
   shape differs.
 - Rejects `logprobs` because the current adapter contract does not support them

@@ -261,15 +261,18 @@ class TestWaitFrom429Headers(unittest.TestCase):
 
 class TestOpenAIResponsesClientBasics(unittest.TestCase):
 
-    def _make_client(self, model="gpt-5-mini"):
+    def _make_client(self, model="gpt-5-mini", **kwargs):
         openai_mock = MagicMock()
         with patch.dict("sys.modules", {"openai": openai_mock}):
             from compass.clients.openai_responses import OpenAIResponsesClient
-            return OpenAIResponsesClient(model=model, api_key="fake"), openai_mock
+            return OpenAIResponsesClient(model=model, api_key="fake", **kwargs), openai_mock
 
-    def test_gpt5_token_budget_multiplied(self):
-        """gpt-5 models get 10x max_tokens for reasoning budget."""
-        client, openai_mock = self._make_client("gpt-5-mini")
+    def test_output_token_multiplier_is_explicit(self):
+        """Configured output-token multipliers are forwarded explicitly."""
+        client, openai_mock = self._make_client(
+            "gpt-5-mini",
+            max_output_token_multiplier=10,
+        )
         captured = {}
 
         resp_mock = MagicMock()
@@ -288,8 +291,8 @@ class TestOpenAIResponsesClientBasics(unittest.TestCase):
             client.complete("prompt", max_tokens=20)
         self.assertEqual(captured["max_output_tokens"], 200)  # 20 * 10
 
-    def test_non_gpt5_token_budget_unchanged(self):
-        client, openai_mock = self._make_client("gpt-4o-mini")
+    def test_output_token_multiplier_defaults_to_requested_budget(self):
+        client, openai_mock = self._make_client("gpt-5-mini")
         captured = {}
 
         resp_mock = MagicMock()
@@ -307,6 +310,13 @@ class TestOpenAIResponsesClientBasics(unittest.TestCase):
         with patch("time.sleep"):
             client.complete("prompt", max_tokens=20)
         self.assertEqual(captured["max_output_tokens"], 20)
+
+    def test_output_token_multiplier_must_be_positive(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "max_output_token_multiplier must be at least 1",
+        ):
+            self._make_client(max_output_token_multiplier=0)
 
 
 class TestGoogleAIClientFeatures(unittest.TestCase):

@@ -35,11 +35,11 @@ _CLIENT_POLICY_TRANSLATIONS = (
     ),
     ClientPolicyTranslation(
         adapter="OpenAIResponsesClient",
-        category="max_token_expansion",
-        trigger="model starts with gpt-5",
-        behavior="multiplies requested max_tokens by 10 before calling the Responses API",
-        explicit_to_caller=False,
-        tested_by=("tests/test_client_conformance.py",),
+        category="output_token_multiplier",
+        trigger="max_output_token_multiplier is configured above 1",
+        behavior="multiplies requested max_tokens by the configured explicit output-token multiplier",
+        explicit_to_caller=True,
+        tested_by=("tests/test_client_conformance.py", "tests/test_client_features.py"),
     ),
     ClientPolicyTranslation(
         adapter="OpenAIResponsesClient",
