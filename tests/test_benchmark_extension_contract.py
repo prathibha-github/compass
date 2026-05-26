@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import compass.benchmark.registry as benchmark_registry
 from compass.benchmark import (
+    BenchmarkPairwiseReport,
     BenchmarkPolicyDefaults,
     BenchmarkRunPreset,
     get_benchmark_runner,
@@ -115,7 +116,7 @@ class BenchmarkExtensionContractTests(unittest.TestCase):
                     generations_path = runner.generate(run_config)
                     evaluations_path = runner.evaluate(generations_path, run_config)
                     stats = runner.analyze(evaluations_path, run_config)
-                    runner.rank(evaluations_path, run_config)
+                    pairwise_report = runner.rank(evaluations_path, run_config)
                     self.assertEqual(
                         runner.validate_report(evaluations_path, run_config),
                         [],
@@ -150,6 +151,18 @@ class BenchmarkExtensionContractTests(unittest.TestCase):
         self.assertEqual(stats["llama3.1|task_focus"].hit_rate, 0.0)
         self.assertEqual(stats["mistral|truthfulness"].hit_rate, 100.0)
         self.assertEqual(stats["llama3.1|truthfulness"].hit_rate, 0.0)
+        self.assertIsInstance(pairwise_report, BenchmarkPairwiseReport)
+        self.assertEqual(pairwise_report.segment_field, spec.pairwise_segment_field)
+        self.assertEqual(
+            pairwise_report.rubrics["task_focus"].overall_ranking[0].model,
+            "llama3.1",
+        )
+        self.assertEqual(
+            pairwise_report.rubrics["truthfulness"].segmented_rankings[
+                "uncertainty_handling"
+            ][0].model,
+            "llama3.1",
+        )
 
 
 if __name__ == "__main__":

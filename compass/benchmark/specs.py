@@ -1,12 +1,28 @@
 """Benchmark specification contracts."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Dict, Mapping, Optional, Protocol, Sequence, Tuple, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Mapping,
+    Optional,
+    Protocol,
+    Sequence,
+    Tuple,
+    runtime_checkable,
+)
 
 from compass.benchmark.config import DEFAULT_TOKEN_BUDGETS, LEGACY_TOKEN_CAP_FALLBACK
 from compass.rubrics.base import Rubric
+
+if TYPE_CHECKING:
+    from compass.benchmark.reporting import BenchmarkPairwiseReport, BenchmarkSummaryRow
+    from compass.benchmark.validation import BenchmarkValidationIssue
 
 _DEFAULT_ANALYSIS_LANES = ("summary", "pairwise")
 _ALLOWED_ANALYSIS_LANES = frozenset(_DEFAULT_ANALYSIS_LANES)
@@ -386,17 +402,25 @@ class BenchmarkRunner(Protocol):
     ) -> Path:
         """Evaluate benchmark completions."""
 
-    def analyze(self, evaluations_path: Path, run_config: BenchmarkRunConfig) -> Dict[str, dict]:
+    def analyze(
+        self,
+        evaluations_path: Path,
+        run_config: BenchmarkRunConfig,
+    ) -> Dict[str, BenchmarkSummaryRow]:
         """Analyze benchmark evaluation outputs."""
 
-    def rank(self, evaluations_path: Path, run_config: BenchmarkRunConfig) -> None:
+    def rank(
+        self,
+        evaluations_path: Path,
+        run_config: BenchmarkRunConfig,
+    ) -> BenchmarkPairwiseReport:
         """Run pairwise ranking for a benchmark family."""
 
     def validate_report(
         self,
         evaluations_path: Path,
         run_config: BenchmarkRunConfig,
-    ) -> Sequence[str]:
+    ) -> Sequence[BenchmarkValidationIssue]:
         """Validate benchmark report artifacts."""
 
 

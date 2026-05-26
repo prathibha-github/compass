@@ -4,7 +4,8 @@ import logging
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Optional
+from types import MappingProxyType
+from typing import Dict, Iterable, List, Mapping, Optional, Tuple
 
 from compass import PairwiseRanker
 from compass.benchmark.io import load_evaluation_records
@@ -29,6 +30,45 @@ class BenchmarkSummaryRow:
     quality_filtered_hit_rate: Optional[float]
     quality_filter_mode: str
     raw_total: int
+
+
+@dataclass(frozen=True)
+class PairwiseRankingEntry:
+    model: str
+    wins: float
+    total: int
+
+
+@dataclass(frozen=True)
+class PairwiseMatchupResult:
+    model_a: str
+    model_b: str
+    matches: int
+    wins_a: int
+    wins_b: int
+    ties: int
+
+
+@dataclass(frozen=True)
+class PairwiseRankingSummary:
+    total_pairs: int
+    models: int
+
+
+@dataclass(frozen=True)
+class PairwiseRubricReport:
+    rubric: str
+    overall_ranking: Tuple[PairwiseRankingEntry, ...]
+    pairwise_results: Mapping[Tuple[str, str], PairwiseMatchupResult]
+    segmented_rankings: Mapping[str, Tuple[PairwiseRankingEntry, ...]]
+    summary: PairwiseRankingSummary
+
+
+@dataclass(frozen=True)
+class BenchmarkPairwiseReport:
+    segment_field: str
+    quality_filter_mode: str
+    rubrics: Mapping[str, PairwiseRubricReport]
 
 
 def _quality_filtered_results(results: Iterable[dict]) -> List[dict]:
@@ -149,16 +189,136 @@ def print_summary(
         logger.info(line)
 
 
+def _coerce_pairwise_ranking(
+    entries: Iterable[tuple[str, float, int]],
+) -> Tuple[PairwiseRankingEntry, ...]:
+    return tuple(
+        PairwiseRankingEntry(model=model, wins=wins, total=total)
+        for model, wins, total in entries
+    )
+
+
+def _coerce_pairwise_matchups(
+    pairwise_results: Mapping[Tuple[str, str], dict],
+) -> Mapping[Tuple[str, str], PairwiseMatchupResult]:
+    return MappingProxyType(
+        {
+            pair_key: PairwiseMatchupResult(
+                model_a=result["model_a"],
+                model_b=result["model_b"],
+                matches=result["matches"],
+                wins_a=result["wins_a"],
+                wins_b=result["wins_b"],
+                ties=result["ties"],
+            )
+            for pair_key, result in pairwise_results.items()
+        }
+    )
+
+
+def _build_pairwise_rubric_report(
+    ranker: PairwiseRanker,
+    rubric: str,
+    segment_field: str,
+) -> PairwiseRubricReport:
+    results = ranker.rank(rubric, min_matches=1)
+    segmented_results = ranker.rank_by_segment(
+        rubric,
+        segment_by=segment_field,
+        min_matches=1,
+    )
+    return PairwiseRubricReport(
+        rubric=rubric,
+        overall_ranking=_coerce_pairwise_ranking(results["overall_ranking"]),
+        pairwise_results=_coerce_pairwise_matchups(results["pairwise_results"]),
+        segmented_rankings=MappingProxyType(
+            {
+                segment_value: _coerce_pairwise_ranking(
+                    segment_result["overall_ranking"]
+                )
+                for segment_value, segment_result in segmented_results.items()
+            }
+        ),
+        summary=PairwiseRankingSummary(
+            total_pairs=results["summary"]["total_pairs"],
+            models=results["summary"]["models"],
+        ),
+    )
+
+
+def empty_pairwise_report(
+    segment_field: str,
+    quality_filter_mode: str = "annotate",
+) -> BenchmarkPairwiseReport:
+    return BenchmarkPairwiseReport(
+        segment_field=segment_field,
+        quality_filter_mode=quality_filter_mode,
+        rubrics=MappingProxyType({}),
+    )
+
+
+def format_pairwise_report(report: BenchmarkPairwiseReport) -> str:
+    """Render a stable textual pairwise ranking report."""
+    lines = ["Computing pairwise model rankings..."]
+    for rubric in sorted(report.rubrics.keys()):
+        rubric_report = report.rubrics[rubric]
+        lines.extend(
+            [
+                "",
+                f"{rubric_report.rubric.upper()} Rankings:",
+                "-" * 80,
+            ]
+        )
+
+        if not rubric_report.overall_ranking:
+            lines.append("  No sufficient comparisons")
+            continue
+
+        for index, entry in enumerate(rubric_report.overall_ranking, 1):
+            win_rate = (entry.wins / entry.total * 100) if entry.total > 0 else 0.0
+            lines.append(
+                f"  {index}. {entry.model:<15} {entry.wins:>4.1f}/{entry.total:<4} wins ({win_rate:>5.1f}%)"
+            )
+
+        lines.extend(
+            [
+                "",
+                f"  Segmented by {report.segment_field}:",
+            ]
+        )
+        if not rubric_report.segmented_rankings:
+            lines.append(
+                f"    No {report.segment_field} metadata available for segmented ranking."
+            )
+            continue
+
+        for segment_value in sorted(rubric_report.segmented_rankings.keys()):
+            segmented_ranking = rubric_report.segmented_rankings[segment_value]
+            if not segmented_ranking:
+                continue
+            lines.append(f"    {segment_value}:")
+            top_ranked = segmented_ranking[0]
+            lines.append(
+                f"      {top_ranked.model} ({top_ranked.wins:.1f}/{top_ranked.total} wins)"
+            )
+
+    return "\n".join(lines)
+
+
+def print_pairwise_report(report: BenchmarkPairwiseReport) -> None:
+    """Log a pairwise ranking report."""
+    for line in format_pairwise_report(report).splitlines():
+        logger.info(line)
+
+
 def rank_models(
     evaluations_path: Path,
     benchmark_spec: BenchmarkSpec,
     output_dir: Path,
     quality_filter_mode: str = "annotate",
-) -> None:
-    """Perform pairwise model ranking."""
+) -> BenchmarkPairwiseReport:
+    """Perform pairwise model ranking and return a structured report."""
     # Reserved for future ranking artifact paths; kept for API compatibility.
-
-    logger.info("Computing pairwise model rankings...")
     ranker = PairwiseRanker()
 
     for result in load_evaluation_records(evaluations_path, strict=True):
@@ -179,44 +339,17 @@ def rank_models(
             metadata=metadata,
         )
 
-    for rubric in benchmark_spec.rubric_names:
-        logger.info("\n%s Rankings:", rubric.upper())
-        logger.info("-" * 80)
-
-        results = ranker.rank(rubric, min_matches=1)
-        ranking = results["overall_ranking"]
-
-        if not ranking:
-            logger.info("  No sufficient comparisons")
-            continue
-
-        for i, (model, wins, total) in enumerate(ranking, 1):
-            win_rate = (wins / total * 100) if total > 0 else 0
-            logger.info(
-                "  %d. %-15s %4.1f/%-4s wins (%5.1f%%)",
-                i,
-                model,
-                wins,
-                total,
-                win_rate,
-            )
-
-        logger.info("\n  Segmented by %s:", benchmark_spec.pairwise_segment_field)
-        segmented = ranker.rank_by_segment(
-            rubric,
-            segment_by=benchmark_spec.pairwise_segment_field,
-            min_matches=1,
-        )
-        if not segmented and ranking:
-            logger.info(
-                "    No %s metadata available for segmented ranking.",
-                benchmark_spec.pairwise_segment_field,
-            )
-            continue
-
-        for segment_value in sorted(segmented.keys()):
-            seg_ranking = segmented[segment_value]["overall_ranking"]
-            if seg_ranking:
-                logger.info("    %s:", segment_value)
-                for model, wins, total in seg_ranking[:1]:
-                    logger.info("      %s (%.1f/%s wins)", model, wins, total)
+    return BenchmarkPairwiseReport(
+        segment_field=benchmark_spec.pairwise_segment_field,
+        quality_filter_mode=quality_filter_mode,
+        rubrics=MappingProxyType(
+            {
+                rubric: _build_pairwise_rubric_report(
+                    ranker,
+                    rubric,
+                    benchmark_spec.pairwise_segment_field,
+                )
+                for rubric in benchmark_spec.rubric_names
+            }
+        ),
+    )
