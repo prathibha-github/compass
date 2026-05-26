@@ -23,7 +23,7 @@ python scripts/validate_benchmark_report.py path/to/evaluations.jsonl
 
 ## Output Artifacts
 
-A benchmark run writes three operationally important artifacts in the output
+A benchmark run writes four operationally important artifacts in the output
 directory:
 
 - `generations.jsonl`
@@ -37,6 +37,9 @@ directory:
   The resolved benchmark policy for the run, including preset name, benchmark
   identity, effective token budgets, analysis lanes, and legacy token-cap
   threshold.
+- `benchmark_run_outcome.json`
+  Per-phase outcome metadata, including expected rows, successful rows, runtime
+  failures, and whether generation or evaluation completed cleanly.
 
 Treat `benchmark_run_policy.json` as part of the benchmark result, not optional
 metadata. It records the policy context needed to interpret the rows later.

@@ -278,21 +278,68 @@ class BenchmarkRegistryTests(unittest.TestCase):
             rubrics_by_name={"clarity": RubricLibrary.clarity},
         )
         runner = SharedBenchmarkRunner(spec)
-        run_config = runner.validate_run_config(spec.make_run_config())
-        evaluations_path = Path("evaluations.jsonl")
-        with patch(
-            "compass.benchmark.runner.evaluate_completions",
-            return_value=evaluations_path,
-        ) as evaluate:
-            with patch.object(
-                runner,
-                "_validate_report_artifacts",
-                return_value=[],
-            ) as validate_report_artifacts:
-                self.assertEqual(
-                    runner.evaluate(Path("generations.jsonl"), run_config),
-                    evaluations_path,
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            run_config = runner.validate_run_config(
+                spec.make_run_config(output_dir=str(output_dir))
+            )
+            generations_path = output_dir / "generations.jsonl"
+            generations_path.write_text(
+                json.dumps(
+                    {
+                        "benchmark_name": spec.name,
+                        "benchmark_version": spec.version,
+                        "model": "llama3.1",
+                        "rubric": "clarity",
+                        "prompt_id": "p1",
+                        "task_type": "explanation",
+                        "sample_idx": 0,
+                        "completion": "ok",
+                        "tokens_used": {"input": 1, "output": 1},
+                    }
                 )
+                + "\n"
+            )
+            evaluations_path = output_dir / "evaluations.jsonl"
+            evaluations_path.write_text(
+                json.dumps(
+                    {
+                        "benchmark_name": spec.name,
+                        "benchmark_version": spec.version,
+                        "model": "llama3.1",
+                        "rubric": "clarity",
+                        "prompt_id": "p1",
+                        "task_type": "explanation",
+                        "sample_idx": 0,
+                        "score": 0.1,
+                        "hit": False,
+                        "confidence": 0.9,
+                        "rationale": "ok",
+                        "judge_model": run_config.judge_model,
+                        "generation_visible_chars": 10,
+                        "generation_visible_word_count": 2,
+                        "generation_hit_token_cap": False,
+                        "generation_is_fragment": False,
+                        "generation_quality_flagged": False,
+                        "generation_finish_reason": "",
+                        "generation_token_cap_inferred_legacy": False,
+                    }
+                )
+                + "\n"
+            )
+            with patch(
+                "compass.benchmark.runner.evaluate_completions",
+                return_value=evaluations_path,
+            ) as evaluate:
+                with patch.object(
+                    runner,
+                    "_validate_report_artifacts",
+                    return_value=[],
+                ) as validate_report_artifacts:
+                    self.assertEqual(
+                        runner.evaluate(generations_path, run_config),
+                        evaluations_path,
+                    )
 
         evaluate.assert_called_once()
         validate_report_artifacts.assert_called_once_with(evaluations_path)
@@ -309,27 +356,75 @@ class BenchmarkRegistryTests(unittest.TestCase):
             rubrics_by_name={"clarity": RubricLibrary.clarity},
         )
         runner = SharedBenchmarkRunner(spec)
-        run_config = runner.validate_run_config(spec.make_run_config())
-        with patch(
-            "compass.benchmark.runner.evaluate_completions",
-            return_value=Path("evaluations.jsonl"),
-        ):
-            with patch.object(
-                runner,
-                "_validate_report_artifacts",
-                return_value=[
-                    BenchmarkValidationIssue(
-                        code="missing_evaluation_quality_fields",
-                        location="evaluation row 1",
-                        message="missing quality fields: generation_visible_chars",
-                    )
-                ],
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            run_config = runner.validate_run_config(
+                spec.make_run_config(output_dir=str(output_dir))
+            )
+            generations_path = output_dir / "generations.jsonl"
+            generations_path.write_text(
+                json.dumps(
+                    {
+                        "benchmark_name": spec.name,
+                        "benchmark_version": spec.version,
+                        "model": "llama3.1",
+                        "rubric": "clarity",
+                        "prompt_id": "p1",
+                        "task_type": "explanation",
+                        "sample_idx": 0,
+                        "completion": "ok",
+                        "tokens_used": {"input": 1, "output": 1},
+                    }
+                )
+                + "\n"
+            )
+            evaluations_path = output_dir / "evaluations.jsonl"
+            evaluations_path.write_text(
+                json.dumps(
+                    {
+                        "benchmark_name": spec.name,
+                        "benchmark_version": spec.version,
+                        "model": "llama3.1",
+                        "rubric": "clarity",
+                        "prompt_id": "p1",
+                        "task_type": "explanation",
+                        "sample_idx": 0,
+                        "score": 0.1,
+                        "hit": False,
+                        "confidence": 0.9,
+                        "rationale": "ok",
+                        "judge_model": run_config.judge_model,
+                        "generation_visible_chars": 10,
+                        "generation_visible_word_count": 2,
+                        "generation_hit_token_cap": False,
+                        "generation_is_fragment": False,
+                        "generation_quality_flagged": False,
+                        "generation_finish_reason": "",
+                        "generation_token_cap_inferred_legacy": False,
+                    }
+                )
+                + "\n"
+            )
+            with patch(
+                "compass.benchmark.runner.evaluate_completions",
+                return_value=evaluations_path,
             ):
-                with self.assertRaisesRegex(
-                    ValueError,
-                    "Benchmark report validation failed: evaluation row 1: missing quality fields: generation_visible_chars",
+                with patch.object(
+                    runner,
+                    "_validate_report_artifacts",
+                    return_value=[
+                        BenchmarkValidationIssue(
+                            code="missing_evaluation_quality_fields",
+                            location="evaluation row 1",
+                            message="missing quality fields: generation_visible_chars",
+                        )
+                    ],
                 ):
-                    runner.evaluate(Path("generations.jsonl"), run_config)
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "Benchmark report validation failed: evaluation row 1: missing quality fields: generation_visible_chars",
+                    ):
+                        runner.evaluate(generations_path, run_config)
 
     def test_shared_runner_phase_methods_require_validated_run_config(self):
         spec = build_benchmark_spec(
@@ -446,6 +541,22 @@ class BenchmarkRegistryTests(unittest.TestCase):
                 )
             )
             generated_path = output_dir / "generations.jsonl"
+            generated_path.write_text(
+                json.dumps(
+                    {
+                        "benchmark_name": spec.name,
+                        "benchmark_version": spec.version,
+                        "model": "llama3.1",
+                        "rubric": "clarity",
+                        "prompt_id": "p1",
+                        "task_type": "explanation",
+                        "sample_idx": 0,
+                        "completion": "ok",
+                        "tokens_used": {"input": 1, "output": 1},
+                    }
+                )
+                + "\n"
+            )
             with patch(
                 "compass.benchmark.runner.generate_completions",
                 return_value=generated_path,
@@ -454,6 +565,8 @@ class BenchmarkRegistryTests(unittest.TestCase):
 
             policy_path = output_dir / "benchmark_run_policy.json"
             policy = json.loads(policy_path.read_text())
+            outcome_path = output_dir / "benchmark_run_outcome.json"
+            outcome = json.loads(outcome_path.read_text())
 
         self.assertEqual(result, generated_path)
         self.assertEqual(policy["benchmark_name"], spec.name)
@@ -472,6 +585,12 @@ class BenchmarkRegistryTests(unittest.TestCase):
                 "mistral": 222,
             },
         )
+        self.assertEqual(outcome["benchmark_name"], spec.name)
+        self.assertEqual(outcome["phases"]["generation"]["expected_rows"], 2)
+        self.assertEqual(outcome["phases"]["generation"]["successful_rows"], 1)
+        self.assertEqual(outcome["phases"]["generation"]["runtime_failures"], 1)
+        self.assertEqual(outcome["phases"]["generation"]["status"], "partial")
+        self.assertEqual(outcome["overall_status"], "partial")
 
     def test_shared_runner_evaluate_writes_run_policy_sidecar(self):
         spec = build_benchmark_spec(
@@ -491,7 +610,68 @@ class BenchmarkRegistryTests(unittest.TestCase):
             run_config = runner.validate_run_config(
                 spec.make_run_config(output_dir=str(output_dir))
             )
+            (output_dir / "benchmark_run_outcome.json").write_text(
+                json.dumps(
+                    {
+                        "benchmark_name": spec.name,
+                        "benchmark_version": spec.version,
+                        "overall_status": "complete",
+                        "phases": {
+                            "generation": {
+                                "expected_rows": 1,
+                                "successful_rows": 1,
+                                "runtime_failures": 0,
+                                "status": "complete",
+                            }
+                        },
+                    }
+                )
+                + "\n"
+            )
+            generations_path = output_dir / "generations.jsonl"
+            generations_path.write_text(
+                json.dumps(
+                    {
+                        "benchmark_name": spec.name,
+                        "benchmark_version": spec.version,
+                        "model": "llama3.1",
+                        "rubric": "clarity",
+                        "prompt_id": "p1",
+                        "task_type": "explanation",
+                        "sample_idx": 0,
+                        "completion": "ok",
+                        "tokens_used": {"input": 1, "output": 1},
+                    }
+                )
+                + "\n"
+            )
             evaluations_path = output_dir / "evaluations.jsonl"
+            evaluations_path.write_text(
+                json.dumps(
+                    {
+                        "benchmark_name": spec.name,
+                        "benchmark_version": spec.version,
+                        "model": "llama3.1",
+                        "rubric": "clarity",
+                        "prompt_id": "p1",
+                        "task_type": "explanation",
+                        "sample_idx": 0,
+                        "score": 0.1,
+                        "hit": False,
+                        "confidence": 0.9,
+                        "rationale": "ok",
+                        "judge_model": run_config.judge_model,
+                        "generation_visible_chars": 10,
+                        "generation_visible_word_count": 2,
+                        "generation_hit_token_cap": False,
+                        "generation_is_fragment": False,
+                        "generation_quality_flagged": False,
+                        "generation_finish_reason": "",
+                        "generation_token_cap_inferred_legacy": False,
+                    }
+                )
+                + "\n"
+            )
             with patch(
                 "compass.benchmark.runner.evaluate_completions",
                 return_value=evaluations_path,
@@ -500,10 +680,12 @@ class BenchmarkRegistryTests(unittest.TestCase):
                 "_validate_report_artifacts",
                 return_value=[],
             ):
-                result = runner.evaluate(output_dir / "generations.jsonl", run_config)
+                result = runner.evaluate(generations_path, run_config)
 
             policy_path = output_dir / "benchmark_run_policy.json"
             policy = json.loads(policy_path.read_text())
+            outcome_path = output_dir / "benchmark_run_outcome.json"
+            outcome = json.loads(outcome_path.read_text())
 
         self.assertEqual(result, evaluations_path)
         self.assertEqual(policy["judge_model"], run_config.judge_model)
@@ -511,6 +693,12 @@ class BenchmarkRegistryTests(unittest.TestCase):
             policy["legacy_token_cap_threshold"],
             run_config.legacy_token_cap_threshold,
         )
+        self.assertEqual(outcome["phases"]["evaluation"]["expected_rows"], 1)
+        self.assertEqual(outcome["phases"]["evaluation"]["successful_rows"], 1)
+        self.assertEqual(outcome["phases"]["evaluation"]["runtime_failures"], 0)
+        self.assertEqual(outcome["phases"]["evaluation"]["status"], "complete")
+        self.assertEqual(outcome["phases"]["generation"]["status"], "complete")
+        self.assertEqual(outcome["overall_status"], "complete")
 
     def test_benchmark_list_contains_constitutional(self):
         self.assertIn("constitutional_compliance", list_benchmark_specs())
