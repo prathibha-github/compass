@@ -147,6 +147,9 @@ Write and document these artifacts:
 - `benchmark_run_policy.json`
   Atomic sidecar artifact that records the resolved preset and effective run
   policy used to produce the outputs.
+- `benchmark_run_outcome.json`
+  Atomic sidecar artifact that records per-phase expected rows, successful
+  rows, runtime failures, and complete/partial status.
 
 Runtime failure behavior should also be explicit:
 - generation and evaluation runtime failures are logged per row
