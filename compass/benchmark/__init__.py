@@ -5,6 +5,7 @@ from compass.benchmark.config import (
     LEGACY_TOKEN_CAP_FALLBACK,
     default_max_tokens_for_model,
 )
+from compass.benchmark.cli import log_and_exit, require_or_exit, run_or_exit
 from compass.benchmark.io import load_evaluation_records, load_generation_records
 from compass.benchmark.registry import (
     CONSTITUTIONAL_COMPLIANCE_BENCHMARK,
@@ -91,6 +92,9 @@ __all__ = [
     "CONSTITUTIONAL_COMPLIANCE_RUNNER",
     "DEFAULT_TOKEN_BUDGETS",
     "LEGACY_TOKEN_CAP_FALLBACK",
+    "log_and_exit",
+    "require_or_exit",
+    "run_or_exit",
     "SharedBenchmarkRunner",
     "build_benchmark_spec",
     "default_max_tokens_for_model",

@@ -3,7 +3,6 @@
 
 import argparse
 import logging
-import sys
 from pathlib import Path
 
 from compass.benchmark import (
@@ -17,7 +16,10 @@ from compass.benchmark import (
     get_benchmark_runner,
     load_evaluation_records,
     load_generation_records,
+    log_and_exit,
     print_summary,
+    require_or_exit,
+    run_or_exit,
     setup_output_dir,
     test_model_connection,
     validate_token_budget_policy,
@@ -308,28 +310,37 @@ def main():
     logger.info("Cost: %s", cost_note)
     logger.info("")
 
-    if requested_legacy_threshold <= 0:
-        logger.error("--legacy-token-cap-threshold must be > 0")
-        sys.exit(2)
+    require_or_exit(
+        requested_legacy_threshold > 0,
+        logger,
+        "--legacy-token-cap-threshold must be > 0",
+        exit_code=2,
+    )
     output_dir = setup_output_dir(requested_output_dir)
 
     logger.info("Checking model availability...")
     available_models = [m for m in requested_models if test_model_connection(m)]
-    if not available_models:
-        logger.error("No models available. Check Ollama is running or API keys are set.")
-        sys.exit(1)
+    require_or_exit(
+        bool(available_models),
+        logger,
+        "No models available. Check Ollama is running or API keys are set.",
+        exit_code=1,
+    )
     logger.info("")
 
-    if args.max_tokens is not None and args.max_tokens <= 0:
-        logger.error("--max-tokens must be > 0")
-        sys.exit(2)
-    try:
-        custom_budget_by_model = _parse_max_tokens_by_model_args(
+    require_or_exit(
+        args.max_tokens is None or args.max_tokens > 0,
+        logger,
+        "--max-tokens must be > 0",
+        exit_code=2,
+    )
+    custom_budget_by_model = run_or_exit(
+        lambda: _parse_max_tokens_by_model_args(
             args.max_tokens_by_model
-        )
-    except ValueError as e:
-        logger.error(str(e))
-        sys.exit(2)
+        ),
+        logger,
+        exit_code=2,
+    )
 
     if args.max_tokens is not None:
         token_budget_input = {model: args.max_tokens for model in available_models}
@@ -338,7 +349,7 @@ def main():
     else:
         token_budget_input = None
 
-    try:
+    def _build_run_config():
         run_config = BENCHMARK_SPEC.make_run_config(
             preset_name=args.preset,
             models=available_models,
@@ -351,10 +362,9 @@ def main():
             skip_generation=args.skip_generation,
             skip_ranking=args.skip_ranking,
         )
-        BENCHMARK_RUNNER.validate_run_config(run_config)
-    except ValueError as e:
-        logger.error(str(e))
-        sys.exit(2)
+        return BENCHMARK_RUNNER.validate_run_config(run_config)
+
+    run_config = run_or_exit(_build_run_config, logger, exit_code=2)
     logger.info("Quality filter policy: %s", run_config.quality_filter_mode)
     logger.info("Analysis lanes: %s", ", ".join(run_config.effective_analysis_lanes))
 
@@ -387,37 +397,40 @@ def main():
     else:
         generations_path = output_dir / "generations.jsonl"
         if not generations_path.exists():
-            logger.error("Generation checkpoint not found: %s", generations_path)
-            sys.exit(1)
+            log_and_exit(
+                logger,
+                f"Generation checkpoint not found: {generations_path}",
+                exit_code=1,
+            )
 
     logger.info("")
     logger.info("PHASE 2: Evaluating completions...")
-    try:
-        evaluations_path = BENCHMARK_RUNNER.evaluate(
+    evaluations_path = run_or_exit(
+        lambda: BENCHMARK_RUNNER.evaluate(
             generations_path,
             run_config,
-        )
-    except ValueError as e:
-        logger.error(str(e))
-        sys.exit(1)
+        ),
+        logger,
+        exit_code=1,
+    )
 
     if "summary" in run_config.effective_analysis_lanes:
         logger.info("")
         logger.info("PHASE 3: Analyzing results...")
-        try:
-            stats = BENCHMARK_RUNNER.analyze(evaluations_path, run_config)
-        except ValueError as e:
-            logger.error(str(e))
-            sys.exit(1)
+        stats = run_or_exit(
+            lambda: BENCHMARK_RUNNER.analyze(evaluations_path, run_config),
+            logger,
+            exit_code=1,
+        )
         print_summary(stats, evaluations_path)
 
     if "pairwise" in run_config.effective_analysis_lanes:
         logger.info("PHASE 4: Pairwise model comparison...")
-        try:
-            BENCHMARK_RUNNER.rank(evaluations_path, run_config)
-        except ValueError as e:
-            logger.error(str(e))
-            sys.exit(1)
+        run_or_exit(
+            lambda: BENCHMARK_RUNNER.rank(evaluations_path, run_config),
+            logger,
+            exit_code=1,
+        )
 
     logger.info("✓ Benchmark complete. Results in %s/", output_dir)
 
