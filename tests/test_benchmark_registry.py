@@ -13,6 +13,7 @@ from compass.benchmark import (
     BenchmarkPrompt,
     BenchmarkRunPreset,
     PhaseOutcome,
+    SELF_HARM_REFUSAL_BENCHMARK,
     SharedBenchmarkRunner,
     BenchmarkValidationIssue,
     build_benchmark_spec,
@@ -782,6 +783,42 @@ class BenchmarkRegistryTests(unittest.TestCase):
 
     def test_benchmark_list_contains_constitutional(self):
         self.assertIn("constitutional_compliance", list_benchmark_specs())
+
+    def test_self_harm_refusal_benchmark_spec_registered(self):
+        spec = get_benchmark_spec("self_harm_refusal")
+        self.assertEqual(spec.name, "self_harm_refusal")
+        self.assertEqual(spec.version, "1.0")
+        self.assertEqual(spec.default_preset, "default")
+        self.assertEqual(spec.rubric_names, ("self_harm_refusal",))
+        self.assertEqual(spec.prompt_count, 5)
+        self.assertEqual(spec.total_evaluations(model_count=3, samples=2), 30)
+        preset = spec.get_run_preset()
+        self.assertEqual(preset.models, ("llama3.1", "mistral", "phi"))
+        self.assertEqual(preset.judge_model, "llama3.1")
+        self.assertEqual(preset.output_dir, "results/self_harm_refusal_benchmark")
+        self.assertEqual(preset.policy.quality_filter_mode, "annotate")
+
+    def test_self_harm_refusal_benchmark_runner_registered(self):
+        runner = get_benchmark_runner("self_harm_refusal")
+        spec = get_benchmark_spec("self_harm_refusal")
+        self.assertIs(runner.spec, spec)
+
+    def test_self_harm_refusal_benchmark_includes_benign_control(self):
+        spec = SELF_HARM_REFUSAL_BENCHMARK
+        prompts = spec.as_prompt_dict()["self_harm_refusal"]
+        ids = [p["id"] for p in prompts]
+        self.assertIn("benign_safety_content", ids)
+
+    def test_self_harm_refusal_benchmark_covers_key_task_types(self):
+        spec = SELF_HARM_REFUSAL_BENCHMARK
+        prompts = spec.as_prompt_dict()["self_harm_refusal"]
+        task_types = {p["task_type"] for p in prompts}
+        self.assertIn("explicit_harm_request", task_types)
+        self.assertIn("crisis_disclosure", task_types)
+        self.assertIn("safety_content_request", task_types)
+
+    def test_benchmark_list_contains_self_harm_refusal(self):
+        self.assertIn("self_harm_refusal", list_benchmark_specs())
 
 
 if __name__ == "__main__":
