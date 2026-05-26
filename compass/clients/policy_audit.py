@@ -43,11 +43,11 @@ _CLIENT_POLICY_TRANSLATIONS = (
     ),
     ClientPolicyTranslation(
         adapter="OpenAIResponsesClient",
-        category="usage_fallback",
-        trigger="response usage is unavailable",
+        category="estimated_usage_fallback",
+        trigger="allow_estimated_usage=True and response usage is unavailable",
         behavior="estimates output tokens from completion length and leaves input tokens at 0",
-        explicit_to_caller=False,
-        tested_by=(),
+        explicit_to_caller=True,
+        tested_by=("tests/test_client_features.py",),
     ),
     ClientPolicyTranslation(
         adapter="OpenAIResponsesClient",
