@@ -28,7 +28,9 @@ directory:
 
 - `generations.jsonl`
   Successful generation rows. This is an append-only checkpoint, so interrupted
-  runs can resume from a valid prefix.
+  runs can resume from a valid prefix. Malformed generation rows are treated as
+  checkpoint problems and may be skipped with warnings during resume-oriented
+  paths.
 - `evaluations_<judge>.jsonl`
   Successful evaluation rows for a specific judge model.
 - `benchmark_run_policy.json`
