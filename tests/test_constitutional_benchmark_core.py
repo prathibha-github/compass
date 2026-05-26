@@ -394,11 +394,11 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
 
             stats = benchmark.analyze_results(eval_path, out)
             row = stats["m1|clarity"]
-            self.assertEqual(row["total"], 2)
-            self.assertEqual(row["quality_filtered_total"], 1)
-            self.assertEqual(row["quality_filtered_hit_rate"], 100.0)
-            self.assertEqual(row["token_cap_pct"], 50.0)
-            self.assertEqual(row["fragment_pct"], 50.0)
+            self.assertEqual(row.total, 2)
+            self.assertEqual(row.quality_filtered_total, 1)
+            self.assertEqual(row.quality_filtered_hit_rate, 100.0)
+            self.assertEqual(row.token_cap_pct, 50.0)
+            self.assertEqual(row.fragment_pct, 50.0)
 
     def test_analyze_results_can_exclude_quality_flagged_rows(self):
         benchmark = _load_benchmark_module()
@@ -445,12 +445,12 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
                 quality_filter_mode="exclude_flagged",
             )
             row = stats["m1|clarity"]
-            self.assertEqual(row["hits"], 1)
-            self.assertEqual(row["total"], 1)
-            self.assertEqual(row["hit_rate"], 100.0)
-            self.assertEqual(row["quality_filtered_total"], 1)
-            self.assertEqual(row["quality_filter_mode"], "exclude_flagged")
-            self.assertEqual(row["raw_total"], 2)
+            self.assertEqual(row.hits, 1)
+            self.assertEqual(row.total, 1)
+            self.assertEqual(row.hit_rate, 100.0)
+            self.assertEqual(row.quality_filtered_total, 1)
+            self.assertEqual(row.quality_filter_mode, "exclude_flagged")
+            self.assertEqual(row.raw_total, 2)
 
 
 if __name__ == "__main__":

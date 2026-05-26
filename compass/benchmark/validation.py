@@ -1,10 +1,10 @@
 """Benchmark report validation helpers."""
 
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable, List, Mapping
 
 from compass.benchmark.io import load_evaluation_records
-from compass.benchmark.reporting import analyze_results
+from compass.benchmark.reporting import BenchmarkSummaryRow, analyze_results
 
 REQUIRED_EVALUATION_QUALITY_FIELDS = (
     "generation_visible_chars",
@@ -44,14 +44,20 @@ def validate_evaluation_records_for_quality(records: Iterable[dict]) -> List[str
     return errors
 
 
-def validate_stats_for_quality(stats: dict) -> List[str]:
+def validate_stats_for_quality(
+    stats: Mapping[str, BenchmarkSummaryRow],
+) -> List[str]:
     """Return validation errors for aggregated benchmark stats."""
     errors: List[str] = []
     if not stats:
         return ["no benchmark stats generated"]
 
     for key, row in stats.items():
-        missing = [field for field in REQUIRED_STATS_QUALITY_FIELDS if field not in row]
+        missing = [
+            field
+            for field in REQUIRED_STATS_QUALITY_FIELDS
+            if not hasattr(row, field)
+        ]
         if missing:
             errors.append(
                 f"stats row {key!r} missing quality fields: {', '.join(missing)}"

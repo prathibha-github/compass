@@ -314,10 +314,10 @@ class BenchmarkQualityGuardrailTests(unittest.TestCase):
 
         key = "llama3.1|clarity"
         self.assertIn(key, stats)
-        self.assertEqual(stats[key]["quality_flagged_pct"], 100.0)
-        self.assertEqual(stats[key]["token_cap_pct"], 100.0)
-        self.assertEqual(stats[key]["fragment_pct"], 100.0)
-        self.assertIsNone(stats[key]["quality_filtered_hit_rate"])
+        self.assertEqual(stats[key].quality_flagged_pct, 100.0)
+        self.assertEqual(stats[key].token_cap_pct, 100.0)
+        self.assertEqual(stats[key].fragment_pct, 100.0)
+        self.assertIsNone(stats[key].quality_filtered_hit_rate)
 
     def test_legacy_rows_infer_token_cap_when_missing_max_tokens(self):
         benchmark = _load_example("constitutional_compliance_benchmark")
