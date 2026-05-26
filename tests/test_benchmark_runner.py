@@ -1,5 +1,6 @@
 """Tests for benchmark runner client routing helpers."""
 
+import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -23,24 +24,41 @@ class BenchmarkRunnerClientRoutingTests(unittest.TestCase):
                     self.assertIs(runner._create_client(model), sentinel)
                 client_ctor.assert_called_once_with(model=model)
 
-    def test_model_connection_uses_client_complete(self):
+    def test_model_connection_for_openai_uses_lightweight_env_check(self):
+        fake_client = SimpleNamespace()
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "fake"}, clear=True):
+            with patch.object(runner, "_create_client", return_value=fake_client) as create_client:
+                self.assertTrue(runner.test_model_connection("gpt-4o-mini"))
+
+        create_client.assert_called_once_with("gpt-4o-mini")
+
+    def test_model_connection_for_ollama_uses_model_listing(self):
         fake_client = SimpleNamespace(
-            complete=MagicMock(
-                return_value=SimpleNamespace(tokens_used={"input": 1, "output": 2})
+            api_client=SimpleNamespace(
+                list=MagicMock(
+                    return_value={"models": [{"name": "llama3.1:latest"}]}
+                )
             )
         )
         with patch.object(runner, "_create_client", return_value=fake_client) as create_client:
-            self.assertTrue(runner.test_model_connection("gpt-4o-mini"))
+            self.assertTrue(runner.test_model_connection("llama3.1"))
 
-        create_client.assert_called_once_with("gpt-4o-mini")
-        fake_client.complete.assert_called_once_with("test", max_tokens=10)
+        create_client.assert_called_once_with("llama3.1")
+        fake_client.api_client.list.assert_called_once_with()
 
-    def test_model_connection_returns_false_when_client_raises(self):
+    def test_model_connection_returns_false_when_probe_raises(self):
         fake_client = SimpleNamespace(
-            complete=MagicMock(side_effect=RuntimeError("unavailable"))
+            api_client=SimpleNamespace(
+                list=MagicMock(side_effect=RuntimeError("unavailable"))
+            )
         )
         with patch.object(runner, "_create_client", return_value=fake_client):
             self.assertFalse(runner.test_model_connection("llama3.1"))
+
+    def test_model_connection_returns_false_when_required_api_key_missing(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with patch.object(runner, "_create_client", return_value=SimpleNamespace()):
+                self.assertFalse(runner.test_model_connection("claude-haiku-4-5"))
 
 
 if __name__ == "__main__":
