@@ -24,41 +24,20 @@ A benchmark has two parts that live in different places:
 
 If a benchmark is worth repeating or sharing, define it in compass first, then run it from helm_eval.
 
-## Planned refactor (two sessions)
-
-The following work is planned but not yet done:
-
-**Session 1 — upgrade compass:**
-- `compass/clients/pricing.py`: shared per-model pricing table (exact model names, not prefix guesses)
-- `AnthropicClient` and `OpenAIClient`: add retry/backoff on 429, request throttling, per-model pricing
-- `OpenAIResponsesClient`: new client for OpenAI Responses API (GPT-5 / `gpt-5-*` models)
-- `compass/detectors/` module: port `TicSuite` framework and all builtin suites from helm_eval
-  - `base.py`: `DetectorResult`, `StyleCondition`, `StylePrompt`, `TicDetector`, `TicSuite`, analytics functions
-  - `heuristic.py`: `RegexDetector`, `PhraseSetDetector`, `EmojiDetector`, `CharacterCountDetector`
-  - `llm_detector.py`: `LLMJudgeDetector` (uses `compass.judges.parsing.parse_judge_response`)
-  - `suites.py`: all builtin suites + `SUITE_REGISTRY`
-  - `quirk_detection.py`: `find_quirks`, `QUIRK_PROMPTS`
-  - `persona_transfer.py`: `analyze_persona_transfer`
-- Add tests for all new code
-
-**Session 2 — wire helm_eval to compass:**
-- Replace helm_eval's model clients with compass clients
-- Replace duplicated rubric text with `compass.RubricLibrary` references
-- Replace duplicated `wilson_interval` with `compass.judges.reliability.wilson_interval`
-- Replace `LLMJudgeDetector` in helm_eval with `compass.detectors.LLMJudgeDetector`
-- Verify tests pass in both repos
-
 ## Module structure
 
 ```
 compass/
-  rubrics/        versioned, immutable rubric definitions
+  rubrics/        versioned, immutable rubric definitions + RubricLibrary
   judges/         LLMJudge, JudgeConfig, EvaluationResult, JudgeReliabilityAuditor
   cache/          EvaluationCache (deterministic, content-addressed)
   evaluation/     CheckpointManager (JSONL-based, resumable)
-  clients/        AnthropicClient, OpenAIClient, GoogleAIClient, OllamaClient
-                  OpenAIResponsesClient (planned)
-  detectors/      TicSuite framework + builtin suites (planned)
+  clients/        AnthropicClient, OpenAIClient, OpenAIResponsesClient,
+                  GoogleAIClient, OllamaClient + shared pricing table
+  detectors/      TicSuite framework, builtin suites, heuristic/LLM detectors,
+                  quirk detection, persona transfer
+  benchmark/      BenchmarkSpec, SharedBenchmarkRunner, registry, reporting,
+                  validation, CLI helpers
   comparison/     PairwiseRanker, MultiModelComparator
   reproducibility/ EvaluationMetadata, cost tracking
 ```
