@@ -154,6 +154,20 @@ Practically equivalent; differences could be noise
 
 The differences are within statistical noise. Treat as tied unless confidence intervals clearly separate.
 
+## What Pairwise Rankings Do Not Prove
+
+Keep these limits in mind when reading rankings:
+
+- A pairwise winner on this evaluation set is not automatically a better model
+  in general. The ranking is local to the shared prompts, rubrics, and judge.
+- A model with a narrow win rate edge is not meaningfully ahead if the match
+  count is small or the confidence intervals overlap.
+- Pairwise preference does not replace absolute quality diagnostics. A model can
+  "win" more matchups while both models still fail the underlying benchmark at
+  unacceptable rates.
+- Rankings across separate runs are not directly comparable unless the
+  benchmark policy, prompt set, and judge model are held constant.
+
 ## Avoiding Pitfalls
 
 ### 1. Different Data Sets
