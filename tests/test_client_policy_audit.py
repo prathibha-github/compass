@@ -29,6 +29,7 @@ class ClientPolicyAuditTests(unittest.TestCase):
         self.assertIn(("OpenAIResponsesClient", "estimated_usage_fallback"), entries)
         self.assertIn(("OpenAIResponsesClient", "unsupported_temperature"), entries)
         self.assertIn(("GoogleAIClient", "max_request_cap"), entries)
+        self.assertIn(("GoogleAIClient", "estimated_usage_fallback"), entries)
         self.assertIn(("OllamaClient", "token_estimation"), entries)
 
     def test_explicit_entries_are_marked_explicit(self):
@@ -47,6 +48,9 @@ class ClientPolicyAuditTests(unittest.TestCase):
         )
         self.assertTrue(
             entries[("OpenAIResponsesClient", "unsupported_temperature")].explicit_to_caller
+        )
+        self.assertTrue(
+            entries[("GoogleAIClient", "estimated_usage_fallback")].explicit_to_caller
         )
 
     def test_inventory_entries_are_unique_and_named(self):

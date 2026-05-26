@@ -91,11 +91,11 @@ _CLIENT_POLICY_TRANSLATIONS = (
     ),
     ClientPolicyTranslation(
         adapter="GoogleAIClient",
-        category="usage_fallback",
-        trigger="usage_metadata is unavailable",
+        category="estimated_usage_fallback",
+        trigger="allow_estimated_usage=True and usage_metadata is unavailable",
         behavior="estimates input and output tokens from word counts",
-        explicit_to_caller=False,
-        tested_by=(),
+        explicit_to_caller=True,
+        tested_by=("tests/test_client_features.py", "tests/test_benchmark_runner.py"),
     ),
     ClientPolicyTranslation(
         adapter="GoogleAIClient",
