@@ -17,6 +17,7 @@ from compass.benchmark import (
     load_evaluation_records,
     load_generation_records,
     log_and_exit,
+    log_benchmark_run_summary,
     log_token_budget_policy,
     print_summary,
     require_available_models,
@@ -235,57 +236,23 @@ def main():
         else preset.legacy_token_cap_threshold
     )
 
-    logger.info("=" * 100)
-    logger.info("CONSTITUTIONAL COMPLIANCE BENCHMARK")
-    logger.info("=" * 100)
-    has_local = any(not m.startswith(("gemini", "gpt", "claude")) for m in requested_models)
-    has_cloud = any(m.startswith(("gemini", "gpt", "claude")) for m in requested_models)
-    if has_local and not has_cloud:
-        gen_source = "LOCAL (Ollama)"
-    elif has_cloud and not has_local:
-        gen_source = "CLOUD (OpenAI/Anthropic/Google)"
-    else:
-        gen_source = "MIXED (Ollama + Cloud)"
-    logger.info("Run preset: %s", args.preset)
-    logger.info("Generation: %s (%s)", ", ".join(requested_models), gen_source)
-    if any(m.startswith("gemini") for m in requested_models):
-        logger.info("  (Gemini free tier - may be slow due to rate limits)")
-    judge_source = (
-        "LOCAL (free)"
-        if requested_judge_model
-        in ("llama3.1", "mistral", "phi", "neural-chat", "dolphin-mixtral")
-        else (
-            "CLOUD (free tier)"
-            if requested_judge_model.startswith("gemini")
-            else "CLOUD (paid)"
-        )
-    )
-    logger.info("Judge: %s (%s)", requested_judge_model, judge_source)
-    logger.info("Rubrics: %s", ", ".join(BENCHMARK_SPEC.rubric_names))
-    logger.info("Samples per prompt: %d", requested_samples)
-    logger.info("Output directory: %s", requested_output_dir)
-    logger.info("Default token budget config: %s", dict(preset.policy.token_budgets))
-    logger.info("Legacy token-cap threshold: %d", requested_legacy_threshold)
-
     total_evals = BENCHMARK_SPEC.total_evaluations(
         len(requested_models),
         requested_samples,
     )
-    if requested_judge_model in (
-        "llama3.1",
-        "mistral",
-        "phi",
-        "neural-chat",
-        "dolphin-mixtral",
-    ):
-        judge_cost = 0.0
-        cost_note = "FULLY FREE (local generation + local judge)"
-    else:
-        judge_cost = total_evals * 0.001
-        cost_note = f"${judge_cost:.2f} (judge only, generation is free)"
-    logger.info("Total evaluations: %d", total_evals)
-    logger.info("Cost: %s", cost_note)
-    logger.info("")
+    log_benchmark_run_summary(
+        logger,
+        benchmark_title="CONSTITUTIONAL COMPLIANCE BENCHMARK",
+        preset_name=args.preset,
+        models=requested_models,
+        judge_model=requested_judge_model,
+        rubric_names=BENCHMARK_SPEC.rubric_names,
+        samples=requested_samples,
+        output_dir=requested_output_dir,
+        token_budget_defaults=preset.policy.token_budgets,
+        legacy_token_cap_threshold=requested_legacy_threshold,
+        total_evaluations=total_evals,
+    )
 
     require_or_exit(
         requested_legacy_threshold > 0,

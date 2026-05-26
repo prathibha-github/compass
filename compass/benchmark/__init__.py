@@ -6,7 +6,11 @@ from compass.benchmark.config import (
     default_max_tokens_for_model,
 )
 from compass.benchmark.cli import (
+    classify_generation_source,
+    classify_judge_source,
+    estimate_judge_cost_note,
     log_and_exit,
+    log_benchmark_run_summary,
     log_errors_and_exit,
     log_token_budget_policy,
     parse_max_tokens_by_model_args,
@@ -101,7 +105,11 @@ __all__ = [
     "CONSTITUTIONAL_COMPLIANCE_RUNNER",
     "DEFAULT_TOKEN_BUDGETS",
     "LEGACY_TOKEN_CAP_FALLBACK",
+    "classify_generation_source",
+    "classify_judge_source",
+    "estimate_judge_cost_note",
     "log_and_exit",
+    "log_benchmark_run_summary",
     "log_errors_and_exit",
     "log_token_budget_policy",
     "parse_max_tokens_by_model_args",

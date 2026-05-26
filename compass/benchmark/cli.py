@@ -7,6 +7,8 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import NoReturn, TypeVar
 
 T = TypeVar("T")
+_LOCAL_MODEL_PREFIXES = ("llama", "mistral", "phi", "neural-chat", "dolphin")
+_CLOUD_MODEL_PREFIXES = ("gemini", "gpt", "claude", "o4")
 
 
 def log_and_exit(
@@ -147,3 +149,75 @@ def log_token_budget_policy(
         "Token budget policy: mixed budgets enabled: %s",
         dict(budgets),
     )
+
+
+def classify_generation_source(models: Sequence[str]) -> str:
+    """Return a user-facing source label for the requested generation models."""
+    has_local = any(not model.startswith(_CLOUD_MODEL_PREFIXES) for model in models)
+    has_cloud = any(model.startswith(_CLOUD_MODEL_PREFIXES) for model in models)
+    if has_local and not has_cloud:
+        return "LOCAL (Ollama)"
+    if has_cloud and not has_local:
+        return "CLOUD (OpenAI/Anthropic/Google)"
+    return "MIXED (Ollama + Cloud)"
+
+
+def classify_judge_source(judge_model: str) -> str:
+    """Return a user-facing source label for the benchmark judge model."""
+    if judge_model.startswith(_LOCAL_MODEL_PREFIXES):
+        return "LOCAL (free)"
+    if judge_model.startswith("gemini"):
+        return "CLOUD (free tier)"
+    return "CLOUD (paid)"
+
+
+def estimate_judge_cost_note(
+    total_evaluations: int,
+    judge_model: str,
+) -> str:
+    """Return the benchmark's rough judge-cost presentation note."""
+    if judge_model.startswith(_LOCAL_MODEL_PREFIXES):
+        return "FULLY FREE (local generation + local judge)"
+    judge_cost = total_evaluations * 0.001
+    return f"${judge_cost:.2f} (judge only, generation is free)"
+
+
+def log_benchmark_run_summary(
+    logger: logging.Logger,
+    *,
+    benchmark_title: str,
+    preset_name: str,
+    models: Sequence[str],
+    judge_model: str,
+    rubric_names: Sequence[str],
+    samples: int,
+    output_dir: str,
+    token_budget_defaults: Mapping[str, int],
+    legacy_token_cap_threshold: int,
+    total_evaluations: int,
+) -> None:
+    """Log a shared benchmark run banner and resolved high-level config."""
+    logger.info("=" * 100)
+    logger.info("%s", benchmark_title)
+    logger.info("=" * 100)
+    logger.info("Run preset: %s", preset_name)
+    logger.info(
+        "Generation: %s (%s)",
+        ", ".join(models),
+        classify_generation_source(models),
+    )
+    if any(model.startswith("gemini") for model in models):
+        logger.info("  (Gemini free tier - may be slow due to rate limits)")
+    logger.info(
+        "Judge: %s (%s)",
+        judge_model,
+        classify_judge_source(judge_model),
+    )
+    logger.info("Rubrics: %s", ", ".join(rubric_names))
+    logger.info("Samples per prompt: %d", samples)
+    logger.info("Output directory: %s", output_dir)
+    logger.info("Default token budget config: %s", dict(token_budget_defaults))
+    logger.info("Legacy token-cap threshold: %d", legacy_token_cap_threshold)
+    logger.info("Total evaluations: %d", total_evaluations)
+    logger.info("Cost: %s", estimate_judge_cost_note(total_evaluations, judge_model))
+    logger.info("")

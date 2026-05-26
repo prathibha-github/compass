@@ -4,7 +4,11 @@ import logging
 import unittest
 
 from compass.benchmark.cli import (
+    classify_generation_source,
+    classify_judge_source,
+    estimate_judge_cost_note,
     log_and_exit,
+    log_benchmark_run_summary,
     log_errors_and_exit,
     log_token_budget_policy,
     parse_max_tokens_by_model_args,
@@ -172,6 +176,60 @@ class BenchmarkCliTests(unittest.TestCase):
                 "WARNING:compass.benchmark.cli.tests:Token budget policy: mixed budgets enabled: {'llama3.1': 150, 'gemini-2.5-flash': 2000}"
             ],
         )
+
+    def test_classify_generation_source(self):
+        self.assertEqual(classify_generation_source(["llama3.1"]), "LOCAL (Ollama)")
+        self.assertEqual(
+            classify_generation_source(["gpt-4o-mini", "claude-haiku-4-5"]),
+            "CLOUD (OpenAI/Anthropic/Google)",
+        )
+        self.assertEqual(
+            classify_generation_source(["llama3.1", "gpt-4o-mini"]),
+            "MIXED (Ollama + Cloud)",
+        )
+
+    def test_classify_judge_source(self):
+        self.assertEqual(classify_judge_source("llama3.1"), "LOCAL (free)")
+        self.assertEqual(classify_judge_source("gemini-2.5-flash"), "CLOUD (free tier)")
+        self.assertEqual(classify_judge_source("gpt-4o-mini"), "CLOUD (paid)")
+
+    def test_estimate_judge_cost_note(self):
+        self.assertEqual(
+            estimate_judge_cost_note(25, "llama3.1"),
+            "FULLY FREE (local generation + local judge)",
+        )
+        self.assertEqual(
+            estimate_judge_cost_note(25, "gpt-4o-mini"),
+            "$0.03 (judge only, generation is free)",
+        )
+
+    def test_log_benchmark_run_summary_logs_shared_banner(self):
+        with self.assertLogs(self.logger, level="INFO") as logs:
+            log_benchmark_run_summary(
+                self.logger,
+                benchmark_title="TEST BENCHMARK",
+                preset_name="default",
+                models=("llama3.1", "gemini-2.5-flash"),
+                judge_model="gemini-2.5-flash",
+                rubric_names=("clarity", "truthfulness"),
+                samples=3,
+                output_dir="results/test",
+                token_budget_defaults={"default": 150, "gemini": 2000},
+                legacy_token_cap_threshold=301,
+                total_evaluations=6,
+            )
+
+        rendered_logs = "\n".join(logs.output)
+        self.assertIn("TEST BENCHMARK", rendered_logs)
+        self.assertIn(
+            "Generation: llama3.1, gemini-2.5-flash (MIXED (Ollama + Cloud))",
+            rendered_logs,
+        )
+        self.assertIn(
+            "Judge: gemini-2.5-flash (CLOUD (free tier))",
+            rendered_logs,
+        )
+        self.assertIn("Cost: $0.01 (judge only, generation is free)", rendered_logs)
 
 
 if __name__ == "__main__":
