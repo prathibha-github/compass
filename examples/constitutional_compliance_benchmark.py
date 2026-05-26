@@ -103,6 +103,7 @@ def generate_completions(
         max_tokens_by_model=max_tokens_by_model,
         allow_mixed_token_budgets=allow_mixed_token_budgets,
     )
+    run_config = runner.validate_run_config(run_config)
     return runner.generate(run_config)
 
 
@@ -118,12 +119,14 @@ def evaluate_completions(
         output_dir=str(output_dir),
         legacy_token_cap_threshold=legacy_token_cap_threshold,
     )
+    run_config = BENCHMARK_RUNNER.validate_run_config(run_config)
     return BENCHMARK_RUNNER.evaluate(generations_path, run_config)
 
 
 def rank_models(evaluations_path: Path, output_dir: Path) -> None:
     """Backward-compatible wrapper around shared pairwise ranking."""
     run_config = BENCHMARK_SPEC.make_run_config(output_dir=str(output_dir))
+    run_config = BENCHMARK_RUNNER.validate_run_config(run_config)
     BENCHMARK_RUNNER.rank(evaluations_path, run_config)
 
 

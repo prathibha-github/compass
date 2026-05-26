@@ -191,7 +191,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
             },
         )
         runner = SharedBenchmarkRunner(spec)
-        run_config = spec.make_run_config()
+        run_config = runner.validate_run_config(spec.make_run_config())
         with patch("compass.benchmark.runner.analyze_results") as analyze:
             self.assertEqual(runner.analyze(Path("evaluations.jsonl"), run_config), {})
         analyze.assert_not_called()
@@ -217,7 +217,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
             },
         )
         runner = SharedBenchmarkRunner(spec)
-        run_config = spec.make_run_config()
+        run_config = runner.validate_run_config(spec.make_run_config())
         with patch("compass.benchmark.runner.rank_models") as rank:
             runner.rank(Path("evaluations.jsonl"), run_config)
         rank.assert_not_called()
@@ -245,7 +245,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
             },
         )
         runner = SharedBenchmarkRunner(spec)
-        run_config = spec.make_run_config()
+        run_config = runner.validate_run_config(spec.make_run_config())
         with patch("compass.benchmark.runner.analyze_results", return_value={}) as analyze:
             runner.analyze(Path("evaluations.jsonl"), run_config)
         with patch("compass.benchmark.runner.rank_models") as rank:
@@ -266,7 +266,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
             rubrics_by_name={"clarity": RubricLibrary.clarity},
         )
         runner = SharedBenchmarkRunner(spec)
-        run_config = spec.make_run_config()
+        run_config = runner.validate_run_config(spec.make_run_config())
         evaluations_path = Path("evaluations.jsonl")
         with patch(
             "compass.benchmark.runner.evaluate_completions",
@@ -297,7 +297,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
             rubrics_by_name={"clarity": RubricLibrary.clarity},
         )
         runner = SharedBenchmarkRunner(spec)
-        run_config = spec.make_run_config()
+        run_config = runner.validate_run_config(spec.make_run_config())
         with patch(
             "compass.benchmark.runner.evaluate_completions",
             return_value=Path("evaluations.jsonl"),
@@ -313,7 +313,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
                 ):
                     runner.evaluate(Path("generations.jsonl"), run_config)
 
-    def test_shared_runner_validate_report_validates_run_config_once(self):
+    def test_shared_runner_phase_methods_require_validated_run_config(self):
         spec = build_benchmark_spec(
             name="toy_validate_once",
             version="0.1",
@@ -326,18 +326,11 @@ class BenchmarkRegistryTests(unittest.TestCase):
         )
         runner = SharedBenchmarkRunner(spec)
         run_config = spec.make_run_config()
-        with patch.object(
-            runner,
-            "validate_run_config",
-            wraps=runner.validate_run_config,
-        ) as validate_run_config:
-            with patch(
-                "compass.benchmark.runner.validate_benchmark_report",
-                return_value=[],
-            ):
-                runner.validate_report(Path("evaluations.jsonl"), run_config)
-
-        validate_run_config.assert_called_once_with(run_config)
+        with self.assertRaisesRegex(
+            ValueError,
+            "must be validated with runner.validate_run_config",
+        ):
+            runner.validate_report(Path("evaluations.jsonl"), run_config)
 
     def test_shared_runner_evaluate_applies_custom_legacy_token_cap_threshold(self):
         spec = build_benchmark_spec(
@@ -389,6 +382,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
                 output_dir=str(output_dir),
                 legacy_token_cap_threshold=301,
             )
+            run_config = runner.validate_run_config(run_config)
             with patch(
                 "compass.benchmark.runner.LLMJudge",
                 side_effect=_FakeJudge,

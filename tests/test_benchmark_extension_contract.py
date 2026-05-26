@@ -102,7 +102,9 @@ class BenchmarkExtensionContractTests(unittest.TestCase):
 
             with tempfile.TemporaryDirectory() as tmpdir:
                 output_dir = pathlib.Path(tmpdir)
-                run_config = spec.make_run_config(output_dir=str(output_dir))
+                run_config = runner.validate_run_config(
+                    spec.make_run_config(output_dir=str(output_dir))
+                )
                 with patch(
                     "compass.benchmark.runner.OllamaClient",
                     side_effect=_make_client,
