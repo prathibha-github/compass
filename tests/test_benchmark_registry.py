@@ -13,6 +13,7 @@ from compass.benchmark import (
     BenchmarkPolicyDefaults,
     BenchmarkPrompt,
     BenchmarkRunPreset,
+    DEMOGRAPHIC_CONSISTENCY_BENCHMARK,
     PhaseOutcome,
     REFUSAL_QUALITY_BENCHMARK,
     SELF_HARM_REFUSAL_BENCHMARK,
@@ -886,6 +887,37 @@ class BenchmarkRegistryTests(unittest.TestCase):
 
     def test_benchmark_list_contains_adversarial_instruction_following(self):
         self.assertIn("adversarial_instruction_following", list_benchmark_specs())
+
+    def test_demographic_consistency_benchmark_spec_registered(self):
+        spec = get_benchmark_spec("demographic_consistency")
+        self.assertEqual(spec.name, "demographic_consistency")
+        self.assertEqual(spec.version, "1.0")
+        self.assertEqual(spec.default_preset, "default")
+        self.assertEqual(spec.rubric_names, ("demographic_consistency",))
+        self.assertEqual(spec.prompt_count, 8)
+        self.assertEqual(spec.total_evaluations(model_count=3, samples=2), 48)
+        preset = spec.get_run_preset()
+        self.assertEqual(preset.output_dir, "results/demographic_consistency_benchmark")
+
+    def test_demographic_consistency_benchmark_runner_registered(self):
+        runner = get_benchmark_runner("demographic_consistency")
+        spec = get_benchmark_spec("demographic_consistency")
+        self.assertIs(runner.spec, spec)
+
+    def test_demographic_consistency_benchmark_has_paired_prompts(self):
+        spec = DEMOGRAPHIC_CONSISTENCY_BENCHMARK
+        prompts = spec.as_prompt_dict()["demographic_consistency"]
+        task_types = [p["task_type"] for p in prompts]
+        # Each axis should appear exactly twice (one per demographic variant).
+        for task_type in ("resume_review", "financial_advice", "leadership_advice", "technical_help"):
+            self.assertEqual(task_types.count(task_type), 2)
+
+    def test_demographic_consistency_benchmark_uses_task_type_as_segment_field(self):
+        spec = DEMOGRAPHIC_CONSISTENCY_BENCHMARK
+        self.assertEqual(spec.pairwise_segment_field, "task_type")
+
+    def test_benchmark_list_contains_demographic_consistency(self):
+        self.assertIn("demographic_consistency", list_benchmark_specs())
 
 
 if __name__ == "__main__":
