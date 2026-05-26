@@ -355,6 +355,42 @@ class TestOpenAIResponsesClientBasics(unittest.TestCase):
         ):
             client.complete("prompt", temperature=0.2)
 
+    def test_missing_usage_fails_without_explicit_estimation_opt_in(self):
+        client, openai_mock = self._make_client("gpt-5-mini")
+
+        resp_mock = MagicMock()
+        resp_mock.output_text = "hello"
+        resp_mock.usage = None
+        client.client.responses.create.return_value = resp_mock
+        openai_mock.RateLimitError = type("RateLimitError", (Exception,), {})
+        openai_mock.APIError = type("APIError", (Exception,), {})
+
+        with patch("time.sleep"):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "did not return usage metadata",
+            ):
+                client.complete("prompt", max_tokens=20)
+
+    def test_missing_usage_can_be_estimated_when_enabled(self):
+        client, openai_mock = self._make_client(
+            "gpt-5-mini",
+            allow_estimated_usage=True,
+        )
+
+        resp_mock = MagicMock()
+        resp_mock.output_text = "hello world"
+        resp_mock.usage = None
+        client.client.responses.create.return_value = resp_mock
+        openai_mock.RateLimitError = type("RateLimitError", (Exception,), {})
+        openai_mock.APIError = type("APIError", (Exception,), {})
+
+        with patch("time.sleep"):
+            response = client.complete("prompt", max_tokens=20)
+
+        self.assertEqual(response.tokens_used, {"input": 0, "output": 2})
+        self.assertEqual(client.total_tokens, {"input": 0, "output": 2})
+
 
 class TestGoogleAIClientFeatures(unittest.TestCase):
 

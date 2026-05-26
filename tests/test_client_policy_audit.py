@@ -26,6 +26,7 @@ class ClientPolicyAuditTests(unittest.TestCase):
         }
         self.assertIn(("OpenAIClient", "required_temperature"), entries)
         self.assertIn(("OpenAIResponsesClient", "output_token_multiplier"), entries)
+        self.assertIn(("OpenAIResponsesClient", "estimated_usage_fallback"), entries)
         self.assertIn(("OpenAIResponsesClient", "unsupported_temperature"), entries)
         self.assertIn(("GoogleAIClient", "max_request_cap"), entries)
         self.assertIn(("OllamaClient", "token_estimation"), entries)
@@ -40,6 +41,9 @@ class ClientPolicyAuditTests(unittest.TestCase):
         )
         self.assertTrue(
             entries[("OpenAIResponsesClient", "output_token_multiplier")].explicit_to_caller
+        )
+        self.assertTrue(
+            entries[("OpenAIResponsesClient", "estimated_usage_fallback")].explicit_to_caller
         )
         self.assertTrue(
             entries[("OpenAIResponsesClient", "unsupported_temperature")].explicit_to_caller

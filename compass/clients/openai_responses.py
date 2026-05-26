@@ -51,6 +51,7 @@ class OpenAIResponsesClient(CompletionClient):
         api_key: Optional[str] = None,
         request_interval: float = 0.0,
         max_output_token_multiplier: int = 1,
+        allow_estimated_usage: bool = False,
     ):
         """
         Args:
@@ -59,6 +60,8 @@ class OpenAIResponsesClient(CompletionClient):
             request_interval: Minimum seconds between API calls (0 = no throttle).
             max_output_token_multiplier: Explicit multiplier applied to requested
                 ``max_tokens`` before calling the Responses API.
+            allow_estimated_usage: Whether to estimate token usage when the
+                Responses API omits usage metadata.
         """
         try:
             import openai as _openai
@@ -78,6 +81,7 @@ class OpenAIResponsesClient(CompletionClient):
         if max_output_token_multiplier < 1:
             raise ValueError("max_output_token_multiplier must be at least 1")
         self._max_output_token_multiplier = max_output_token_multiplier
+        self._allow_estimated_usage = allow_estimated_usage
 
     @property
     def total_tokens(self) -> dict:
@@ -119,7 +123,8 @@ class OpenAIResponsesClient(CompletionClient):
 
         The configured ``max_output_token_multiplier`` is applied to ``max_tokens``
         before making the request. Non-zero temperatures are rejected because
-        the Responses API path does not forward temperature.
+        the Responses API path does not forward temperature. Usage metadata is
+        required unless the caller explicitly allows estimated usage.
 
         Args:
             prompt: Input prompt
@@ -182,13 +187,20 @@ class OpenAIResponsesClient(CompletionClient):
                     time.sleep(min(4 * (2 ** attempt), 30))
                     continue
 
+                if not usage:
+                    if not self._allow_estimated_usage:
+                        raise RuntimeError(
+                            "Responses API did not return usage metadata. "
+                            "Re-run with allow_estimated_usage=True to accept "
+                            "estimated token accounting."
+                        )
+                    logger.warning(
+                        "Responses API omitted usage metadata; estimating token counts."
+                    )
+                    output_tokens = len(completion) // 4
+
                 self._input_tokens += input_tokens
                 self._output_tokens += output_tokens
-
-                # Fallback token estimation when usage is unavailable
-                if not usage:
-                    output_tokens = len(completion) // 4
-                    self._output_tokens += output_tokens
 
                 return CompletionResponse(
                     completion=completion,
