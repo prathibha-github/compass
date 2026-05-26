@@ -169,7 +169,10 @@ def setup_output_dir(output_dir: str) -> Path:
 
 def _create_client(model: str):
     if model.startswith("gemini"):
-        return GoogleAIClient(model=model)
+        return GoogleAIClient(
+            model=model,
+            allow_estimated_usage=True,
+        )
     if model.startswith("gpt") or model.startswith("o4"):
         required_temperature = None
         if model.startswith("gpt-5") or model.startswith("o4"):

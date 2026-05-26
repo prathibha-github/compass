@@ -464,6 +464,33 @@ class TestGoogleAIClientFeatures(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Reached max_requests"):
             client.complete("prompt")
 
+    def test_google_ai_client_requires_usage_metadata_by_default(self):
+        client, _, _ = self._make_client()
+        response_mock = MagicMock()
+        response_mock.text = "answer words"
+        response_mock.usage_metadata = None
+        client.client.models.generate_content.return_value = response_mock
+
+        with patch("time.sleep"):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "did not return usage metadata",
+            ):
+                client.complete("prompt")
+
+    def test_google_ai_client_can_estimate_usage_when_enabled(self):
+        client, _, _ = self._make_client(allow_estimated_usage=True)
+        response_mock = MagicMock()
+        response_mock.text = "answer words"
+        response_mock.usage_metadata = None
+        client.client.models.generate_content.return_value = response_mock
+
+        with patch("time.sleep"):
+            response = client.complete("prompt words")
+
+        self.assertEqual(response.tokens_used, {"input": 2, "output": 2})
+        self.assertEqual(client.total_tokens, {"input": 2, "output": 2})
+
     def test_uses_response_text_not_thought_signature(self):
         """Client must use response.text, not attempt to decode thought_signature bytes.
 

@@ -33,6 +33,7 @@ class GoogleAIClient(CompletionClient):
         api_key: Optional[str] = None,
         request_interval: float = 0.1,
         disable_safety_filters: bool = False,
+        allow_estimated_usage: bool = False,
     ):
         """
         Initialize Google AI (Gemini) client.
@@ -41,6 +42,9 @@ class GoogleAIClient(CompletionClient):
             model: Model name (e.g., 'gemini-1.5-flash', 'gemini-1.5-pro')
             api_key: Google API key. If None, reads from GOOGLE_API_KEY env var.
             request_interval: Minimum seconds between requests
+            disable_safety_filters: Whether to disable Gemini safety settings.
+            allow_estimated_usage: Whether to estimate token usage when Gemini
+                omits usage metadata.
 
         Raises:
             ImportError: If google-genai package is not installed
@@ -69,6 +73,7 @@ class GoogleAIClient(CompletionClient):
         self._last_call_at: float = 0.0
         self._request_count = 0
         self._disable_safety_filters = disable_safety_filters
+        self._allow_estimated_usage = allow_estimated_usage
 
         logger.info(f"Using {model} (google-genai)")
 
@@ -156,14 +161,20 @@ class GoogleAIClient(CompletionClient):
 
             completion = response.text if response.text else ""
 
-            # Use actual token counts from usage_metadata when available
             usage = getattr(response, "usage_metadata", None)
             if usage is not None:
                 input_tokens = getattr(usage, "prompt_token_count", None) or 0
                 output_tokens = getattr(usage, "candidates_token_count", None) or 0
             else:
-                # Fall back to word-count estimate if SDK doesn't return usage
-                logger.debug("usage_metadata unavailable; estimating token counts from word count")
+                if not self._allow_estimated_usage:
+                    raise RuntimeError(
+                        "Gemini response did not return usage metadata. "
+                        "Re-run with allow_estimated_usage=True to accept "
+                        "estimated token accounting."
+                    )
+                logger.warning(
+                    "Gemini response omitted usage metadata; estimating token counts."
+                )
                 input_tokens = len(full_prompt.split())
                 output_tokens = len(completion.split())
 

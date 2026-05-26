@@ -24,7 +24,12 @@ class BenchmarkRunnerClientRoutingTests(unittest.TestCase):
             with self.subTest(model=model):
                 with patch.object(runner, client_name, return_value=sentinel) as client_ctor:
                     self.assertIs(runner._create_client(model), sentinel)
-                if client_name == "OpenAIClient" and model in {"gpt-5-mini", "o4-mini"}:
+                if client_name == "GoogleAIClient":
+                    client_ctor.assert_called_once_with(
+                        model=model,
+                        allow_estimated_usage=True,
+                    )
+                elif client_name == "OpenAIClient" and model in {"gpt-5-mini", "o4-mini"}:
                     client_ctor.assert_called_once_with(
                         model=model,
                         required_temperature=1.0,
