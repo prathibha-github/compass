@@ -54,7 +54,11 @@ class ClientConformanceTests(unittest.TestCase):
         with patch.dict("sys.modules", {"openai": openai_mock}):
             from compass.clients.openai_responses import OpenAIResponsesClient
 
-            client = OpenAIResponsesClient(model="gpt-5-mini", api_key="fake")
+            client = OpenAIResponsesClient(
+                model="gpt-5-mini",
+                api_key="fake",
+                max_output_token_multiplier=10,
+            )
 
         resp_mock = MagicMock()
         resp_mock.output_text = "answer"

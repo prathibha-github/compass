@@ -19,15 +19,24 @@ class ClientPolicyAuditTests(unittest.TestCase):
             },
         )
 
-    def test_inventory_includes_known_hidden_policy_cases(self):
+    def test_inventory_includes_known_policy_cases(self):
         entries = {
             (entry.adapter, entry.category): entry
             for entry in list_client_policy_translations()
         }
         self.assertIn(("OpenAIClient", "temperature_override"), entries)
-        self.assertIn(("OpenAIResponsesClient", "max_token_expansion"), entries)
+        self.assertIn(("OpenAIResponsesClient", "output_token_multiplier"), entries)
         self.assertIn(("GoogleAIClient", "max_request_cap"), entries)
         self.assertIn(("OllamaClient", "token_estimation"), entries)
+
+    def test_explicit_entries_are_marked_explicit(self):
+        entries = {
+            (entry.adapter, entry.category): entry
+            for entry in list_client_policy_translations()
+        }
+        self.assertTrue(
+            entries[("OpenAIResponsesClient", "output_token_multiplier")].explicit_to_caller
+        )
 
     def test_inventory_entries_are_unique_and_named(self):
         seen = set()

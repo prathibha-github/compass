@@ -32,11 +32,15 @@ def _parse_reset_seconds(s: str) -> Optional[float]:
 class OpenAIResponsesClient(CompletionClient):
     """OpenAI Responses API client for GPT-5 and compatible models.
 
-    The Responses API does not support logprobs. For gpt-5 models the actual
-    max_output_tokens is multiplied by 10 to reserve budget for reasoning tokens.
+    The Responses API does not support logprobs. Callers may opt into a larger
+    output-token budget with ``max_output_token_multiplier`` when a model needs
+    extra reasoning headroom.
 
     Usage:
-        client = OpenAIResponsesClient(model="gpt-5-mini")
+        client = OpenAIResponsesClient(
+            model="gpt-5-mini",
+            max_output_token_multiplier=10,
+        )
         response = client.complete("What is 2+2?")
         print(response.completion)
     """
@@ -46,12 +50,15 @@ class OpenAIResponsesClient(CompletionClient):
         model: str,
         api_key: Optional[str] = None,
         request_interval: float = 0.0,
+        max_output_token_multiplier: int = 1,
     ):
         """
         Args:
             model: Model name (e.g., 'gpt-5-mini', 'gpt-5')
             api_key: OpenAI API key. If None, reads from OPENAI_API_KEY env var.
             request_interval: Minimum seconds between API calls (0 = no throttle).
+            max_output_token_multiplier: Explicit multiplier applied to requested
+                ``max_tokens`` before calling the Responses API.
         """
         try:
             import openai as _openai
@@ -68,6 +75,9 @@ class OpenAIResponsesClient(CompletionClient):
         self._output_tokens = 0
         self._request_interval = request_interval
         self._last_call_at: float = 0.0
+        if max_output_token_multiplier < 1:
+            raise ValueError("max_output_token_multiplier must be at least 1")
+        self._max_output_token_multiplier = max_output_token_multiplier
 
     @property
     def total_tokens(self) -> dict:
@@ -107,13 +117,14 @@ class OpenAIResponsesClient(CompletionClient):
         """
         Generate completion via OpenAI Responses API with retry/backoff on 429.
 
-        For gpt-5 models, max_tokens is multiplied by 10 to accommodate reasoning tokens.
-        The temperature parameter is accepted for interface compatibility but not forwarded
-        to the Responses API.
+        The configured ``max_output_token_multiplier`` is applied to ``max_tokens``
+        before making the request. The temperature parameter is accepted for
+        interface compatibility but not forwarded to the Responses API.
 
         Args:
             prompt: Input prompt
-            max_tokens: Maximum output tokens (multiplied by 10 for gpt-5 reasoning budget)
+            max_tokens: Maximum output tokens before applying the configured
+                output-token multiplier
             temperature: Accepted for interface compatibility; not forwarded.
             system: Optional system/instructions prompt
 
@@ -129,8 +140,7 @@ class OpenAIResponsesClient(CompletionClient):
             )
         del top_logprobs
 
-        # gpt-5 models need a larger token budget for reasoning + output
-        actual_max_tokens = max_tokens * 10 if self.model.startswith("gpt-5") else max_tokens
+        actual_max_tokens = max_tokens * self._max_output_token_multiplier
         instructions = system or "You are a helpful assistant."
 
         max_attempts = 10
