@@ -326,6 +326,35 @@ class TestOpenAIResponsesClientBasics(unittest.TestCase):
         ):
             self._make_client(max_output_token_multiplier=0)
 
+    def test_system_prompt_is_omitted_when_not_provided(self):
+        client, openai_mock = self._make_client("gpt-5-mini")
+        captured = {}
+
+        resp_mock = MagicMock()
+        resp_mock.output_text = "hello"
+        resp_mock.usage = MagicMock(input_tokens=10, output_tokens=5)
+
+        def fake_create(**kwargs):
+            captured.update(kwargs)
+            return resp_mock
+
+        client.client.responses.create.side_effect = fake_create
+        openai_mock.RateLimitError = type("RateLimitError", (Exception,), {})
+        openai_mock.APIError = type("APIError", (Exception,), {})
+
+        with patch("time.sleep"):
+            client.complete("prompt", max_tokens=20)
+
+        self.assertNotIn("instructions", captured)
+
+    def test_nonzero_temperature_is_rejected(self):
+        client, _ = self._make_client("gpt-5-mini")
+        with self.assertRaisesRegex(
+            ValueError,
+            "does not support temperature overrides",
+        ):
+            client.complete("prompt", temperature=0.2)
+
 
 class TestGoogleAIClientFeatures(unittest.TestCase):
 

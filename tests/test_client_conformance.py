@@ -71,7 +71,7 @@ class ClientConformanceTests(unittest.TestCase):
             response = client.complete(
                 "prompt",
                 max_tokens=12,
-                temperature=0.2,
+                temperature=0.0,
                 system="system prompt",
             )
 
