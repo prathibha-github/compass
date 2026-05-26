@@ -19,6 +19,18 @@ def log_and_exit(
     raise SystemExit(exit_code)
 
 
+def log_errors_and_exit(
+    logger: logging.Logger,
+    messages: list[str],
+    *,
+    exit_code: int,
+) -> NoReturn:
+    """Log a sequence of user-facing benchmark errors and terminate."""
+    for message in messages:
+        logger.error(message)
+    raise SystemExit(exit_code)
+
+
 def require_or_exit(
     condition: bool,
     logger: logging.Logger,

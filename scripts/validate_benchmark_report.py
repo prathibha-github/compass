@@ -2,10 +2,14 @@
 """Validate benchmark evaluations for required quality diagnostics."""
 
 import argparse
-import sys
+import logging
 from pathlib import Path
 
+from compass.benchmark import log_errors_and_exit, run_or_exit
 from compass.benchmark.validation import validate_benchmark_report
+
+logging.basicConfig(level=logging.ERROR, format="%(levelname)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -23,15 +27,17 @@ def create_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = create_parser()
     args = parser.parse_args()
-    try:
-        errors = validate_benchmark_report(args.evaluations_path)
-    except ValueError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    errors = run_or_exit(
+        lambda: validate_benchmark_report(args.evaluations_path),
+        logger,
+        exit_code=1,
+    )
     if errors:
-        for error in errors:
-            print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        log_errors_and_exit(
+            logger,
+            [str(error) for error in errors],
+            exit_code=1,
+        )
     print(f"OK: benchmark report validation passed for {args.evaluations_path}")
     return 0
 
