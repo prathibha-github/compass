@@ -403,6 +403,97 @@ class BenchmarkRegistryTests(unittest.TestCase):
         self.assertTrue(saved_rows[0]["generation_token_cap_inferred_legacy"])
         self.assertTrue(saved_rows[0]["generation_quality_flagged"])
 
+    def test_shared_runner_generate_writes_run_policy_sidecar(self):
+        spec = build_benchmark_spec(
+            name="toy_policy_artifact",
+            version="0.1",
+            prompts_by_rubric={
+                "clarity": [
+                    {"id": "p1", "text": "Explain X", "task_type": "explanation"},
+                ]
+            },
+            rubrics_by_name={"clarity": RubricLibrary.clarity},
+        )
+        runner = SharedBenchmarkRunner(spec)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            run_config = runner.validate_run_config(
+                spec.make_run_config(
+                    output_dir=str(output_dir),
+                    models=("llama3.1", "mistral"),
+                    max_tokens_by_model={"llama3.1": 321, "mistral": 222},
+                    allow_mixed_token_budgets=True,
+                    skip_ranking=True,
+                )
+            )
+            generated_path = output_dir / "generations.jsonl"
+            with patch(
+                "compass.benchmark.runner.generate_completions",
+                return_value=generated_path,
+            ):
+                result = runner.generate(run_config)
+
+            policy_path = output_dir / "benchmark_run_policy.json"
+            policy = json.loads(policy_path.read_text())
+
+        self.assertEqual(result, generated_path)
+        self.assertEqual(policy["benchmark_name"], spec.name)
+        self.assertEqual(policy["benchmark_version"], spec.version)
+        self.assertEqual(policy["preset_name"], run_config.preset_name)
+        self.assertEqual(policy["quality_filter_mode"], run_config.quality_filter_mode)
+        self.assertEqual(policy["analysis_lanes"], list(run_config.analysis_lanes))
+        self.assertEqual(
+            policy["effective_analysis_lanes"],
+            list(run_config.effective_analysis_lanes),
+        )
+        self.assertEqual(
+            policy["effective_max_tokens_by_model"],
+            {
+                "llama3.1": 321,
+                "mistral": 222,
+            },
+        )
+
+    def test_shared_runner_evaluate_writes_run_policy_sidecar(self):
+        spec = build_benchmark_spec(
+            name="toy_policy_eval",
+            version="0.1",
+            prompts_by_rubric={
+                "clarity": [
+                    {"id": "p1", "text": "Explain X", "task_type": "explanation"},
+                ]
+            },
+            rubrics_by_name={"clarity": RubricLibrary.clarity},
+        )
+        runner = SharedBenchmarkRunner(spec)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            run_config = runner.validate_run_config(
+                spec.make_run_config(output_dir=str(output_dir))
+            )
+            evaluations_path = output_dir / "evaluations.jsonl"
+            with patch(
+                "compass.benchmark.runner.evaluate_completions",
+                return_value=evaluations_path,
+            ), patch.object(
+                runner,
+                "_validate_report_artifacts",
+                return_value=[],
+            ):
+                result = runner.evaluate(output_dir / "generations.jsonl", run_config)
+
+            policy_path = output_dir / "benchmark_run_policy.json"
+            policy = json.loads(policy_path.read_text())
+
+        self.assertEqual(result, evaluations_path)
+        self.assertEqual(policy["judge_model"], run_config.judge_model)
+        self.assertEqual(
+            policy["legacy_token_cap_threshold"],
+            run_config.legacy_token_cap_threshold,
+        )
+
     def test_benchmark_list_contains_constitutional(self):
         self.assertIn("constitutional_compliance", list_benchmark_specs())
 
