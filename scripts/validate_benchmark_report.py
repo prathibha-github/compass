@@ -23,7 +23,11 @@ def create_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = create_parser()
     args = parser.parse_args()
-    errors = validate_benchmark_report(args.evaluations_path)
+    try:
+        errors = validate_benchmark_report(args.evaluations_path)
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
     if errors:
         for error in errors:
             print(f"ERROR: {error}", file=sys.stderr)
