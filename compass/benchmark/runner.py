@@ -330,7 +330,6 @@ def _count_generation_rows(path: Path) -> int:
     return len(load_generation_records(path, strict=True))
 
 
-
 def test_model_connection(model: str) -> bool:
     """Run a lightweight model readiness probe without spending generation budget."""
     try:
