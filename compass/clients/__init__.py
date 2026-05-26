@@ -1,6 +1,10 @@
 """Client abstractions for compass."""
 from compass.clients.base import CompletionClient, CompletionResponse
 from compass.clients.ollama import OllamaClient
+from compass.clients.policy_audit import (
+    ClientPolicyTranslation,
+    list_client_policy_translations,
+)
 from compass.clients.pricing import ModelPricing, get_pricing
 
 
@@ -49,8 +53,10 @@ except ImportError as exc:
 __all__ = [
     "CompletionClient",
     "CompletionResponse",
+    "ClientPolicyTranslation",
     "ModelPricing",
     "get_pricing",
+    "list_client_policy_translations",
     "OllamaClient",
     "OpenAIClient",
     "OpenAIResponsesClient",
