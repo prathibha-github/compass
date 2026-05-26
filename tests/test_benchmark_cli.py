@@ -6,7 +6,11 @@ import unittest
 from compass.benchmark.cli import (
     log_and_exit,
     log_errors_and_exit,
+    log_token_budget_policy,
+    parse_max_tokens_by_model_args,
+    require_available_models,
     require_or_exit,
+    resolve_token_budget_overrides,
     run_or_exit,
 )
 
@@ -67,6 +71,107 @@ class BenchmarkCliTests(unittest.TestCase):
 
         self.assertEqual(exc.exception.code, 1)
         self.assertEqual(logs.output, ["ERROR:compass.benchmark.cli.tests:bad row"])
+
+    def test_parse_max_tokens_by_model_args(self):
+        budgets = parse_max_tokens_by_model_args(
+            ["claude-haiku-4-5=1000", "gpt-5.4-mini=1000"]
+        )
+        self.assertEqual(
+            budgets,
+            {
+                "claude-haiku-4-5": 1000,
+                "gpt-5.4-mini": 1000,
+            },
+        )
+
+    def test_parse_max_tokens_by_model_args_rejects_invalid_entries(self):
+        with self.assertRaisesRegex(ValueError, "expected MODEL=TOKENS"):
+            parse_max_tokens_by_model_args(["bad-entry"])
+        with self.assertRaisesRegex(ValueError, "must be > 0"):
+            parse_max_tokens_by_model_args(["llama3.1=0"])
+
+    def test_resolve_token_budget_overrides_returns_uniform_map(self):
+        budgets = resolve_token_budget_overrides(
+            ["llama3.1", "mistral"],
+            256,
+            None,
+            self.logger,
+            exit_code=2,
+        )
+        self.assertEqual(budgets, {"llama3.1": 256, "mistral": 256})
+
+    def test_resolve_token_budget_overrides_returns_custom_map(self):
+        budgets = resolve_token_budget_overrides(
+            ["llama3.1"],
+            None,
+            ["llama3.1=512"],
+            self.logger,
+            exit_code=2,
+        )
+        self.assertEqual(budgets, {"llama3.1": 512})
+
+    def test_resolve_token_budget_overrides_exits_on_invalid_uniform_budget(self):
+        with self.assertLogs(self.logger, level="ERROR") as logs:
+            with self.assertRaises(SystemExit) as exc:
+                resolve_token_budget_overrides(
+                    ["llama3.1"],
+                    0,
+                    None,
+                    self.logger,
+                    exit_code=2,
+                )
+
+        self.assertEqual(exc.exception.code, 2)
+        self.assertEqual(logs.output, ["ERROR:compass.benchmark.cli.tests:--max-tokens must be > 0"])
+
+    def test_require_available_models_filters_using_probe(self):
+        available = require_available_models(
+            ["llama3.1", "mistral"],
+            lambda model: model == "mistral",
+            self.logger,
+            exit_code=1,
+            unavailable_message="no models",
+        )
+        self.assertEqual(available, ["mistral"])
+
+    def test_require_available_models_exits_when_none_pass_probe(self):
+        with self.assertLogs(self.logger, level="ERROR") as logs:
+            with self.assertRaises(SystemExit) as exc:
+                require_available_models(
+                    ["llama3.1"],
+                    lambda model: False,
+                    self.logger,
+                    exit_code=1,
+                    unavailable_message="no models",
+                )
+
+        self.assertEqual(exc.exception.code, 1)
+        self.assertEqual(logs.output, ["ERROR:compass.benchmark.cli.tests:no models"])
+
+    def test_log_token_budget_policy_logs_uniform_budget(self):
+        with self.assertLogs(self.logger, level="INFO") as logs:
+            log_token_budget_policy(self.logger, {"llama3.1": 150, "mistral": 150})
+
+        self.assertEqual(
+            logs.output,
+            [
+                "INFO:compass.benchmark.cli.tests:Token budget policy: uniform max_tokens=150 across 2 models."
+            ],
+        )
+
+    def test_log_token_budget_policy_logs_mixed_budget_warning(self):
+        with self.assertLogs(self.logger, level="WARNING") as logs:
+            log_token_budget_policy(
+                self.logger,
+                {"llama3.1": 150, "gemini-2.5-flash": 2000},
+            )
+
+        self.assertEqual(
+            logs.output,
+            [
+                "WARNING:compass.benchmark.cli.tests:Token budget policy: mixed budgets enabled: {'llama3.1': 150, 'gemini-2.5-flash': 2000}"
+            ],
+        )
 
 
 if __name__ == "__main__":

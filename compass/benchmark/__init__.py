@@ -8,7 +8,11 @@ from compass.benchmark.config import (
 from compass.benchmark.cli import (
     log_and_exit,
     log_errors_and_exit,
+    log_token_budget_policy,
+    parse_max_tokens_by_model_args,
+    require_available_models,
     require_or_exit,
+    resolve_token_budget_overrides,
     run_or_exit,
 )
 from compass.benchmark.io import load_evaluation_records, load_generation_records
@@ -99,7 +103,11 @@ __all__ = [
     "LEGACY_TOKEN_CAP_FALLBACK",
     "log_and_exit",
     "log_errors_and_exit",
+    "log_token_budget_policy",
+    "parse_max_tokens_by_model_args",
+    "require_available_models",
     "require_or_exit",
+    "resolve_token_budget_overrides",
     "run_or_exit",
     "SharedBenchmarkRunner",
     "build_benchmark_spec",
