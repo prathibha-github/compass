@@ -61,7 +61,7 @@ def validate_stats_for_quality(stats: dict) -> List[str]:
 
 def validate_benchmark_report(evaluations_path: Path) -> List[str]:
     """Validate that a benchmark report includes required quality diagnostics."""
-    rows = load_evaluation_records(evaluations_path)
+    rows = load_evaluation_records(evaluations_path, strict=True)
     errors = validate_evaluation_records_for_quality(rows)
     if errors:
         return errors

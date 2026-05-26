@@ -5,7 +5,12 @@ import pathlib
 import tempfile
 import unittest
 
-from compass.benchmark import analyze_results, validate_benchmark_report
+from compass.benchmark import (
+    analyze_results,
+    get_benchmark_spec,
+    rank_models,
+    validate_benchmark_report,
+)
 from compass.benchmark.reporting import format_summary
 
 FIXTURES_DIR = pathlib.Path(__file__).resolve().parent / "fixtures"
@@ -31,6 +36,14 @@ class BenchmarkValidationTests(unittest.TestCase):
         errors = validate_benchmark_report(path)
         self.assertTrue(errors)
         self.assertIn("generation_visible_chars", errors[0])
+
+    def test_validate_benchmark_report_raises_for_malformed_rows(self):
+        line = '{"model":"llama3.1","rubric":"clarity","prompt_id":"p2"}'
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = pathlib.Path(tmpdir) / "evaluations.jsonl"
+            path.write_text(line + "\n")
+            with self.assertRaisesRegex(ValueError, "invalid evaluation row"):
+                validate_benchmark_report(path)
 
     def test_format_summary_matches_expected_snapshot(self):
         path = FIXTURES_DIR / "benchmark_evaluations_valid.jsonl"
@@ -63,6 +76,23 @@ class BenchmarkValidationTests(unittest.TestCase):
         self.assertIn("LegacyCap", summary)
         self.assertIn("QF Hit", summary)
 
+    def test_analyze_results_raises_for_malformed_rows(self):
+        line = '{"model":"llama3.1","rubric":"clarity","prompt_id":"p2"}'
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = pathlib.Path(tmpdir) / "evaluations.jsonl"
+            path.write_text(line + "\n")
+            with self.assertRaisesRegex(ValueError, "invalid evaluation row"):
+                analyze_results(path, pathlib.Path(tmpdir))
+
+    def test_rank_models_raises_for_malformed_rows(self):
+        spec = get_benchmark_spec("constitutional_compliance")
+        line = '{"model":"llama3.1","rubric":"clarity","prompt_id":"p2"}'
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = pathlib.Path(tmpdir) / "evaluations.jsonl"
+            path.write_text(line + "\n")
+            with self.assertRaisesRegex(ValueError, "invalid evaluation row"):
+                rank_models(path, spec, pathlib.Path(tmpdir))
+
     def test_validator_script_exits_nonzero_for_invalid_fixture(self):
         import runpy
         import sys
@@ -88,6 +118,23 @@ class BenchmarkValidationTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as exc:
                 runpy.run_path(str(script_path), run_name="__main__")
             self.assertEqual(exc.exception.code, 0)
+        finally:
+            sys.argv = old_argv
+
+    def test_validator_script_exits_nonzero_for_malformed_rows(self):
+        import runpy
+        import sys
+
+        script_path = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "validate_benchmark_report.py"
+        old_argv = sys.argv
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                path = pathlib.Path(tmpdir) / "evaluations.jsonl"
+                path.write_text('{"model":"llama3.1","rubric":"clarity","prompt_id":"p2"}\n')
+                sys.argv = [str(script_path), str(path)]
+                with self.assertRaises(SystemExit) as exc:
+                    runpy.run_path(str(script_path), run_name="__main__")
+                self.assertEqual(exc.exception.code, 1)
         finally:
             sys.argv = old_argv
 

@@ -70,7 +70,7 @@ def analyze_results(
     """Analyze evaluation results and generate report data."""
     # Reserved for future report artifact paths; kept for API compatibility.
     results_by_key = defaultdict(list)
-    for result in load_evaluation_records(evaluations_path):
+    for result in load_evaluation_records(evaluations_path, strict=True):
         key = (result["model"], result["rubric"])
         results_by_key[key].append(result)
 
@@ -136,7 +136,7 @@ def rank_models(
     logger.info("Computing pairwise model rankings...")
     ranker = PairwiseRanker()
 
-    for result in load_evaluation_records(evaluations_path):
+    for result in load_evaluation_records(evaluations_path, strict=True):
         if (
             quality_filter_mode == "exclude_flagged"
             and result.get("generation_quality_flagged")

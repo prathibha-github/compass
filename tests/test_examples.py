@@ -269,6 +269,21 @@ class BenchmarkRecordLoadingTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["prompt_id"], "p1")
 
+    def test_load_evaluation_records_strict_rejects_invalid_rows(self):
+        import tempfile
+
+        benchmark = _load_example("constitutional_compliance_benchmark")
+        lines = [
+            '{"model":"llama3.1","rubric":"clarity","prompt_id":"p1","score":0.2,"hit":true}',
+            '{"model":"llama3.1","rubric":"clarity","prompt_id":"p2"}',
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = pathlib.Path(tmpdir) / "evaluations.jsonl"
+            path.write_text("\n".join(lines) + "\n")
+            with self.assertRaisesRegex(ValueError, "invalid evaluation row"):
+                benchmark.load_evaluation_records(path, strict=True)
+
 
 class BenchmarkQualityGuardrailTests(unittest.TestCase):
     def test_compute_generation_quality_flags_token_cap_fragments(self):

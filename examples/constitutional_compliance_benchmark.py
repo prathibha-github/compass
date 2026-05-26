@@ -401,12 +401,20 @@ def main():
     if "summary" in run_config.effective_analysis_lanes:
         logger.info("")
         logger.info("PHASE 3: Analyzing results...")
-        stats = BENCHMARK_RUNNER.analyze(evaluations_path, run_config)
+        try:
+            stats = BENCHMARK_RUNNER.analyze(evaluations_path, run_config)
+        except ValueError as e:
+            logger.error(str(e))
+            sys.exit(1)
         print_summary(stats, evaluations_path)
 
     if "pairwise" in run_config.effective_analysis_lanes:
         logger.info("PHASE 4: Pairwise model comparison...")
-        BENCHMARK_RUNNER.rank(evaluations_path, run_config)
+        try:
+            BENCHMARK_RUNNER.rank(evaluations_path, run_config)
+        except ValueError as e:
+            logger.error(str(e))
+            sys.exit(1)
 
     logger.info("✓ Benchmark complete. Results in %s/", output_dir)
 
