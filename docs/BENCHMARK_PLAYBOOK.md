@@ -138,9 +138,9 @@ Benchmark outputs should be self-describing and operationally predictable.
 
 Write and document these artifacts:
 - `generations.jsonl`
-  Append-only generation checkpoint. Resume and evaluation paths may salvage a
-  valid prefix and warn on malformed rows; treat it as an operational
-  checkpoint, not as a silently self-healing final report.
+  Append-only generation checkpoint. Resume paths may salvage a valid prefix
+  and warn on malformed rows, but downstream benchmark execution should treat
+  malformed generation input as a hard failure.
 - `evaluations_<judge>.jsonl`
   Append-only evaluation checkpoint. Shared summary, ranking, and report
   validation paths read this strictly and fail on malformed rows.

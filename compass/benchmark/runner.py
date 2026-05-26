@@ -420,7 +420,7 @@ def evaluate_completions(
     completed = checkpoint.load()
     logger.info("Resuming: %d prior evaluations", len(completed))
 
-    generations_by_key = load_generation_records(generations_path)
+    generations_by_key = load_generation_records(generations_path, strict=True)
     cache = EvaluationCache(cache_dir=str(output_dir / ".cache"))
 
     total_to_evaluate = 0

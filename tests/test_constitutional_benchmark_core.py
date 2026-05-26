@@ -285,6 +285,37 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
 
         self.assertIn("Evaluation completed with 1 runtime failures", logs.output[-1])
 
+    def test_evaluate_completions_rejects_malformed_generation_rows(self):
+        benchmark = _load_benchmark_module()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out = pathlib.Path(tmpdir)
+            generations_path = out / "generations.jsonl"
+            generations_path.write_text(
+                "\n".join(
+                    [
+                        json.dumps(
+                            migrate_generation_record(
+                                {
+                                    "model": "llama3.1",
+                                    "rubric": "clarity",
+                                    "prompt_id": "p1",
+                                    "task_type": "general",
+                                    "sample_idx": 0,
+                                    "completion": "ok",
+                                    "tokens_used": {"input": 1, "output": 10},
+                                }
+                            )
+                        ),
+                        '{"model":"llama3.1","rubric":"clarity"',
+                    ]
+                )
+                + "\n"
+            )
+
+            with self.assertRaisesRegex(ValueError, "invalid generation row"):
+                benchmark.evaluate_completions(generations_path, "llama3.1", out)
+
     def test_evaluate_completions_reuses_evaluation_cache_for_duplicate_text(self):
         benchmark = _load_benchmark_module()
 
