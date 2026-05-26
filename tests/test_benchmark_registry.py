@@ -12,6 +12,7 @@ from compass.benchmark import (
     BenchmarkPolicyDefaults,
     BenchmarkPrompt,
     BenchmarkRunPreset,
+    PhaseOutcome,
     SharedBenchmarkRunner,
     BenchmarkValidationIssue,
     build_benchmark_spec,
@@ -329,7 +330,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
             )
             with patch(
                 "compass.benchmark.runner.evaluate_completions",
-                return_value=evaluations_path,
+                return_value=PhaseOutcome(evaluations_path, 1, 0),
             ) as evaluate:
                 with patch.object(
                     runner,
@@ -407,7 +408,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
             )
             with patch(
                 "compass.benchmark.runner.evaluate_completions",
-                return_value=evaluations_path,
+                return_value=PhaseOutcome(evaluations_path, 1, 0),
             ):
                 with patch.object(
                     runner,
@@ -559,7 +560,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
             )
             with patch(
                 "compass.benchmark.runner.generate_completions",
-                return_value=generated_path,
+                return_value=PhaseOutcome(generated_path, 1, 1),
             ):
                 result = runner.generate(run_config)
 
@@ -674,7 +675,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
             )
             with patch(
                 "compass.benchmark.runner.evaluate_completions",
-                return_value=evaluations_path,
+                return_value=PhaseOutcome(evaluations_path, 1, 0),
             ), patch.object(
                 runner,
                 "_validate_report_artifacts",
@@ -699,6 +700,85 @@ class BenchmarkRegistryTests(unittest.TestCase):
         self.assertEqual(outcome["phases"]["evaluation"]["status"], "complete")
         self.assertEqual(outcome["phases"]["generation"]["status"], "complete")
         self.assertEqual(outcome["overall_status"], "complete")
+
+    def test_shared_runner_generate_writes_failed_outcome_on_error(self):
+        spec = build_benchmark_spec(
+            name="toy_failed_generate",
+            version="0.1",
+            prompts_by_rubric={
+                "clarity": [
+                    {"id": "p1", "text": "Explain X", "task_type": "explanation"},
+                ]
+            },
+            rubrics_by_name={"clarity": RubricLibrary.clarity},
+        )
+        runner = SharedBenchmarkRunner(spec)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            run_config = runner.validate_run_config(
+                spec.make_run_config(output_dir=str(output_dir))
+            )
+            with patch(
+                "compass.benchmark.runner.generate_completions",
+                side_effect=RuntimeError("generation crashed"),
+            ):
+                with self.assertRaises(RuntimeError):
+                    runner.generate(run_config)
+
+            outcome = json.loads(
+                (output_dir / "benchmark_run_outcome.json").read_text()
+            )
+
+        self.assertEqual(outcome["phases"]["generation"]["status"], "failed")
+        self.assertEqual(outcome["overall_status"], "failed")
+
+    def test_shared_runner_evaluate_writes_failed_outcome_on_error(self):
+        spec = build_benchmark_spec(
+            name="toy_failed_evaluate",
+            version="0.1",
+            prompts_by_rubric={
+                "clarity": [
+                    {"id": "p1", "text": "Explain X", "task_type": "explanation"},
+                ]
+            },
+            rubrics_by_name={"clarity": RubricLibrary.clarity},
+        )
+        runner = SharedBenchmarkRunner(spec)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            run_config = runner.validate_run_config(
+                spec.make_run_config(output_dir=str(output_dir))
+            )
+            generations_path = output_dir / "generations.jsonl"
+            generations_path.write_text(
+                json.dumps(
+                    {
+                        "benchmark_name": spec.name,
+                        "benchmark_version": spec.version,
+                        "model": "llama3.1",
+                        "rubric": "clarity",
+                        "prompt_id": "p1",
+                        "task_type": "explanation",
+                        "sample_idx": 0,
+                        "completion": "ok",
+                        "tokens_used": {"input": 1, "output": 1},
+                    }
+                )
+                + "\n"
+            )
+            with patch(
+                "compass.benchmark.runner.evaluate_completions",
+                side_effect=RuntimeError("evaluation crashed"),
+            ):
+                with self.assertRaises(RuntimeError):
+                    runner.evaluate(generations_path, run_config)
+
+            outcome = json.loads(
+                (output_dir / "benchmark_run_outcome.json").read_text()
+            )
+
+        self.assertEqual(outcome["phases"]["evaluation"]["status"], "failed")
+        self.assertEqual(outcome["overall_status"], "failed")
 
     def test_benchmark_list_contains_constitutional(self):
         self.assertIn("constitutional_compliance", list_benchmark_specs())
