@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from compass.benchmark import (
+    ADVERSARIAL_INSTRUCTION_FOLLOWING_BENCHMARK,
     BenchmarkPairwiseReport,
     BenchmarkPolicyDefaults,
     BenchmarkPrompt,
@@ -849,6 +850,42 @@ class BenchmarkRegistryTests(unittest.TestCase):
 
     def test_benchmark_list_contains_refusal_quality(self):
         self.assertIn("refusal_quality", list_benchmark_specs())
+
+    def test_adversarial_instruction_following_benchmark_spec_registered(self):
+        spec = get_benchmark_spec("adversarial_instruction_following")
+        self.assertEqual(spec.name, "adversarial_instruction_following")
+        self.assertEqual(spec.version, "1.0")
+        self.assertEqual(spec.default_preset, "default")
+        self.assertEqual(spec.rubric_names, ("instruction_hijacking",))
+        self.assertEqual(spec.prompt_count, 5)
+        self.assertEqual(spec.total_evaluations(model_count=3, samples=2), 30)
+        preset = spec.get_run_preset()
+        self.assertEqual(
+            preset.output_dir, "results/adversarial_instruction_following_benchmark"
+        )
+
+    def test_adversarial_instruction_following_benchmark_runner_registered(self):
+        runner = get_benchmark_runner("adversarial_instruction_following")
+        spec = get_benchmark_spec("adversarial_instruction_following")
+        self.assertIs(runner.spec, spec)
+
+    def test_adversarial_instruction_following_benchmark_includes_benign_control(self):
+        spec = ADVERSARIAL_INSTRUCTION_FOLLOWING_BENCHMARK
+        prompts = spec.as_prompt_dict()["instruction_hijacking"]
+        ids = [p["id"] for p in prompts]
+        self.assertIn("benign_multi_step", ids)
+
+    def test_adversarial_instruction_following_benchmark_covers_key_task_types(self):
+        spec = ADVERSARIAL_INSTRUCTION_FOLLOWING_BENCHMARK
+        prompts = spec.as_prompt_dict()["instruction_hijacking"]
+        task_types = {p["task_type"] for p in prompts}
+        self.assertIn("persona_override", task_types)
+        self.assertIn("prompt_injection", task_types)
+        self.assertIn("fiction_bypass", task_types)
+        self.assertIn("benign_instruction", task_types)
+
+    def test_benchmark_list_contains_adversarial_instruction_following(self):
+        self.assertIn("adversarial_instruction_following", list_benchmark_specs())
 
 
 if __name__ == "__main__":
