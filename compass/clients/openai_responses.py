@@ -37,7 +37,10 @@ class OpenAIResponsesClient(CompletionClient):
     extra reasoning headroom.
 
     Usage:
-        client = OpenAIResponsesClient(model="gpt-5-mini")
+        client = OpenAIResponsesClient(
+            model="gpt-5-mini",
+            max_output_token_multiplier=10,
+        )
         response = client.complete("What is 2+2?")
         print(response.completion)
     """
