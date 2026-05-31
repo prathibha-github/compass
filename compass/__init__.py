@@ -9,7 +9,12 @@ from compass.clients import (
     OpenAIResponsesClient,
 )
 from compass.comparison import ComparisonResult, MultiModelComparator, PairwiseRanker
-from compass.evaluation import CheckpointManager
+from compass.evaluation import (
+    CheckpointManager,
+    evaluate_suite_completions,
+    generate_suite_completions,
+    summarize_suite_evaluations,
+)
 from compass.judges import EvaluationResult, JudgeConfig, JudgeReliabilityAuditor, LLMJudge
 from compass.reproducibility import (
     EvaluationMetadata,
@@ -29,6 +34,9 @@ __all__ = [
     "JudgeReliabilityAuditor",
     "EvaluationCache",
     "CheckpointManager",
+    "generate_suite_completions",
+    "evaluate_suite_completions",
+    "summarize_suite_evaluations",
     "AnthropicClient",
     "GoogleAIClient",
     "OllamaClient",

@@ -46,12 +46,20 @@ class LLMJudge(Judge):
             cache = EvaluationCache()
         self.cache = cache
 
-    def evaluate(self, text: str) -> EvaluationResult:
+    def evaluate(self, text: str, context: Optional[str] = None) -> EvaluationResult:
         """Evaluate text with this judge's rubric.
+
+        Args:
+            text: The assistant response to score.
+            context: Optional surrounding context (for example the user request)
+                shown to the judge so prompt-aware rubrics can distinguish a
+                volunteered behavior from a solicited one. It is folded into the
+                cache key, so the same response under different contexts caches
+                separately.
 
         Returns cached result if available, otherwise calls judge API.
         """
-        cache_key = self._cache_coordinates(text)
+        cache_key = self._cache_coordinates(text, context)
 
         # Check cache
         cached = self.cache.get(*cache_key)
@@ -60,7 +68,7 @@ class LLMJudge(Judge):
             return cached
 
         # Build prompt deterministically
-        prompt = self._build_prompt(text)
+        prompt = self._build_prompt(text, context)
 
         # Call judge
         response = self.client.complete(
@@ -83,13 +91,31 @@ class LLMJudge(Judge):
         self.cache.put(*cache_key, result)
         return result
 
-    def _cache_coordinates(self, text: str) -> tuple[str, str, str]:
-        """Build the cache lookup coordinates for this evaluation contract."""
-        text_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
+    def _cache_coordinates(
+        self, text: str, context: Optional[str] = None
+    ) -> tuple[str, str, str]:
+        """Build the cache lookup coordinates for this evaluation contract.
+
+        The context is hashed alongside the text so an identical response judged
+        with and without surrounding context does not collide.
+        """
+        keyed_text = text if context is None else f"{context}\x00{text}"
+        text_hash = hashlib.sha256(keyed_text.encode()).hexdigest()[:16]
         return (self.config.config_hash, text_hash, self.PROMPT_VERSION)
 
-    def _build_prompt(self, text: str) -> str:
+    def _build_prompt(self, text: str, context: Optional[str] = None) -> str:
         """Build evaluation prompt deterministically."""
+        if context is not None:
+            return (
+                "Evaluate the assistant response in light of the user request, "
+                "using this rubric.\n\n"
+                f"Rubric:\n{self.config.rubric.text}\n\n"
+                "Return JSON exactly in this shape:\n"
+                '{"score": 0.0, "confidence": 0.9, "rationale": "brief reason"}\n'
+                "(score between 0.0 and 1.0)\n\n"
+                f"User request:\n{context}\n\n"
+                f"Assistant response:\n{text}"
+            )
         return (
             "Evaluate the assistant response below using this rubric.\n\n"
             f"Rubric:\n{self.config.rubric.text}\n\n"
