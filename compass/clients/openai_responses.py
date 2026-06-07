@@ -32,9 +32,10 @@ def _parse_reset_seconds(s: str) -> Optional[float]:
 class OpenAIResponsesClient(CompletionClient):
     """OpenAI Responses API client for GPT-5 and compatible models.
 
-    The Responses API does not support logprobs. Callers may opt into a larger
-    output-token budget with ``max_output_token_multiplier`` when a model needs
-    extra reasoning headroom.
+    The Responses API does not support logprobs. Temperature is forwarded directly;
+    use ``required_temperature`` to enforce a fixed value on every call (e.g. 1.0
+    for GPT-5 models). Callers may opt into a larger output-token budget with
+    ``max_output_token_multiplier`` when a model needs extra reasoning headroom.
 
     Usage:
         client = OpenAIResponsesClient(
@@ -52,6 +53,7 @@ class OpenAIResponsesClient(CompletionClient):
         request_interval: float = 0.0,
         max_output_token_multiplier: int = 1,
         allow_estimated_usage: bool = False,
+        required_temperature: Optional[float] = None,
     ):
         """
         Args:
@@ -62,6 +64,8 @@ class OpenAIResponsesClient(CompletionClient):
                 ``max_tokens`` before calling the Responses API.
             allow_estimated_usage: Whether to estimate token usage when the
                 Responses API omits usage metadata.
+            required_temperature: Explicit temperature to send on every request,
+                overriding the caller-supplied value (e.g. 1.0 for GPT-5 models).
         """
         try:
             import openai as _openai
@@ -82,6 +86,7 @@ class OpenAIResponsesClient(CompletionClient):
             raise ValueError("max_output_token_multiplier must be at least 1")
         self._max_output_token_multiplier = max_output_token_multiplier
         self._allow_estimated_usage = allow_estimated_usage
+        self._required_temperature = required_temperature
 
     @property
     def total_tokens(self) -> dict:
@@ -122,15 +127,14 @@ class OpenAIResponsesClient(CompletionClient):
         Generate completion via OpenAI Responses API with retry/backoff on 429.
 
         The configured ``max_output_token_multiplier`` is applied to ``max_tokens``
-        before making the request. Non-zero temperatures are rejected because
-        the Responses API path does not forward temperature. Usage metadata is
-        required unless the caller explicitly allows estimated usage.
+        before making the request. Temperature is forwarded to the API. Usage
+        metadata is required unless the caller explicitly allows estimated usage.
 
         Args:
             prompt: Input prompt
             max_tokens: Maximum output tokens before applying the configured
                 output-token multiplier
-            temperature: Must remain 0.0 for this adapter path
+            temperature: Sampling temperature forwarded to the Responses API.
             system: Optional system/instructions prompt
 
         Returns:
@@ -144,16 +148,17 @@ class OpenAIResponsesClient(CompletionClient):
                 f"{self.__class__.__name__} does not support logprobs"
             )
         del top_logprobs
-        if temperature != 0.0:
-            raise ValueError(
-                f"{self.__class__.__name__} does not support temperature overrides"
-            )
-
+        actual_temperature = (
+            self._required_temperature
+            if self._required_temperature is not None
+            else temperature
+        )
         actual_max_tokens = max_tokens * self._max_output_token_multiplier
         request_kwargs = dict(
             model=self.model,
             input=prompt,
             max_output_tokens=actual_max_tokens,
+            temperature=actual_temperature,
         )
         if system is not None:
             request_kwargs["instructions"] = system
