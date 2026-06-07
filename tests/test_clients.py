@@ -55,10 +55,12 @@ class TestCompletionResponse(unittest.TestCase):
             completion="test",
             tokens_used={"input": 100, "output": 50},
             cost_usd=0.001,
+            finish_reason="stop",
         )
         self.assertEqual(response.completion, "test")
         self.assertEqual(response.tokens_used["input"], 100)
         self.assertEqual(response.cost_usd, 0.001)
+        self.assertEqual(response.finish_reason, "stop")
 
     def test_response_tokens_dict(self):
         """Response tokens are properly stored."""

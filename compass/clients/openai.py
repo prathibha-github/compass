@@ -203,6 +203,9 @@ class OpenAIClient(CompletionClient):
                         + output_tokens * self._pricing.output_cost_per_million / 1_000_000
                     ),
                     logprobs=raw_logprobs,
+                    finish_reason=str(
+                        getattr(resp.choices[0], "finish_reason", "") or ""
+                    ),
                 )
 
             except self._openai.RateLimitError as exc:

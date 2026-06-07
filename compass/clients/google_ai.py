@@ -195,6 +195,14 @@ class GoogleAIClient(CompletionClient):
                 completion=completion.strip(),
                 tokens_used={"input": input_tokens, "output": output_tokens},
                 cost_usd=cost_usd,
+                finish_reason=str(
+                    getattr(
+                        (getattr(response, "candidates", None) or [None])[0],
+                        "finish_reason",
+                        "",
+                    )
+                    or ""
+                ),
             )
 
         except Exception as exc:

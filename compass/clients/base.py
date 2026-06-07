@@ -12,6 +12,7 @@ class CompletionResponse:
     tokens_used: Optional[dict] = None  # {"input": X, "output": Y}
     cost_usd: float = 0.0
     logprobs: Optional[list] = None
+    finish_reason: str = ""
 
 
 class CompletionClient(ABC):
