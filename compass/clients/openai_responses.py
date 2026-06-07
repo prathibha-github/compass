@@ -32,7 +32,8 @@ def _parse_reset_seconds(s: str) -> Optional[float]:
 class OpenAIResponsesClient(CompletionClient):
     """OpenAI Responses API client for GPT-5 and compatible models.
 
-    The Responses API does not support logprobs. Callers may opt into a larger
+    The Responses API does not support logprobs; temperature is forwarded directly.
+    Callers may opt into a larger
     output-token budget with ``max_output_token_multiplier`` when a model needs
     extra reasoning headroom.
 
@@ -122,15 +123,14 @@ class OpenAIResponsesClient(CompletionClient):
         Generate completion via OpenAI Responses API with retry/backoff on 429.
 
         The configured ``max_output_token_multiplier`` is applied to ``max_tokens``
-        before making the request. Non-zero temperatures are rejected because
-        the Responses API path does not forward temperature. Usage metadata is
-        required unless the caller explicitly allows estimated usage.
+        before making the request. Temperature is forwarded to the API. Usage
+        metadata is required unless the caller explicitly allows estimated usage.
 
         Args:
             prompt: Input prompt
             max_tokens: Maximum output tokens before applying the configured
                 output-token multiplier
-            temperature: Must remain 0.0 for this adapter path
+            temperature: Sampling temperature forwarded to the Responses API.
             system: Optional system/instructions prompt
 
         Returns:
@@ -144,16 +144,12 @@ class OpenAIResponsesClient(CompletionClient):
                 f"{self.__class__.__name__} does not support logprobs"
             )
         del top_logprobs
-        if temperature != 0.0:
-            raise ValueError(
-                f"{self.__class__.__name__} does not support temperature overrides"
-            )
-
         actual_max_tokens = max_tokens * self._max_output_token_multiplier
         request_kwargs = dict(
             model=self.model,
             input=prompt,
             max_output_tokens=actual_max_tokens,
+            temperature=temperature,
         )
         if system is not None:
             request_kwargs["instructions"] = system
