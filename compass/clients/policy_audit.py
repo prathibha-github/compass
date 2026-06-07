@@ -51,9 +51,9 @@ _CLIENT_POLICY_TRANSLATIONS = (
     ),
     ClientPolicyTranslation(
         adapter="OpenAIResponsesClient",
-        category="unsupported_temperature",
-        trigger="temperature is not 0.0",
-        behavior="raises ValueError because the adapter does not forward temperature to the Responses API",
+        category="required_temperature",
+        trigger="required_temperature is configured",
+        behavior="sends the configured temperature on every request instead of the caller-provided temperature",
         explicit_to_caller=True,
         tested_by=("tests/test_client_features.py",),
     ),

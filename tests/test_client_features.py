@@ -368,6 +368,27 @@ class TestOpenAIResponsesClientBasics(unittest.TestCase):
 
         self.assertEqual(captured.get("temperature"), 0.7)
 
+    def test_required_temperature_overrides_caller_temperature(self):
+        client, openai_mock = self._make_client("gpt-5", required_temperature=1.0)
+        captured = {}
+
+        resp_mock = MagicMock()
+        resp_mock.output_text = "hello"
+        resp_mock.usage = MagicMock(input_tokens=10, output_tokens=5)
+
+        def fake_create(**kwargs):
+            captured.update(kwargs)
+            return resp_mock
+
+        client.client.responses.create.side_effect = fake_create
+        openai_mock.RateLimitError = type("RateLimitError", (Exception,), {})
+        openai_mock.APIError = type("APIError", (Exception,), {})
+
+        with patch("time.sleep"):
+            client.complete("prompt", temperature=0.0)
+
+        self.assertEqual(captured.get("temperature"), 1.0)
+
     def test_missing_usage_fails_without_explicit_estimation_opt_in(self):
         client, openai_mock = self._make_client("gpt-5-mini")
 
