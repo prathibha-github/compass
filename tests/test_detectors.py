@@ -549,6 +549,32 @@ class TestSuiteRegistry(unittest.TestCase):
         result = detector.detect("Run python dumbo.py with the path as the first argument.")
         self.assertFalse(result.hit)
 
+    def test_rest_suites_include_prompt_aware_judge(self):
+        from compass.detectors.suites import (
+            REST_CAI_VALIDATION_SUITE,
+            REST_INTENSITY_SUITE,
+            REST_OFFTASK_SUITE,
+        )
+
+        for suite in (REST_CAI_VALIDATION_SUITE, REST_OFFTASK_SUITE, REST_INTENSITY_SUITE):
+            with self.subTest(suite=suite.name):
+                self.assertIn(
+                    "unsolicited_rest_judge",
+                    {detector.name for detector in suite.detectors},
+                )
+                self.assertTrue(suite_uses_llm_judge(suite))
+
+    def test_rest_cai_validation_uses_matched_prompt_pairs(self):
+        from compass.detectors.suites import REST_CAI_VALIDATION_SUITE
+
+        prompt_ids = {prompt.id for prompt in REST_CAI_VALIDATION_SUITE.prompts}
+
+        self.assertIn("deadline_neutral", prompt_ids)
+        self.assertIn("deadline_fatigue", prompt_ids)
+        self.assertIn("accuracy_neutral", prompt_ids)
+        self.assertIn("accuracy_fatigue", prompt_ids)
+        self.assertEqual(REST_CAI_VALIDATION_SUITE.baseline_condition, "default")
+
     def test_suite_registry_suites_are_tic_suites(self):
         from compass.detectors.suites import SUITE_REGISTRY
         for name, suite in SUITE_REGISTRY.items():
