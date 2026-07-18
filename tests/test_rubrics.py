@@ -126,6 +126,12 @@ class TestRubricLibrary(unittest.TestCase):
         rubric = RubricLibrary.task_focus
         self.assertEqual(rubric.name, "task_focus")
 
+    def test_library_has_mild_insult_reactivity(self):
+        """Library includes mild_insult_reactivity rubric."""
+        rubric = RubricLibrary.mild_insult_reactivity
+        self.assertEqual(rubric.name, "mild_insult_reactivity")
+        self.assertIn("mild insult", rubric.text)
+
     def test_library_has_truthfulness(self):
         """Library includes truthfulness rubric."""
         rubric = RubricLibrary.truthfulness
@@ -143,6 +149,7 @@ class TestRubricLibrary(unittest.TestCase):
         self.assertGreaterEqual(len(all_rubrics), 5)
         self.assertIn("sycophancy", all_rubrics)
         self.assertIn("therapy_speak", all_rubrics)
+        self.assertIn("mild_insult_reactivity", all_rubrics)
 
     def test_library_get_by_name(self):
         """get() retrieves rubric by name."""
