@@ -15,7 +15,7 @@ generation JSONL (see ``compass.evaluation.suite_io``) for the completions.
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Mapping, Optional, Union
 
 from compass.cache import EvaluationCache
 from compass.clients import (
@@ -23,6 +23,7 @@ from compass.clients import (
     GoogleAIClient,
     OllamaClient,
     OpenAIClient,
+    OpenAIResponsesClient,
 )
 from compass.detectors.base import (
     TicSuite,
@@ -42,15 +43,27 @@ from compass.rubrics.base import Rubric
 logger = logging.getLogger(__name__)
 
 _PathLike = Union[str, Path]
+_DEFAULT_SUITE_TOKEN_BUDGETS = {
+    "default": 150,
+    "gemini": 2000,
+}
+_SENTENCE_ENDINGS = (".", "!", "?", "\"", "'")
+_TOKEN_CAP_FINISH_REASONS = {"length", "max_tokens", "max_output_tokens", "token_limit"}
 
 
 def _create_client(model: str):
     """Mirror benchmark client routing so suites share provider behavior."""
     if model.startswith("gemini"):
         return GoogleAIClient(model=model, allow_estimated_usage=True)
+    if model.startswith("gpt-5"):
+        return OpenAIResponsesClient(
+            model=model,
+            max_output_token_multiplier=10,
+            required_temperature=1.0,
+        )
     if model.startswith("gpt") or model.startswith("o4"):
         required_temperature = None
-        if model.startswith("gpt-5") or model.startswith("o4"):
+        if model.startswith("o4"):
             required_temperature = 1.0
         return OpenAIClient(model=model, required_temperature=required_temperature)
     if model.startswith("claude"):
@@ -60,6 +73,102 @@ def _create_client(model: str):
 
 def _is_judge_detector(detector) -> bool:
     return hasattr(detector, "detect_with_judge")
+
+
+def _compute_suite_token_budget_by_model(
+    models: List[str],
+    *,
+    max_tokens_by_model: Optional[Mapping[str, int]] = None,
+    allow_mixed_token_budgets: bool = True,
+) -> Dict[str, int]:
+    if max_tokens_by_model is None:
+        budgets = {
+            model: _default_suite_max_tokens_for_model(model)
+            for model in models
+        }
+    else:
+        budgets = {}
+        for model in models:
+            if model not in max_tokens_by_model:
+                raise ValueError(
+                    f"Missing max token budget for model {model!r} in custom map."
+                )
+            budget = int(max_tokens_by_model[model])
+            if budget <= 0:
+                raise ValueError(
+                    f"Invalid max token budget for model {model!r}: {budget}"
+                )
+            budgets[model] = budget
+
+    distinct = sorted(set(budgets.values()))
+    if len(distinct) > 1 and not allow_mixed_token_budgets:
+        raise ValueError(
+            "Mixed max token budgets detected across models: "
+            f"{budgets}. Re-run with allow_mixed_token_budgets=True to override."
+        )
+    return budgets
+
+
+def _default_suite_max_tokens_for_model(model: str) -> int:
+    prefixes = sorted(
+        (prefix for prefix in _DEFAULT_SUITE_TOKEN_BUDGETS if prefix != "default"),
+        key=len,
+        reverse=True,
+    )
+    for prefix in prefixes:
+        if model.startswith(prefix):
+            return int(_DEFAULT_SUITE_TOKEN_BUDGETS[prefix])
+    return int(_DEFAULT_SUITE_TOKEN_BUDGETS["default"])
+
+
+def _compute_suite_generation_quality(
+    completion: str,
+    output_tokens: int,
+    max_tokens_requested: int,
+    finish_reason: str = "",
+) -> Dict[str, Any]:
+    text = (completion or "").strip()
+    visible_chars = len(text)
+    visible_word_count = len(text.split()) if text else 0
+    finish_reason_norm = (finish_reason or "").strip().lower()
+    hit_token_cap = bool(
+        (max_tokens_requested > 0 and output_tokens >= max_tokens_requested)
+        or (finish_reason_norm in _TOKEN_CAP_FINISH_REASONS)
+    )
+    sentence_complete = bool(text and text.endswith(_SENTENCE_ENDINGS))
+    is_fragment = (
+        not text
+        or (visible_chars < 80 and not sentence_complete)
+        or (hit_token_cap and not sentence_complete)
+    )
+    quality_flagged = bool(hit_token_cap or is_fragment)
+    return {
+        "visible_chars": visible_chars,
+        "visible_word_count": visible_word_count,
+        "hit_token_cap": hit_token_cap,
+        "is_fragment": is_fragment,
+        "quality_flagged": quality_flagged,
+    }
+
+
+def _validate_resumed_suite_token_budgets(
+    rows,
+    effective_max_tokens_by_model: Mapping[str, int],
+) -> None:
+    for row in rows:
+        model = row.get("model")
+        if model not in effective_max_tokens_by_model:
+            continue
+        recorded = row.get("max_tokens_requested")
+        if recorded is None:
+            continue
+        expected = int(effective_max_tokens_by_model[model])
+        if int(recorded) != expected:
+            raise ValueError(
+                "Existing suite generations use a different max token budget "
+                f"for model {model!r}: found {recorded}, expected {expected}. "
+                "Use a fresh output directory or reset generations before rerunning."
+            )
 
 
 def _detector_rubric(detector) -> Rubric:
@@ -88,6 +197,8 @@ def generate_suite_completions(
     *,
     temperature: float = 0.0,
     resume: bool = False,
+    max_tokens_by_model: Optional[Mapping[str, int]] = None,
+    allow_mixed_token_budgets: bool = True,
     client_factory=_create_client,
 ) -> Path:
     """Generate and persist one completion per (model, prompt, condition, sample).
@@ -100,6 +211,10 @@ def generate_suite_completions(
         output_dir: Directory for ``suite_generations.jsonl``.
         temperature: Sampling temperature for the model under test.
         resume: Continue from an existing generations file instead of resetting.
+        max_tokens_by_model: Optional explicit generation token budget per model.
+            If omitted, Compass benchmark token-budget defaults are used.
+        allow_mixed_token_budgets: Allow different effective token budgets across
+            models. Disable for strict apples-to-apples budget comparisons.
         client_factory: Override for client construction (tests inject fakes).
 
     Returns the path to the generations JSONL.
@@ -111,7 +226,19 @@ def generate_suite_completions(
     if not resume:
         reset_suite_generations(generations_path)
 
-    completed = set(load_suite_generations(generations_path).keys())
+    effective_max_tokens_by_model = _compute_suite_token_budget_by_model(
+        models,
+        max_tokens_by_model=(
+            dict(max_tokens_by_model) if max_tokens_by_model is not None else None
+        ),
+        allow_mixed_token_budgets=allow_mixed_token_budgets,
+    )
+    existing_generations = load_suite_generations(generations_path)
+    _validate_resumed_suite_token_budgets(
+        existing_generations.values(),
+        effective_max_tokens_by_model,
+    )
+    completed = set(existing_generations.keys())
     logger.info("Suite generation: %d cells already complete", len(completed))
 
     clients_by_model = {model: client_factory(model) for model in models}
@@ -133,13 +260,22 @@ def generate_suite_completions(
                     if identity in completed:
                         continue
                     try:
+                        max_tokens = int(effective_max_tokens_by_model[model])
                         response = client.complete(
                             prompt=prompt.text,
-                            max_tokens=suite.max_tokens,
+                            max_tokens=max_tokens,
                             temperature=temperature,
                             system=condition.system_prompt,
                         )
                         tokens_used = getattr(response, "tokens_used", {}) or {}
+                        output_tokens = int(tokens_used.get("output", 0) or 0)
+                        finish_reason = str(getattr(response, "finish_reason", "") or "")
+                        quality = _compute_suite_generation_quality(
+                            completion=response.completion,
+                            output_tokens=output_tokens,
+                            max_tokens_requested=max_tokens,
+                            finish_reason=finish_reason,
+                        )
                         append_suite_generation(
                             generations_path,
                             {
@@ -153,9 +289,13 @@ def generate_suite_completions(
                                 "completion": response.completion,
                                 "tokens_used": tokens_used,
                                 "cost_usd": getattr(response, "cost_usd", 0.0),
-                                "finish_reason": str(
-                                    getattr(response, "finish_reason", "") or ""
-                                ),
+                                "max_tokens_requested": max_tokens,
+                                "finish_reason": finish_reason,
+                                "visible_chars": quality["visible_chars"],
+                                "visible_word_count": quality["visible_word_count"],
+                                "hit_token_cap": quality["hit_token_cap"],
+                                "is_fragment": quality["is_fragment"],
+                                "quality_flagged": quality["quality_flagged"],
                             },
                         )
                         written += 1
@@ -266,6 +406,15 @@ def evaluate_suite_completions(
                         "task_type": gen.get("task_type", "general"),
                         "sample_idx": sample_idx,
                         "completion": completion[:200],
+                        "generation_visible_chars": gen.get("visible_chars"),
+                        "generation_visible_word_count": gen.get("visible_word_count"),
+                        "generation_hit_token_cap": gen.get("hit_token_cap"),
+                        "generation_is_fragment": gen.get("is_fragment"),
+                        "generation_quality_flagged": gen.get("quality_flagged"),
+                        "generation_finish_reason": gen.get("finish_reason", ""),
+                        "generation_max_tokens_requested": gen.get(
+                            "max_tokens_requested"
+                        ),
                         "score": score,
                         "hit": hit,
                         "count": count,

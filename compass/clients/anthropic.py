@@ -152,6 +152,7 @@ class AnthropicClient(CompletionClient):
                         input_tokens * self._pricing.input_cost_per_million / 1_000_000
                         + output_tokens * self._pricing.output_cost_per_million / 1_000_000
                     ),
+                    finish_reason=str(getattr(resp, "stop_reason", "") or ""),
                 )
 
             except self._anthropic.RateLimitError as exc:

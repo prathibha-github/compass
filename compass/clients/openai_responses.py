@@ -214,6 +214,7 @@ class OpenAIResponsesClient(CompletionClient):
                         input_tokens * self._pricing.input_cost_per_million / 1_000_000
                         + output_tokens * self._pricing.output_cost_per_million / 1_000_000
                     ),
+                    finish_reason=str(getattr(resp, "status", "") or ""),
                 )
 
             except self._openai.RateLimitError as exc:

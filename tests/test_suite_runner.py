@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from compass.clients.base import CompletionResponse
 from compass.detectors.base import StyleCondition, StylePrompt, TicSuite
@@ -19,6 +20,7 @@ from compass.evaluation.suite_io import (
     suite_generation_identity,
 )
 from compass.evaluation.suite_runner import (
+    _create_client,
     evaluate_suite_completions,
     generate_suite_completions,
     summarize_suite_evaluations,
@@ -46,16 +48,19 @@ class _CountingClient:
 
     def __init__(self):
         self.calls = 0
+        self.max_tokens_seen = []
 
     def complete(self, prompt, max_tokens=200, temperature=0.0, system=None):
         self.calls += 1
+        self.max_tokens_seen.append(max_tokens)
         # Fatigue prompts get a rest suggestion; neutral prompts stay on task.
         body = "take a break" if "exhausted" in prompt else "here is the fix"
         # Unique per call so distinct samples are distinct completions (as at temp>0).
         return CompletionResponse(
             completion=f"{body} [{system}|{prompt}] #{self.calls}",
-            tokens_used={"input": 1, "output": 1},
+            tokens_used={"input": 1, "output": max_tokens},
             cost_usd=0.0,
+            finish_reason="length",
         )
 
 
@@ -85,6 +90,12 @@ class GenerationPhaseTests(unittest.TestCase):
         for row in rows.values():
             self.assertIn("completion", row)
             self.assertTrue(row["completion"])
+            self.assertEqual(row["max_tokens_requested"], 150)
+            self.assertEqual(row["finish_reason"], "length")
+            self.assertTrue(row["hit_token_cap"])
+            self.assertTrue(row["quality_flagged"])
+            self.assertGreater(row["visible_chars"], 0)
+            self.assertGreater(row["visible_word_count"], 0)
 
         # Re-running with resume keeps prior work and makes no new calls.
         client2 = _CountingClient()
@@ -106,6 +117,70 @@ class GenerationPhaseTests(unittest.TestCase):
         )
         # 2 prompts x 2 conditions x 1 sample, not doubled.
         self.assertEqual(len(load_suite_generations(gen_path)), 4)
+
+    def test_generation_accepts_per_model_token_budgets(self):
+        suite = _heuristic_suite()
+        clients = {"m1": _CountingClient(), "m2": _CountingClient()}
+        generate_suite_completions(
+            suite,
+            ["m1", "m2"],
+            samples=1,
+            output_dir=self.out,
+            max_tokens_by_model={"m1": 123, "m2": 456},
+            client_factory=lambda model: clients[model],
+        )
+
+        self.assertEqual(set(clients["m1"].max_tokens_seen), {123})
+        self.assertEqual(set(clients["m2"].max_tokens_seen), {456})
+
+    def test_generation_rejects_mixed_budgets_when_disallowed(self):
+        suite = _heuristic_suite()
+        with self.assertRaisesRegex(ValueError, "Mixed max token budgets"):
+            generate_suite_completions(
+                suite,
+                ["m1", "m2"],
+                samples=1,
+                output_dir=self.out,
+                max_tokens_by_model={"m1": 123, "m2": 456},
+                allow_mixed_token_budgets=False,
+                client_factory=lambda _m: _CountingClient(),
+            )
+
+    def test_resume_rejects_existing_generation_budget_mismatch(self):
+        suite = _heuristic_suite()
+        generate_suite_completions(
+            suite,
+            ["m"],
+            samples=1,
+            output_dir=self.out,
+            max_tokens_by_model={"m": 123},
+            client_factory=lambda _m: _CountingClient(),
+        )
+
+        with self.assertRaisesRegex(ValueError, "different max token budget"):
+            generate_suite_completions(
+                suite,
+                ["m"],
+                samples=1,
+                output_dir=self.out,
+                resume=True,
+                max_tokens_by_model={"m": 456},
+                client_factory=lambda _m: _CountingClient(),
+            )
+
+    def test_default_client_routes_gpt5_to_responses_api(self):
+        with patch(
+            "compass.evaluation.suite_runner.OpenAIResponsesClient",
+            return_value="responses",
+        ) as patched:
+            client = _create_client("gpt-5-mini")
+
+        self.assertEqual(client, "responses")
+        patched.assert_called_once_with(
+            model="gpt-5-mini",
+            max_output_token_multiplier=10,
+            required_temperature=1.0,
+        )
 
 
 class EvaluationPhaseTests(unittest.TestCase):
@@ -131,6 +206,10 @@ class EvaluationPhaseTests(unittest.TestCase):
         rows = [json.loads(l) for l in open(eval_path) if l.strip()]
         # 8 generations x 1 detector
         self.assertEqual(len(rows), 8)
+        self.assertTrue(all(r["generation_max_tokens_requested"] == 150 for r in rows))
+        self.assertTrue(all(r["generation_hit_token_cap"] for r in rows))
+        self.assertTrue(all(r["generation_quality_flagged"] for r in rows))
+        self.assertTrue(all(r["generation_finish_reason"] == "length" for r in rows))
         # Fatigue cells hit, neutral cells do not.
         by_prompt = {}
         for r in rows:

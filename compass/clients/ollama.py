@@ -139,6 +139,7 @@ class OllamaClient(CompletionClient):
                     "output": estimated_output_tokens,
                 },
                 cost_usd=0.0,
+                finish_reason=str(response.get("done_reason", "") or ""),
             )
 
         except Exception as e:
