@@ -24,6 +24,8 @@ PRICING_TABLE: dict = {
     "claude-sonnet-4-6":      ModelPricing("claude-sonnet-4-6",      3.00,  15.00),
     "claude-opus-4-6":        ModelPricing("claude-opus-4-6",        15.00, 75.00),
     "claude-opus-4-7":        ModelPricing("claude-opus-4-7",        5.00,  25.00),
+    "claude-opus-4-8":        ModelPricing("claude-opus-4-8",        5.00,  25.00),
+    "claude-fable-5":         ModelPricing("claude-fable-5",        10.00,  50.00),
     "gemini-2.5-flash":       ModelPricing("gemini-2.5-flash",       0.075,  0.30, max_requests=15),
     "gemini-2.0-flash":       ModelPricing("gemini-2.0-flash",       0.075,  0.30, max_requests=15),
     "gemini-1.5-pro":         ModelPricing("gemini-1.5-pro",         1.25,   5.00, max_requests=5),
