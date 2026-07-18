@@ -10,6 +10,15 @@ from compass.clients.pricing import get_pricing
 
 logger = logging.getLogger(__name__)
 
+# Newest Claude models reject the `temperature` parameter outright — the API
+# returns 400 "temperature is deprecated for this model". Omit it for these
+# (enforced in the client, not the caller); they sample at the API default.
+_TEMPERATURE_DEPRECATED_PREFIXES = ("claude-opus-4-8", "claude-fable-5")
+
+
+def _supports_temperature(model: str) -> bool:
+    return not model.startswith(_TEMPERATURE_DEPRECATED_PREFIXES)
+
 
 def _parse_reset_seconds(s: str) -> Optional[float]:
     """Parse Anthropic rate-limit reset values: '20s' or bare seconds."""
@@ -122,13 +131,15 @@ class AnthropicClient(CompletionClient):
             self._last_call_at = time.monotonic()
 
             try:
-                resp = self.client.messages.create(
+                create_kwargs = dict(
                     model=self.model,
                     max_tokens=max_tokens,
-                    temperature=temperature,
                     system=system or "",
                     messages=[{"role": "user", "content": prompt}],
                 )
+                if _supports_temperature(self.model):
+                    create_kwargs["temperature"] = temperature
+                resp = self.client.messages.create(**create_kwargs)
 
                 usage = getattr(resp, "usage", None)
                 input_tokens = getattr(usage, "input_tokens", 0) if usage else 0

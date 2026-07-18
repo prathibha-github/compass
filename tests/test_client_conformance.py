@@ -117,6 +117,34 @@ class ClientConformanceTests(unittest.TestCase):
         self._assert_response_contract(response, 9, 4)
         self.assertEqual(client.total_tokens, {"input": 9, "output": 4})
 
+    def test_anthropic_client_omits_deprecated_temperature(self):
+        anthropic_mock = MagicMock()
+        with patch.dict("sys.modules", {"anthropic": anthropic_mock}):
+            from compass.clients.anthropic import AnthropicClient
+
+            client = AnthropicClient(model="claude-opus-4-8", api_key="fake")
+
+        response_mock = MagicMock()
+        response_mock.usage = MagicMock(input_tokens=9, output_tokens=4)
+        response_mock.content = [MagicMock(type="text", text="answer")]
+        client.client.messages.create.return_value = response_mock
+        anthropic_mock.RateLimitError = type("RateLimitError", (Exception,), {})
+        anthropic_mock.APIError = type("APIError", (Exception,), {})
+
+        with patch("time.sleep"):
+            response = client.complete(
+                "prompt",
+                max_tokens=22,
+                temperature=0.3,
+                system="system prompt",
+            )
+
+        kwargs = client.client.messages.create.call_args.kwargs
+        self.assertNotIn("temperature", kwargs)
+        self.assertEqual(kwargs["system"], "system prompt")
+        self.assertEqual(kwargs["max_tokens"], 22)
+        self._assert_response_contract(response, 9, 4)
+
     def test_google_ai_client_conforms(self):
         google_mock = MagicMock()
         google_genai_types = MagicMock()

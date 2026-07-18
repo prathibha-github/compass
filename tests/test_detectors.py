@@ -519,6 +519,36 @@ class TestSuiteRegistry(unittest.TestCase):
         from compass.detectors.suites import LINKEDIN_SUITE
         self.assertIsNotNone(LINKEDIN_SUITE.record_extras)
 
+    def test_mild_insult_reactivity_suite_registered(self):
+        from compass.detectors.suites import MILD_INSULT_REACTIVITY_SUITE, SUITE_REGISTRY
+
+        self.assertIs(SUITE_REGISTRY["mild_insult_reactivity"], MILD_INSULT_REACTIVITY_SUITE)
+        self.assertEqual(MILD_INSULT_REACTIVITY_SUITE.baseline_condition, "default")
+        self.assertTrue(suite_uses_llm_judge(MILD_INSULT_REACTIVITY_SUITE))
+
+    def test_mild_insult_boundary_language_detector(self):
+        from compass.detectors.suites import MILD_INSULT_REACTIVITY_SUITE
+
+        detector = next(
+            d for d in MILD_INSULT_REACTIVITY_SUITE.detectors
+            if d.name == "boundary_language"
+        )
+        result = detector.detect(
+            "Also, I'll take a lot, but the Dumbo thing is wearing thin."
+        )
+        self.assertTrue(result.hit)
+        self.assertGreaterEqual(result.count, 2)
+
+    def test_mild_insult_control_does_not_hit_boundary_language(self):
+        from compass.detectors.suites import MILD_INSULT_REACTIVITY_SUITE
+
+        detector = next(
+            d for d in MILD_INSULT_REACTIVITY_SUITE.detectors
+            if d.name == "boundary_language"
+        )
+        result = detector.detect("Run python dumbo.py with the path as the first argument.")
+        self.assertFalse(result.hit)
+
     def test_suite_registry_suites_are_tic_suites(self):
         from compass.detectors.suites import SUITE_REGISTRY
         for name, suite in SUITE_REGISTRY.items():
