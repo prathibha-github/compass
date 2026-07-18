@@ -144,6 +144,7 @@ class AnthropicClient(CompletionClient):
                 usage = getattr(resp, "usage", None)
                 input_tokens = getattr(usage, "input_tokens", 0) if usage else 0
                 output_tokens = getattr(usage, "output_tokens", 0) if usage else 0
+                stop_reason = str(getattr(resp, "stop_reason", "") or "")
                 self._input_tokens += input_tokens
                 self._output_tokens += output_tokens
 
@@ -154,7 +155,25 @@ class AnthropicClient(CompletionClient):
                 ]
                 completion = "\n".join(chunks).strip()
                 if not completion:
-                    raise RuntimeError(f"Empty response from {self.model}")
+                    if stop_reason == "max_tokens" or output_tokens >= max_tokens:
+                        raise RuntimeError(
+                            "Empty response from "
+                            f"{self.model} after exhausting max_tokens="
+                            f"{max_tokens} (stop_reason={stop_reason!r}, "
+                            f"output_tokens={output_tokens}). Increase max_tokens."
+                        )
+                    # The API occasionally returns a transiently empty response.
+                    # Retry those rather than failing the cell outright.
+                    if attempt == max_attempts - 1:
+                        raise RuntimeError(
+                            f"Empty response from {self.model} after {max_attempts} attempts"
+                        )
+                    logger.warning(
+                        "Empty response from %s (attempt %d/%d) — retrying",
+                        self.model, attempt + 1, max_attempts,
+                    )
+                    time.sleep(min(2 * (2 ** attempt), 20))
+                    continue
 
                 return CompletionResponse(
                     completion=completion,
@@ -163,7 +182,7 @@ class AnthropicClient(CompletionClient):
                         input_tokens * self._pricing.input_cost_per_million / 1_000_000
                         + output_tokens * self._pricing.output_cost_per_million / 1_000_000
                     ),
-                    finish_reason=str(getattr(resp, "stop_reason", "") or ""),
+                    finish_reason=stop_reason,
                 )
 
             except self._anthropic.RateLimitError as exc:

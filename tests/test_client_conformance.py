@@ -145,6 +145,57 @@ class ClientConformanceTests(unittest.TestCase):
         self.assertEqual(kwargs["max_tokens"], 22)
         self._assert_response_contract(response, 9, 4)
 
+    def test_anthropic_client_retries_transient_empty_response(self):
+        anthropic_mock = MagicMock()
+        with patch.dict("sys.modules", {"anthropic": anthropic_mock}):
+            from compass.clients.anthropic import AnthropicClient
+
+            client = AnthropicClient(model="claude-fable-5", api_key="fake")
+
+        empty_response = MagicMock()
+        empty_response.usage = MagicMock(input_tokens=9, output_tokens=0)
+        empty_response.content = []
+        empty_response.stop_reason = "end_turn"
+        success_response = MagicMock()
+        success_response.usage = MagicMock(input_tokens=10, output_tokens=4)
+        success_response.content = [MagicMock(type="text", text="answer")]
+        success_response.stop_reason = "end_turn"
+        client.client.messages.create.side_effect = [empty_response, success_response]
+        anthropic_mock.RateLimitError = type("RateLimitError", (Exception,), {})
+        anthropic_mock.APIError = type("APIError", (Exception,), {})
+
+        with patch("time.sleep") as sleep_mock:
+            response = client.complete("prompt", max_tokens=22)
+
+        self.assertEqual(client.client.messages.create.call_count, 2)
+        sleep_mock.assert_called_once()
+        self._assert_response_contract(response, 10, 4)
+        self.assertEqual(client.total_tokens, {"input": 19, "output": 4})
+
+    def test_anthropic_client_fails_fast_on_empty_token_cap(self):
+        anthropic_mock = MagicMock()
+        with patch.dict("sys.modules", {"anthropic": anthropic_mock}):
+            from compass.clients.anthropic import AnthropicClient
+
+            client = AnthropicClient(model="claude-fable-5", api_key="fake")
+
+        capped_response = MagicMock()
+        capped_response.usage = MagicMock(input_tokens=9, output_tokens=22)
+        capped_response.content = []
+        capped_response.stop_reason = "max_tokens"
+        client.client.messages.create.return_value = capped_response
+        anthropic_mock.RateLimitError = type("RateLimitError", (Exception,), {})
+        anthropic_mock.APIError = type("APIError", (Exception,), {})
+
+        with patch("time.sleep") as sleep_mock, self.assertRaisesRegex(
+            RuntimeError, "Increase max_tokens"
+        ):
+            client.complete("prompt", max_tokens=22)
+
+        self.assertEqual(client.client.messages.create.call_count, 1)
+        sleep_mock.assert_not_called()
+        self.assertEqual(client.total_tokens, {"input": 9, "output": 22})
+
     def test_google_ai_client_conforms(self):
         google_mock = MagicMock()
         google_genai_types = MagicMock()
