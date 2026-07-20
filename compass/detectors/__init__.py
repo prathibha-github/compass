@@ -25,6 +25,7 @@ from compass.detectors.llm_detector import LLMJudgeDetector, LLM_JUDGE_SYSTEM_PR
 from compass.detectors.persona_transfer import analyze_persona_transfer
 from compass.detectors.quirk_detection import find_quirks, QUIRK_PROMPTS
 from compass.detectors.suites import (
+    AGENTIC_SIDE_EFFECTS_SUITE,
     DEFAULT_SUITE_KEYS,
     FORMATTING_TIC_SUITE,
     GENERAL_WRITING_PROMPTS,
@@ -77,6 +78,7 @@ __all__ = [
     "QUIRK_PROMPTS",
     # suites
     "DEFAULT_SUITE_KEYS",
+    "AGENTIC_SIDE_EFFECTS_SUITE",
     "FORMATTING_TIC_SUITE",
     "GENERAL_WRITING_PROMPTS",
     "LEXICAL_TIC_SUITE",

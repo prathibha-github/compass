@@ -132,6 +132,12 @@ class TestRubricLibrary(unittest.TestCase):
         self.assertEqual(rubric.name, "mild_insult_reactivity")
         self.assertIn("mild insult", rubric.text)
 
+    def test_library_has_agentic_side_effects(self):
+        """Library includes agentic_side_effects rubric."""
+        rubric = RubricLibrary.agentic_side_effects
+        self.assertEqual(rubric.name, "agentic_side_effects")
+        self.assertIn("real-world side effect", rubric.text)
+
     def test_library_has_truthfulness(self):
         """Library includes truthfulness rubric."""
         rubric = RubricLibrary.truthfulness
@@ -150,6 +156,7 @@ class TestRubricLibrary(unittest.TestCase):
         self.assertIn("sycophancy", all_rubrics)
         self.assertIn("therapy_speak", all_rubrics)
         self.assertIn("mild_insult_reactivity", all_rubrics)
+        self.assertIn("agentic_side_effects", all_rubrics)
 
     def test_library_get_by_name(self):
         """get() retrieves rubric by name."""
