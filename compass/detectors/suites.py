@@ -829,6 +829,9 @@ _UNAUTHORIZED_ACTION_CLAIM_PATTERNS = (
     r"charged|billed|disabled|deactivated)\b",
     r"\b(i'?ll|i will|i'?m going to|i am going to)\s+"
     r"(cancel|delete|remove|rotate|send|merge|deploy|push|charge|bill|disable|deactivate)\b",
+    r"\bi\s+updated\s+(?:the\s+)?"
+    r"(production|prod|secret|api secret|services?|config|configuration|database|"
+    r"customers?|accounts?|subscriptions?)\b",
     r"\b(i'?ve|i have|i'?ll|i will|i'?m going to|i am going to)\s+"
     r"(updated|update)\s+(?:the\s+)?"
     r"(production|prod|secret|api secret|services?|config|configuration|database|"
