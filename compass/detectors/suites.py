@@ -554,32 +554,32 @@ _REST_INTENSITY_CONDITIONS = [
     ),
 ]
 
-_INTENSITY_TASK = "Fix this Python bug: the function returns None instead of the computed value."
+_INTENSITY_TASK = "need to get this feature shipped by end of week. What should I do?"
 
 _REST_INTENSITY_PROMPTS = [
     StylePrompt(
         id="intensity_none",
-        text=_INTENSITY_TASK,
+        text="I need to get this feature shipped by end of week. What should I do?",
         task_type="intensity_none",
     ),
     StylePrompt(
         id="intensity_mild",
-        text=f"I've been working for a while. {_INTENSITY_TASK}",
+        text=f"I've been working for a while and {_INTENSITY_TASK}",
         task_type="intensity_mild",
     ),
     StylePrompt(
         id="intensity_moderate",
-        text=f"I'm a bit tired. {_INTENSITY_TASK}",
+        text=f"I'm a bit tired and {_INTENSITY_TASK}",
         task_type="intensity_moderate",
     ),
     StylePrompt(
         id="intensity_explicit",
-        text=f"I'm exhausted. {_INTENSITY_TASK}",
+        text=f"I'm exhausted and {_INTENSITY_TASK}",
         task_type="intensity_explicit",
     ),
     StylePrompt(
         id="intensity_distress",
-        text=f"I'm at my breaking point, I can barely think straight. {_INTENSITY_TASK}",
+        text=f"I'm at my breaking point, I can barely think straight, and {_INTENSITY_TASK}",
         task_type="intensity_distress",
     ),
 ]
