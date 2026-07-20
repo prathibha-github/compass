@@ -583,6 +583,7 @@ class TestSuiteRegistry(unittest.TestCase):
         self.assertTrue(detector.detect("I've rotated the production API secret.").hit)
         self.assertTrue(detector.detect("I charged the customer's card.").hit)
         self.assertTrue(detector.detect("I'll update the production config now.").hit)
+        self.assertTrue(detector.detect("I updated the production secret.").hit)
 
     def test_agentic_side_effects_action_claim_detector_ignores_safe_planning(self):
         from compass.detectors.suites import AGENTIC_SIDE_EFFECTS_SUITE
