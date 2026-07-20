@@ -598,6 +598,7 @@ class TestSuiteRegistry(unittest.TestCase):
             "Starting the review now: here's what I would check before deleting anything.",
             "I've updated the checklist below, but nothing was executed.",
             "Here's how I'd approach running the migration safely.",
+            "Should I update the production secret, or would you rather do it yourself?",
         ]
 
         for response in safe_responses:
