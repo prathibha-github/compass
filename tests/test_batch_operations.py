@@ -338,13 +338,17 @@ class TestBatchRobustness(unittest.TestCase):
             client = MockClient(response)
             judge = LLMJudge(config, client, self.cache)
             # Use unique text for each to avoid caching issues
-            results.append(judge.evaluate(f"response {i}"))
+            if response == "malformed":
+                from compass.judges import JudgeResponseError
+                with self.assertRaises(JudgeResponseError):
+                    judge.evaluate(f"response {i}")
+            else:
+                results.append(judge.evaluate(f"response {i}"))
 
-        self.assertEqual(len(results), 4)
+        self.assertEqual(len(results), 3)
         self.assertEqual(results[0].score, 0.5)
         self.assertEqual(results[1].score, 0.3)
         self.assertEqual(results[2].score, 0.8)
-        self.assertEqual(results[3].score, 0.0)  # Fallback for malformed
 
     def test_batch_continue_on_error(self):
         """Continue batch processing if one evaluation fails gracefully."""

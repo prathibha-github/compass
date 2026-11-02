@@ -34,33 +34,37 @@ sequenceDiagram
     participant Judge as LLMJudge
     participant Cache as EvaluationCache
     participant Client as CompletionClient
-    participant Parser as parse_judge_response
+    participant Parser as parse_scored_response
 
     Caller->>Judge: evaluate(text, context=None)
     Judge->>Judge: compute cache coordinates
-    Judge->>Cache: get(config_hash, text_hash, prompt_version)
+    Judge->>Cache: get(config_hash, text_hash, prompt_version + scoring_version)
     alt cache hit
         Cache-->>Judge: cached EvaluationResult
         Judge-->>Caller: result with cache_hit=True
     else cache miss
         Judge->>Client: complete(prompt, system, max_tokens, temperature)
         Client-->>Judge: completion, token usage, cost
-        Judge->>Parser: parse_judge_response(completion)
-        Parser-->>Judge: payload or None
-        Judge->>Judge: normalize payload into EvaluationResult
-        Judge->>Cache: put(coordinates, result)
-        Judge-->>Caller: EvaluationResult
+        Judge->>Parser: parse_scored_response(completion)
+        alt invalid or missing numeric score
+            Parser-->>Caller: JudgeResponseError (no cache write)
+        else valid finite score
+            Parser-->>Judge: normalized payload
+            Judge->>Judge: derive hit from threshold
+            Judge->>Cache: put(coordinates, result)
+            Judge-->>Caller: EvaluationResult
+        end
     end
 ```
 
 The configuration hash includes the rubric hash, judge model, maximum tokens,
 temperature, and seed. The text hash includes optional user context, and the
-prompt-template version is a separate coordinate. `JudgeConfig.seed` affects
+prompt-template and scoring-contract versions share a separate coordinate. `JudgeConfig.seed` affects
 the key but is not forwarded by `LLMJudge` to the client call.
 
-`LLMJudge` recomputes `hit` from the score threshold. Malformed responses currently
-produce a zero-score fallback that is cached; the sequence describes that
-current behavior, not successful validation of every judgment.
+`LLMJudge` recomputes `hit` from the score threshold. Invalid scores raise before
+cache insertion. The scoring-contract namespace prevents reuse of historical
+fallback-zero cache entries; persisted evaluation rows require explicit rescoring.
 
 ## Direct detector execution
 
@@ -80,9 +84,10 @@ flowchart TD
 
 `LLMJudgeDetector.detect_with_judge` coordinates prompt building, the callback,
 and parsing. It does not instantiate `LLMJudge` or use `EvaluationCache`
-internally. Its current parser can accept a supplied `hit` value; malformed
-output becomes a zero score with `parse_error` metadata. The main CLI in
-Compass Experiments uses this direct path.
+internally. Both judge paths use `parse_scored_response`, reject invalid scores,
+and derive `hit` from the configured threshold. The main CLI in Compass
+Experiments uses this direct path. Prompt construction and context still differ
+from the cached suite judge, so generated judgments need not be identical.
 
 ## Two-phase TicSuite execution
 
@@ -153,11 +158,15 @@ by themselves distinguish malformed judge output from genuine nonviolations.
 ## Persistence boundaries
 
 Judge-cache coordinates and checkpoint identities serve different purposes.
-Checkpoint identities do not include every prompt, rubric, detector, or
-sampling setting. A skipped checkpoint row never reaches judge-cache lookup,
-so changing a rubric hash alone does not force rescoring of completed rows.
-Keep experiment configurations isolated and deliberately rebuild affected
-artifacts when definitions change.
+The suite runner validates generation and evaluation input fingerprints before
+skipping completed rows. It rejects stale or legacy fingerprints. Generation and
+evaluation manifests preserve expected identities so failures cannot disappear
+from suite summaries. Custom detectors with external state must provide an
+explicit versioned contract. Provider alias changes remain outside this check.
+
+BenchmarkSpec checkpoints still use identities without complete input
+fingerprints. Keep those experiment configurations isolated and deliberately
+rebuild affected artifacts when definitions change.
 
 The generic checkpoint loader logs and skips malformed rows; strict suite and
 benchmark record readers reject invalid data. Neither behavior should be

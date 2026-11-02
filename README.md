@@ -229,11 +229,17 @@ Do not treat a benchmark win as a blanket model-quality claim. Interpretation
 is benchmark-local and depends on the prompt set, rubric design, judge model,
 and artifact quality diagnostics.
 
-Use a separate output directory for each experiment configuration. Checkpoint
-identities do not capture every prompt, rubric, or sampling change. In the
-suite API, changing a detector under the same name requires explicit
-rescoring with `evaluate_suite_completions(..., resume=False)`; this preserves
-generations. Changing prompts or generation settings calls for fresh generations.
+The suite API verifies saved input fingerprints before resuming. Changed prompts,
+conditions, temperature, token budgets, detector definitions, or saved completions
+require an explicit fresh run or rescore. Legacy suite rows without fingerprints
+cannot resume. Use `evaluate_suite_completions(..., resume=False)` to re-score
+saved generations without regenerating them. Keep each JSONL file with its
+`.manifest.json` coverage file. Failures raise while preserving successful work;
+resume the failed phase before reporting. Custom detectors with external state
+must expose a versioned `resume_contract()`; see `evaluation/contracts.py`.
+
+The separate `BenchmarkSpec` API still uses identity-based checkpoints. Use a
+fresh output directory when its prompts, rubrics, or generation settings change.
 
 ## Reproducibility
 
@@ -252,12 +258,17 @@ do not establish validity on their own.
 
 ### Current scoring limitations
 
-Malformed `LLMJudge` output currently falls back to a zero score and is cached.
-A zero score alone therefore does not prove the judged behavior was absent.
-The direct `LLMJudgeDetector` path records parse errors in metadata but also
-returns a zero score; it can accept a model-supplied `hit` that differs from
-the score threshold. Audit judge failures and score/hit consistency before
-using aggregate rates as evidence.
+`LLMJudge` and `LLMJudgeDetector` raise `JudgeResponseError` for missing,
+malformed, nonnumeric, boolean, or nonfinite scores. Failed judgments are not
+cached or saved as successful evaluations. Both derive `hit` from the configured
+score threshold, ignoring a model-supplied `hit`. The new cache namespace excludes
+older fallback-zero entries; it does not repair historical evaluation files.
+Re-score those files before drawing conclusions.
+
+Valid JSON is not evidence of judge accuracy. Calibrate detectors against human
+labels; `compass.judges.calibration.compare_human_labels` reports coverage,
+agreement, precision, recall, and a confusion matrix without treating missing
+labels as negatives.
 
 ## Examples
 

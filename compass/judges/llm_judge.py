@@ -1,13 +1,10 @@
 """LLM-based judge for evaluating model completions."""
 import hashlib
-import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Optional
 
 from compass.judges.base import EvaluationResult, JudgeConfig
-from compass.judges.parsing import parse_judge_response
-
-logger = logging.getLogger(__name__)
+from compass.judges.parsing import SCORING_VERSION, parse_scored_response
 
 if TYPE_CHECKING:
     from compass.cache import EvaluationCache
@@ -101,7 +98,8 @@ class LLMJudge(Judge):
         """
         keyed_text = text if context is None else f"{context}\x00{text}"
         text_hash = hashlib.sha256(keyed_text.encode()).hexdigest()[:16]
-        return (self.config.config_hash, text_hash, self.PROMPT_VERSION)
+        # Old caches may contain fabricated zeros from parse failures.
+        return (self.config.config_hash, text_hash, f"{self.PROMPT_VERSION}:scoring-{SCORING_VERSION}")
 
     def _build_prompt(self, text: str, context: Optional[str] = None) -> str:
         """Build evaluation prompt deterministically."""
@@ -126,27 +124,9 @@ class LLMJudge(Judge):
         )
 
     def _parse_response(self, raw: str) -> EvaluationResult:
-        """Parse judge response with defensive fallbacks."""
-        payload = parse_judge_response(raw)
-
-        if payload is None:
-            return EvaluationResult(
-                name=self.config.rubric.name,
-                score=0.0,
-                hit=False,
-                confidence=None,
-                rationale="",
-                rubric_hash=self.config.rubric.hash,
-                judge_model=self.config.judge_model,
-                prompt_version=self.PROMPT_VERSION,
-            )
-
-        # Extract and validate score
-        try:
-            score = float(payload.get("score", 0.0))
-        except (TypeError, ValueError):
-            score = 0.0
-        score = max(0.0, min(1.0, score))
+        """Parse a valid score or raise before any result is cached."""
+        payload = parse_scored_response(raw)
+        score = payload["score"]
 
         # Calculate hit from score and threshold (ignore judge's hit value,
         # since judge may have different internal judgment of violation).
@@ -154,17 +134,8 @@ class LLMJudge(Judge):
         hit = score >= self.config.rubric.hit_threshold
 
         # Extract other fields safely
-        confidence = payload.get("confidence")
-        if confidence is not None:
-            try:
-                confidence = float(confidence)
-            except (TypeError, ValueError):
-                confidence = None
-
-        raw_rationale = str(payload.get("rationale", ""))
-        if len(raw_rationale) > 500:
-            logger.warning("Judge rationale truncated from %d to 500 chars", len(raw_rationale))
-        rationale = raw_rationale[:500]
+        confidence = payload["confidence"]
+        rationale = payload["rationale"]
 
         return EvaluationResult(
             name=self.config.rubric.name,

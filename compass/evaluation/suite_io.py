@@ -95,8 +95,8 @@ def load_suite_generations(
 ) -> Dict[Tuple[Any, ...], Dict[str, Any]]:
     """Load generation rows keyed by identity, with schema migration.
 
-    Returns the most recent row for each identity; invalid rows are skipped
-    (or raise when ``strict``).
+    Non-strict reads return the most recent row per identity and skip invalid
+    rows. Strict reads reject invalid rows and duplicate identities.
     """
     generations_by_key: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
     if not Path(generations_path).exists():
@@ -107,7 +107,10 @@ def load_suite_generations(
                 continue
             try:
                 row = migrate_suite_generation_record(json.loads(line))
-                generations_by_key[suite_generation_identity(row)] = row
+                identity = suite_generation_identity(row)
+                if strict and identity in generations_by_key:
+                    raise ValueError(f"duplicate generation identity: {identity}")
+                generations_by_key[identity] = row
             except (TypeError, ValueError, json.JSONDecodeError) as e:
                 message = (
                     f"invalid suite generation row at {generations_path}:{line_num} ({e})"

@@ -2,6 +2,8 @@
 import tempfile
 import unittest
 
+from compass.judges import JudgeResponseError
+
 from compass.cache import EvaluationCache
 from compass.clients import CompletionClient, CompletionResponse
 from compass.judges import JudgeConfig, LLMJudge
@@ -276,12 +278,8 @@ class TestLLMJudge(unittest.TestCase):
         client = MockClient("Not JSON at all")
         judge = LLMJudge(config, client, self.cache)
 
-        result = judge.evaluate("test")
-
-        # Should return safe defaults
-        self.assertEqual(result.score, 0.0)
-        self.assertFalse(result.hit)
-        self.assertEqual(result.rationale, "")
+        with self.assertRaises(JudgeResponseError):
+            judge.evaluate("test")
 
     def test_judge_missing_fields(self):
         config = JudgeConfig(
@@ -303,12 +301,11 @@ class TestLLMJudge(unittest.TestCase):
             judge_model="gpt-4o",
         )
 
-        # Non-numeric score should default to 0.0
+        # Non-numeric scores are failed measurements
         client = MockClient('{"score": "high", "hit": false}')
         judge = LLMJudge(config, client, self.cache)
-        result = judge.evaluate("test")
-
-        self.assertEqual(result.score, 0.0)
+        with self.assertRaises(JudgeResponseError):
+            judge.evaluate("test")
 
     def test_judge_tracks_tokens(self):
         config = JudgeConfig(

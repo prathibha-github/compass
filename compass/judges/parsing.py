@@ -1,6 +1,47 @@
 """JSON parsing with defensive fallbacks for judge responses."""
 import json
+import math
 from typing import Optional
+
+
+SCORING_VERSION = "2"
+
+
+class JudgeResponseError(ValueError):
+    """A judge response cannot be interpreted as a valid measurement."""
+
+
+def parse_scored_response(raw: str) -> dict:
+    """Require a finite numeric score; never turn a failed judgment into zero.
+
+    Numeric strings and finite out-of-range scores retain the historical
+    conversion/clamping behavior. A model-provided ``hit`` is ignored: callers
+    derive it from their configured threshold.
+    """
+    payload = parse_judge_response(raw)
+    if not isinstance(payload, dict):
+        raise JudgeResponseError("Judge response must contain a JSON object with a score")
+    value = payload.get("score")
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise JudgeResponseError("Judge score must be a finite number")
+    try:
+        score = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise JudgeResponseError("Judge score must be a finite number") from exc
+    if not math.isfinite(score):
+        raise JudgeResponseError("Judge score must be a finite number")
+    confidence = payload.get("confidence")
+    try:
+        confidence = float(confidence) if not isinstance(confidence, bool) else None
+    except (TypeError, ValueError, OverflowError):
+        confidence = None
+    if confidence is not None and not (math.isfinite(confidence) and 0 <= confidence <= 1):
+        confidence = None
+    return {
+        "score": max(0.0, min(1.0, score)),
+        "confidence": confidence,
+        "rationale": str(payload.get("rationale", ""))[:500],
+    }
 
 
 def parse_judge_response(raw: str) -> Optional[dict]:
@@ -13,7 +54,8 @@ def parse_judge_response(raw: str) -> Optional[dict]:
     """
     # Try direct parse
     try:
-        return json.loads(raw)
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else None
     except json.JSONDecodeError:
         pass
 
