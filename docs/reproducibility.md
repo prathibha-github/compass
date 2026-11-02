@@ -5,6 +5,9 @@ can be inspected and reused. A cache hit returns a saved evaluation. A new
 provider call can return a different score, even with the same visible inputs;
 Compass does not guarantee identical model outputs across time or environments.
 
+See [limitations and work left to do](LIMITATIONS.md) for the remaining gaps
+in scoring, saved metadata, and resume behavior.
+
 ## Cache identity
 
 `LLMJudge` uses these cache coordinates:

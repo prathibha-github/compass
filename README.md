@@ -1,6 +1,11 @@
 # Compass
 
-Evaluation framework for subjective model behavior.
+A framework for repeatable experiments on model behavior.
+
+When a model does something unexpected, define a test suite and compare the
+behavior across model versions, prompts, and conditions. Compass provides the
+shared clients, scoring, cache, and checkpoints so each experiment can reuse
+that infrastructure.
 
 Compass evaluates model outputs on rubric-based qualities such as sycophancy,
 truthfulness, task focus, and clarity. It provides:
@@ -15,6 +20,9 @@ truthfulness, task focus, and clarity. It provides:
 [Compass Experiments](https://github.com/prathibha-github/helm-eval-lex-quirks)
 uses this library for experiment orchestration, scenario loading, and reports.
 Compass owns the shared evaluation primitives and does not import the harness.
+
+See [limitations and work left to do](docs/LIMITATIONS.md) for the scoring and
+reproducibility issues that still need attention.
 
 ## Installation
 
