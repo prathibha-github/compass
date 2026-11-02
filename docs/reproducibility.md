@@ -1,282 +1,142 @@
 # Reproducibility in Compass
 
-## Overview
+Compass records evaluation metadata and caches judge results so earlier work
+can be inspected and reused. A cache hit returns a saved evaluation. A new
+provider call can return a different score, even with the same visible inputs;
+Compass does not guarantee identical model outputs across time or environments.
 
-Compass is designed from the ground up to be reproducible. Every evaluation result is tied to:
+## Cache identity
 
-- The exact rubric used (via immutable hash)
-- The judge model name and version
-- The input text being evaluated
-- A deterministic seed
+`LLMJudge` uses these cache coordinates:
 
-This means you can reproduce exact results months or years later, assuming the same rubric, judge model, and input text.
-
-## The Reproducibility Guarantee
-
-Given:
-- Rubric with hash `abc123def456`
-- Judge model `gpt-4o`
-- Input text "Hello world"
-- All other parameters (temperature=0.0, seed=42)
-
-The same score and reasoning will be produced every time, whether:
-- Evaluated today or in 6 months
-- Evaluated on your laptop or a cloud server
-- Evaluated in a batch of 10 or a batch of 1,000
-
-## How It Works
-
-### 1. Deterministic Caching
-
-The cache key is built from:
-
-```python
-cache_key = (config_hash, text_hash, prompt_version)
+```text
+(config_hash, text_hash, prompt_version)
 ```
 
-Since judge configs are immutable and texts don't change, the same evaluation contract will always map to the same cache entry.
+`config_hash` covers the rubric hash, judge model, maximum tokens, temperature,
+and seed. `text_hash` covers the response plus optional user context.
+`prompt_version` identifies the judge prompt template. Changing any coordinate
+selects a different cache entry.
 
-### 2. Deterministic Prompts
+Rubrics are frozen dataclasses, but `JudgeConfig` is mutable. Construct a new
+configuration for a new experiment and preserve the old one with its results.
+`JudgeConfig.seed` affects cache identity; `LLMJudge` does not forward it to the
+provider's completion call. Some clients also override or omit requested
+sampling parameters for particular models.
 
-Prompts are built the same way every time:
+The default cache directory is `.compass_cache/`, with one JSON file per hashed
+key. Suite and benchmark runners use a `.cache/` directory under their output
+path. Back up the cache if you need to preserve the original judgments.
+Deleting it forces new calls, which may cost money and produce different results.
 
-```python
-prompt = f"""
-Evaluate the assistant response below using this rubric.
+## Reuse a saved evaluation
 
-Rubric:
-{rubric.text}
-
-Return JSON exactly:
-{{"score": 0.0, "hit": false, "confidence": 0.0, "rationale": "..."}}
-
-Response:
-{text}
-"""
-```
-
-No randomization, no interpolation, no variability.
-
-### 3. Deterministic Judge Configuration
-
-Judge configuration includes:
-- `temperature=0.0` (no randomness in model sampling)
-- `seed=42` (for models that support it)
-- `max_tokens=180` (consistent output length)
-
-### 4. Metadata Tracking
-
-Every result stores:
+Install the OpenAI provider extra and set `OPENAI_API_KEY` for this example.
+The first evaluation makes a provider call if the entry is absent; the second
+uses the same evaluation inputs and cache:
 
 ```python
-result.rubric_hash        # Which rubric was used
-result.judge_model        # Which model did the judging
-result.prompt_version     # Which prompt template
-result.timestamp          # When evaluation happened
-result.cache_hit          # Was this from cache?
-result.tokens_used        # How many tokens?
-result.cost_usd           # How much did it cost?
+from compass import EvaluationCache, JudgeConfig, LLMJudge, OpenAIClient, RubricLibrary
+
+config = JudgeConfig(
+    rubric=RubricLibrary.task_focus,
+    judge_model="gpt-4o-mini",
+    max_tokens=180,
+    temperature=0.0,
+    seed=42,
+)
+client = OpenAIClient(model=config.judge_model)
+cache = EvaluationCache(cache_dir=".compass_cache")
+judge = LLMJudge(config, client, cache)
+
+response = "Use a dictionary to count occurrences."
+request = "How do I count repeated values in Python?"
+first = judge.evaluate(response, context=request)
+second = judge.evaluate(response, context=request)
+assert second.cache_hit
+assert second.score == first.score
 ```
 
-Use this metadata to audit your evaluations and understand provenance.
+This demonstrates reuse, not deterministic regeneration. If a hosted model
+changes behind an unchanged ID, the cache still contains the earlier judgment.
+Use a separate cache directory when you intend to measure the changed judge.
 
-## Reproducing Results
+## What to preserve
 
-### Generate a Report
+Keep the full prompts, system conditions, responses, rubric definitions, judge
+configuration, sampling settings, provider model IDs, and both repository commit
+SHAs with each experiment. `EvaluationResult` records the rubric hash, judge
+model, prompt version, timestamp, cache status, token usage, and cost, but does
+not store all inputs or the full configuration.
+
+`EvaluationMetadata.from_result()` currently fills in `seed=42`; it cannot
+recover a non-default seed from an `EvaluationResult`. Save the configuration
+explicitly rather than treating that helper's default as evidence of the seed
+used by the provider.
+
+A report can summarize the results you collected:
 
 ```python
 from compass import reproducibility_report
 
-results = [...]  # Your evaluation results
-report = reproducibility_report(results)
-print(report)
+print(reproducibility_report([first]))
 ```
 
-This outputs:
+The report's generated instructions still describe seed 42 as deterministic.
+Treat them as configuration hints, not a promise of exact reproduction. The
+saved artifacts and actual provider settings are the evidence for a run.
 
-```
-================================================================================
-REPRODUCIBILITY REPORT
-================================================================================
+## Resume is a separate mechanism
 
-Evaluation Configuration:
-  Rubric hash:      abc123def456
-  Judge model:      gpt-4o
-  Prompt version:   1.0
+Checkpoint identities are smaller than judge-cache identities. Reusing an
+output directory after changing prompt text, system conditions, detector
+rules, rubrics, or sampling settings can reuse older results. A judge-cache
+change does not help when the checkpoint skips the judge call entirely.
 
-Resource Usage:
-  Evaluations:      1,000
-  Input tokens:     45,231
-  Output tokens:    12,451
-  Total cost:       $0.43
+Use a new output directory for a changed experiment. To rescore existing suite
+generations with changed detector definitions, call
+`evaluate_suite_completions(..., resume=False)` with the saved generation path.
+To change generation settings, generate fresh completions. See the
+[checkpoint guide](CHECKPOINT_SYSTEM.md) for record formats and the
+[benchmark playbook](BENCHMARK_PLAYBOOK.md) for the benchmark API.
 
-To Reproduce:
-  1. Use compass version 0.1.0
-  2. Load rubric with hash: abc123def456
-  3. Initialize judge: gpt-4o
-  4. Set seed to 42
-  5. Run evaluation on same texts
-```
+## Rubric versions
 
-### Step-by-Step Reproduction
-
-1. **Get the rubric hash** from the original results (field: `result.rubric_hash`)
-
-2. **Find that rubric** in your rubric library:
-   ```python
-   from compass import RubricLibrary
-   
-   rubric = None
-   for r in RubricLibrary.all_rubrics().values():
-       if r.hash == "abc123def456":
-           rubric = r
-           break
-   ```
-
-3. **Create the same judge configuration**:
-   ```python
-   from compass import LLMJudge, JudgeConfig
-   from anthropic import Anthropic
-   
-   config = JudgeConfig(
-       rubric=rubric,
-       judge_model="gpt-4o",
-       max_tokens=180,
-       temperature=0.0,
-       seed=42,
-   )
-   
-   client = Anthropic()  # or your preferred client
-   judge = LLMJudge(config, client)
-   ```
-
-4. **Run the same evaluation**:
-   ```python
-   result = judge.evaluate("Hello world")
-   ```
-
-5. **Compare**:
-   ```python
-   assert result.score == original_result.score
-   assert result.hit == original_result.hit
-   assert result.rubric_hash == original_result.rubric_hash
-   ```
-
-## What Breaks Reproducibility
-
-These changes will produce different results:
-
-- **Changing the rubric text** — Even a small wording change produces a new hash
-- **Changing the judge model** — Different model = different evaluations
-- **Changing the input text** — Of course
-- **Changing temperature** — Higher temperature = more randomness
-
-These changes will still get cached results (if available):
-
-- **Time passing** — Cache remains valid
-- **Running on different hardware** — Cache still works
-- **Changing other rubrics** — Doesn't affect this rubric's cache
-
-## Cost Tracking
-
-Every evaluation includes cost information:
+Create a new rubric version when changing its meaning. Keep the old definition
+available so previous results remain interpretable:
 
 ```python
-result.tokens_used  # {"input": 123, "output": 45}
-result.cost_usd     # 0.00189
+from dataclasses import replace
+from compass import RubricLibrary
+
+original = RubricLibrary.task_focus
+revised = replace(
+    original,
+    version="1.1",
+    text=original.text + " Explicitly requested advice is not a violation.",
+)
+assert revised.hash != original.hash
 ```
 
-Aggregate costs across runs:
+The hash distinguishes definitions; it does not validate them or stop callers
+from combining incompatible results. Preserve the judge prompt-template version
+and code revision as well.
+
+## Cost accounting
+
+`cost_summary` and `cost_per_judge` add the cost fields in the supplied results.
+Cached results retain the original call's token usage and cost, so summing them
+again does not measure new API spend. Client counters track calls made by that
+client instance. For the example above:
 
 ```python
 from compass import cost_summary
 
-results = [...]
-summary = cost_summary(results)
-print(f"Total cost: ${summary['total_cost_usd']}")
-print(f"Total tokens: {summary['total_tokens']:,}")
+print(cost_summary([first]))  # Cost recorded on this evaluation
+print(client.total_cost_usd)  # Estimated API spend by this client instance
 ```
 
-Break down by judge model:
-
-```python
-from compass import cost_per_judge
-
-breakdown = cost_per_judge(results)
-for model, costs in breakdown.items():
-    print(f"{model}: ${costs['total_cost_usd']} ({costs['count']} evals)")
-```
-
-## Versioning Strategy
-
-### Rubric Versions
-
-When you change a rubric, you create a new version:
-
-```python
-# Original
-SYCOPHANCY_V1 = Rubric(
-    name="sycophancy_v1",
-    version="1.0",
-    text="Score 1.0 when..."
-)
-
-# Modified (e.g., clarified wording)
-SYCOPHANCY_V2 = Rubric(
-    name="sycophancy_v2",
-    version="1.1",
-    text="Score 1.0 when... (clarified: X means Y)"
-)
-```
-
-This ensures:
-- Old results tied to `sycophancy_v1` remain valid
-- New evaluations using `sycophancy_v2` are distinct
-- No accidental mixing of different rubric versions
-
-### Compass Versions
-
-The library version is tracked:
-
-```python
-from compass import __version__
-
-print(__version__)  # "0.1.0"
-```
-
-Include this in results for full provenance tracking:
-
-```python
-from compass import EvaluationMetadata
-
-metadata = EvaluationMetadata.from_result(result, __version__)
-print(metadata.compass_version)  # "0.1.0"
-```
-
-## Best Practices
-
-1. **Always check rubric hashes** when loading old results
-2. **Document your judge configuration** in comments or README
-3. **Use version-specific rubric names** (e.g., `sycophancy_v1`, not just `sycophancy`)
-4. **Archive cost reports** alongside results for auditing
-5. **Test reproducibility** on a small sample before scaling
-
-## Caching
-
-Reproducibility is fast because of caching. The cache is stored in `.compass_cache/` by default:
-
-```
-.compass_cache/
-  ├── abc123def456_gpt4o.json    # Cached result
-  ├── def456ghi789_gpt4o.json
-  └── ...
-```
-
-The cache is safe to:
-- Copy to another machine (cache keys are deterministic)
-- Back up and restore
-- Delete (results will be recomputed)
-
-The cache is not safe to:
-- Share without understanding the rubrics
-- Assume is fresh (if rubrics changed, cache is stale)
+Provider bills remain the source for actual charges; local pricing tables and
+reported token usage are estimates. Inspect invalid judge responses and
+missing evaluations separately from cost and cache statistics. See the
+[README's scoring limitations](../README.md#current-scoring-limitations).
