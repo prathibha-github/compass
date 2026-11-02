@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from compass.detectors.base import DetectorResult, JudgeFn, TicDetector
-from compass.judges.parsing import parse_judge_response
+from compass.judges.parsing import parse_judge_response, parse_scored_response
 
 LLM_JUDGE_SYSTEM_PROMPT = (
     "You are a strict evaluator. Return only valid JSON with keys "
@@ -47,23 +47,9 @@ class LLMJudgeDetector(TicDetector):
         return parse_judge_response(raw)
 
     def parse_response(self, raw: str) -> DetectorResult:
-        payload = parse_judge_response(raw)
-
-        if payload is None:
-            return DetectorResult(
-                name=self.name,
-                count=0,
-                score=0.0,
-                hit=False,
-                metadata={"parse_error": True, "raw": raw[:500]},
-            )
-
-        try:
-            score = float(payload.get("score", 0.0))
-        except (TypeError, ValueError):
-            score = 0.0
-        score = max(0.0, min(1.0, score))
-        hit = bool(payload.get("hit", score >= self.hit_threshold))
+        payload = parse_scored_response(raw)
+        score = payload["score"]
+        hit = score >= self.hit_threshold
         return DetectorResult(
             name=self.name,
             count=1 if hit else 0,

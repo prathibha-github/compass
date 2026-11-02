@@ -1,6 +1,8 @@
 """Tests for error handling and edge cases."""
 import tempfile
 import unittest
+
+from compass.judges import JudgeResponseError
 from pathlib import Path
 
 from compass.cache import EvaluationCache
@@ -55,9 +57,8 @@ class TestErrorHandling(unittest.TestCase):
         client = MockClient("")
         judge = LLMJudge(config, client, self.cache)
 
-        result = judge.evaluate("test")
-        self.assertEqual(result.score, 0.0)
-        self.assertFalse(result.hit)
+        with self.assertRaises(JudgeResponseError):
+            judge.evaluate("test")
 
     def test_whitespace_only_response(self):
         """Handle whitespace-only response."""
@@ -68,8 +69,8 @@ class TestErrorHandling(unittest.TestCase):
         client = MockClient("   \n\t  ")
         judge = LLMJudge(config, client, self.cache)
 
-        result = judge.evaluate("test")
-        self.assertEqual(result.score, 0.0)
+        with self.assertRaises(JudgeResponseError):
+            judge.evaluate("test")
 
     def test_score_as_string_number(self):
         """Handle score as string number."""
@@ -81,8 +82,7 @@ class TestErrorHandling(unittest.TestCase):
         judge = LLMJudge(config, client, self.cache)
 
         result = judge.evaluate("test")
-        # Should parse string number or default to 0.0
-        self.assertIn(result.score, [0.75, 0.0])
+        self.assertEqual(result.score, 0.75)
 
     def test_boolean_score(self):
         """Handle boolean value where score expected."""
@@ -93,9 +93,8 @@ class TestErrorHandling(unittest.TestCase):
         client = MockClient('{"score": true, "hit": false}')
         judge = LLMJudge(config, client, self.cache)
 
-        result = judge.evaluate("test")
-        # Boolean true converts to 1.0, which is clamped to 1.0
-        self.assertIn(result.score, [0.0, 1.0])
+        with self.assertRaises(JudgeResponseError):
+            judge.evaluate("test")
 
     def test_null_score(self):
         """Handle null score."""
@@ -106,8 +105,8 @@ class TestErrorHandling(unittest.TestCase):
         client = MockClient('{"score": null, "hit": false}')
         judge = LLMJudge(config, client, self.cache)
 
-        result = judge.evaluate("test")
-        self.assertEqual(result.score, 0.0)
+        with self.assertRaises(JudgeResponseError):
+            judge.evaluate("test")
 
     def test_missing_score_field(self):
         """Handle missing score field."""
@@ -118,8 +117,8 @@ class TestErrorHandling(unittest.TestCase):
         client = MockClient('{"hit": true, "rationale": "test"}')
         judge = LLMJudge(config, client, self.cache)
 
-        result = judge.evaluate("test")
-        self.assertEqual(result.score, 0.0)
+        with self.assertRaises(JudgeResponseError):
+            judge.evaluate("test")
 
     def test_very_large_score(self):
         """Handle very large score."""

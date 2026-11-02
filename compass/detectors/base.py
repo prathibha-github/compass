@@ -189,7 +189,14 @@ def summarize_detector_records(
 
         for detector_record in records:
             for detector in suite.detectors:
-                payload = detector_record.get(detector.name, {})
+                if detector.name not in detector_record:
+                    raise ValueError(
+                        f"Cannot summarize incomplete detector records: {detector.name!r} "
+                        "is missing. Retry failed evaluations before reporting."
+                    )
+                payload = detector_record[detector.name]
+                if payload.get("metadata", {}).get("parse_error"):
+                    raise ValueError("Cannot summarize legacy failed judgments; re-evaluate them")
                 count = float(payload.get("count", 0.0))
                 hit = bool(payload.get("hit", count > 0))
                 detector_values[detector.name].append(count)

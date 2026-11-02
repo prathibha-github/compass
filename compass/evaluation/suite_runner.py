@@ -31,13 +31,15 @@ from compass.detectors.base import (
     suite_uses_llm_judge,
 )
 from compass.evaluation.checkpoint import CheckpointManager
-from compass.evaluation.record_schema import suite_sample_identity
+from compass.evaluation.record_schema import checkpoint_identity, suite_sample_identity
+from compass.evaluation.contracts import detector_definition, fingerprint, validate_suite_identities
 from compass.evaluation.suite_io import (
     append_suite_generation,
     load_suite_generations,
     reset_suite_generations,
 )
 from compass.judges import JudgeConfig, LLMJudge
+from compass.judges.parsing import SCORING_VERSION
 from compass.rubrics.base import Rubric
 
 logger = logging.getLogger(__name__)
@@ -219,12 +221,14 @@ def generate_suite_completions(
 
     Returns the path to the generations JSONL.
     """
+    validate_suite_identities(suite)
+    if len(models) != len(set(models)):
+        raise ValueError("Model names must be unique")
+    if type(samples) is not int or samples <= 0:
+        raise ValueError("samples must be a positive integer")
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     generations_path = out / "suite_generations.jsonl"
-
-    if not resume:
-        reset_suite_generations(generations_path)
 
     effective_max_tokens_by_model = _compute_suite_token_budget_by_model(
         models,
@@ -233,13 +237,43 @@ def generate_suite_completions(
         ),
         allow_mixed_token_budgets=allow_mixed_token_budgets,
     )
-    existing_generations = load_suite_generations(generations_path)
+    contracts = {
+        (model, suite.name, prompt.id, condition.name): fingerprint({
+            "version": 1, "model": model, "suite": suite.name,
+            "prompt": prompt.text, "task_type": prompt.task_type,
+            "system": condition.system_prompt, "temperature": temperature,
+            "max_tokens": effective_max_tokens_by_model[model],
+        })
+        for model in models for prompt in suite.prompts for condition in suite.conditions
+    }
+    if not resume:
+        reset_suite_generations(generations_path)
+    existing_generations = load_suite_generations(generations_path, strict=True)
     _validate_resumed_suite_token_budgets(
         existing_generations.values(),
         effective_max_tokens_by_model,
     )
+    for identity, row in existing_generations.items():
+        expected = contracts.get(identity[:4])
+        if expected is None or row.get("generation_contract") != expected or identity[4] >= samples:
+            raise ValueError(
+                f"Cannot resume generation {identity}: inputs changed or the artifact "
+                "has no verified generation contract. Use a fresh output directory "
+                "or explicitly regenerate with resume=False."
+            )
     completed = set(existing_generations.keys())
     logger.info("Suite generation: %d cells already complete", len(completed))
+
+    generation_manifest = {
+        "expected": [
+            {"identity": list(key) + [sample_idx], "contract": value}
+            for key, value in contracts.items() for sample_idx in range(samples)
+        ],
+    }
+    manifest_path = generations_path.with_suffix(".manifest.json")
+    temporary = manifest_path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(generation_manifest, sort_keys=True) + "\n")
+    temporary.replace(manifest_path)
 
     clients_by_model = {model: client_factory(model) for model in models}
 
@@ -286,6 +320,9 @@ def generate_suite_completions(
                                 "task_type": prompt.task_type,
                                 "condition": condition.name,
                                 "sample_idx": sample_idx,
+                                "generation_contract": contracts[identity[:4]],
+                                "temperature": temperature,
+                                "system_prompt": condition.system_prompt,
                                 "completion": response.completion,
                                 "tokens_used": tokens_used,
                                 "cost_usd": getattr(response, "cost_usd", 0.0),
@@ -314,7 +351,10 @@ def generate_suite_completions(
 
     logger.info("✓ Suite generation wrote %d completions", written)
     if failures:
-        logger.warning("Suite generation had %d runtime failures", failures)
+        raise RuntimeError(
+            f"Suite generation had {failures} runtime failures; successful completions were saved. "
+            "Retry with resume=True before evaluating."
+        )
     return generations_path
 
 
@@ -336,25 +376,76 @@ def evaluate_suite_completions(
 
     Returns the path to ``suite_evaluations_<judge_model>.jsonl``.
     """
+    validate_suite_identities(suite)
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     judge_tag = judge_model or "heuristic"
     evaluations_path = out / f"suite_evaluations_{judge_tag}.jsonl"
 
+    generations = load_suite_generations(Path(generations_path), strict=True)
+    generation_manifest_path = Path(generations_path).with_suffix(".manifest.json")
+    if generation_manifest_path.exists():
+        manifest = json.loads(generation_manifest_path.read_text())
+        expected = {tuple(row["identity"]): row["contract"] for row in manifest["expected"]}
+        if set(generations) != set(expected) or any(
+            row.get("generation_contract") != expected[key] for key, row in generations.items()
+        ):
+            raise ValueError("Incomplete or incompatible generations; resume generation before scoring")
+    else:
+        logger.warning("Legacy generations have no manifest; intended generation coverage cannot be verified")
+
+    definitions = {d.name: detector_definition(d) for d in suite.detectors}
+    contracts = {}
+    for (model, source_suite, prompt_id, condition, sample_idx), gen in generations.items():
+        if source_suite != suite.name:
+            raise ValueError(f"Generation belongs to suite {source_suite!r}, expected {suite.name!r}")
+        for detector in suite.detectors:
+            identity = suite_sample_identity(model, suite.name, detector.name, prompt_id, condition, sample_idx)
+            contracts[identity] = fingerprint({
+                "generation": gen,
+                "detector": definitions[detector.name],
+                "judge_model": judge_model if _is_judge_detector(detector) else None,
+                "judge_prompt_version": LLMJudge.PROMPT_VERSION,
+                "scoring_version": SCORING_VERSION,
+            })
+
+    completed = set()
+    if resume and evaluations_path.exists():
+        with evaluations_path.open() as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                identity = checkpoint_identity(row)
+                expected = contracts.get(identity)
+                if expected is None or row.get("evaluation_contract") != expected:
+                    raise ValueError(
+                        f"Cannot resume evaluation {identity}: inputs changed or the artifact "
+                        "has no verified evaluation contract. Re-score saved generations "
+                        "with resume=False or use a fresh output directory."
+                    )
+                if identity in completed:
+                    raise ValueError(f"Duplicate evaluation identity: {identity}")
+                completed.add(identity)
+
+    needs_judge = suite_uses_llm_judge(suite)
+    if needs_judge and not judge_model:
+        raise ValueError("suite has LLM-judge detectors; judge_model is required to evaluate")
     checkpoint = CheckpointManager(str(evaluations_path))
     if not resume:
         checkpoint.reset()
-    completed = checkpoint.load()
-
-    generations = load_suite_generations(Path(generations_path), strict=True)
-
-    needs_judge = suite_uses_llm_judge(suite)
+    # Retain the expected population even when an entire sample fails judging.
+    manifest_path = evaluations_path.with_suffix(".manifest.json")
+    manifest = {
+        "suite": suite.name,
+        "detectors": definitions,
+        "expected": [{"identity": list(key), "contract": value} for key, value in contracts.items()],
+    }
+    temporary = manifest_path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(manifest, sort_keys=True) + "\n")
+    temporary.replace(manifest_path)
     judges: Dict[str, LLMJudge] = {}
     if needs_judge:
-        if not judge_model:
-            raise ValueError(
-                "suite has LLM-judge detectors; judge_model is required to evaluate"
-            )
         judge_client = client_factory(judge_model)
         cache = EvaluationCache(cache_dir=str(out / ".cache"))
         for detector in suite.detectors:
@@ -405,6 +496,8 @@ def evaluate_suite_completions(
                         "condition": condition,
                         "task_type": gen.get("task_type", "general"),
                         "sample_idx": sample_idx,
+                        "evaluation_contract": contracts[identity],
+                        "generation_fingerprint": fingerprint(gen),
                         "completion": completion[:200],
                         "generation_visible_chars": gen.get("visible_chars"),
                         "generation_visible_word_count": gen.get("visible_word_count"),
@@ -437,7 +530,10 @@ def evaluate_suite_completions(
 
     logger.info("✓ Suite evaluation scored %d detector results", scored)
     if failures:
-        logger.warning("Suite evaluation had %d runtime failures", failures)
+        raise RuntimeError(
+            f"Suite evaluation had {failures} runtime failures; successful scores were saved. "
+            "Retry with resume=True before reporting results."
+        )
     return evaluations_path
 
 
@@ -452,11 +548,24 @@ def summarize_suite_evaluations(
     """
     # (model, prompt_id, condition, sample_idx) -> {detector_name: {count, hit}}
     cells: Dict[Any, Dict[str, dict]] = {}
+    manifest_path = Path(evaluations_path).with_suffix(".manifest.json")
+    if not manifest_path.exists():
+        raise ValueError("Cannot verify evaluation coverage without its manifest; re-score saved generations")
+    manifest = json.loads(manifest_path.read_text())
+    definitions = {d.name: detector_definition(d) for d in suite.detectors}
+    if manifest["suite"] != suite.name or manifest["detectors"] != json.loads(json.dumps(definitions)):
+        raise ValueError("Evaluation definitions changed; re-score before summarizing")
+    expected = {tuple(row["identity"]): row["contract"] for row in manifest["expected"]}
+    seen = set()
     with open(evaluations_path) as f:
         for line in f:
             if not line.strip():
                 continue
             row = json.loads(line)
+            identity = checkpoint_identity(row)
+            if identity in seen or identity not in expected or row.get("evaluation_contract") != expected[identity]:
+                raise ValueError("Duplicate, unexpected, or stale evaluation row; re-score before summarizing")
+            seen.add(identity)
             cell_key = (
                 row["model"],
                 row["prompt_id"],
@@ -467,6 +576,9 @@ def summarize_suite_evaluations(
                 "count": row.get("count", 1 if row.get("hit") else 0),
                 "hit": row.get("hit", False),
             }
+
+    if seen != set(expected):
+        raise ValueError("Incomplete evaluation coverage; retry failed evaluations before summarizing")
 
     condition_records: Dict[str, List[Dict[str, dict]]] = {}
     for (_model, _prompt_id, condition, _sample_idx), detector_map in cells.items():

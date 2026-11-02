@@ -1,5 +1,7 @@
 """Tests for the compass.detectors module."""
 import unittest
+
+from compass.judges import JudgeResponseError
 from unittest.mock import MagicMock
 
 from compass.detectors.base import (
@@ -189,10 +191,8 @@ class TestLLMJudgeDetector(unittest.TestCase):
     def test_parse_response_invalid_json(self):
         d = LLMJudgeDetector(name="tone", rubric="rubric")
         raw = "This is not JSON at all."
-        result = d.parse_response(raw)
-        self.assertEqual(result.score, 0.0)
-        self.assertFalse(result.hit)
-        self.assertTrue(result.metadata.get("parse_error"))
+        with self.assertRaises(JudgeResponseError):
+            d.parse_response(raw)
 
     def test_parse_response_score_clamped_to_01(self):
         d = LLMJudgeDetector(name="tone", rubric="rubric")

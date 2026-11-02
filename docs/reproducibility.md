@@ -10,13 +10,14 @@ Compass does not guarantee identical model outputs across time or environments.
 `LLMJudge` uses these cache coordinates:
 
 ```text
-(config_hash, text_hash, prompt_version)
+(config_hash, text_hash, prompt_version + scoring_version)
 ```
 
 `config_hash` covers the rubric hash, judge model, maximum tokens, temperature,
 and seed. `text_hash` covers the response plus optional user context.
-`prompt_version` identifies the judge prompt template. Changing any coordinate
-selects a different cache entry.
+The last coordinate identifies the judge prompt template and score-validation
+contract. Changing either selects a different cache entry; older fallback-zero
+entries are excluded by the new scoring version.
 
 Rubrics are frozen dataclasses, but `JudgeConfig` is mutable. Construct a new
 configuration for a new experiment and preserve the old one with its results.
@@ -88,10 +89,24 @@ saved artifacts and actual provider settings are the evidence for a run.
 
 ## Resume is a separate mechanism
 
-Checkpoint identities are smaller than judge-cache identities. Reusing an
-output directory after changing prompt text, system conditions, detector
-rules, rubrics, or sampling settings can reuse older results. A judge-cache
-change does not help when the checkpoint skips the judge call entirely.
+The suite runner checks input fingerprints in addition to checkpoint identities.
+Generation resume verifies prompt text, task type, system condition, model,
+temperature, and token budget. Evaluation resume verifies saved generation data,
+detector parameters and implementation, judge model, and scoring/prompt versions.
+It rejects mismatches and legacy rows without fingerprints before provider calls.
+Unchanged runs can append samples. Hosted-model alias changes and external custom
+client state cannot be inferred from these inputs; use pinned model IDs and fresh
+output directories when such state changes.
+
+Generation and evaluation manifests record expected rows. Incomplete generated
+artifacts with manifests cannot be scored, and incomplete evaluation files cannot
+be summarized. Imported legacy generations without manifests remain scoreable,
+but their intended generation population cannot be verified. Retain manifests
+beside their JSONL files when moving artifacts.
+
+The separate BenchmarkSpec API still uses smaller checkpoint identities. Its
+resume path can reuse older results when prompts or rubrics change under the
+same identifiers. A judge-cache change cannot invalidate skipped checkpoints.
 
 Use a new output directory for a changed experiment. To rescore existing suite
 generations with changed detector definitions, call
