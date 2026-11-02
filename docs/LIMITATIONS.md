@@ -1,66 +1,93 @@
-# Evaluation limits and next steps
+# Limitations and work left to do
 
-Compass provides infrastructure for collecting and scoring model outputs. Its
-tests establish behavior of that infrastructure; they do not establish the
-validity of a rubric, the accuracy of a judge, or a model's safety. Conclusions
-need evidence from the specific experiment and population being studied.
+The idea behind Compass is that the next time a model does something unexpected,
+I can define a test suite and compare the behavior across model versions,
+prompts, and conditions. Rest suggestions are one example. Unprompted safety
+guidance could be another. The same infrastructure should support both.
 
-This document describes the implementation as of November 2, 2026. Proposed
-work below has not been completed or assigned a delivery date. Experiment-level
-limitations and the rest-suggestion pilot are documented in
-[Compass Experiments](https://github.com/prathibha-github/helm-eval-lex-quirks/blob/main/RESEARCH_LIMITATIONS.md).
+I still need to check the scores against human labels and close a few gaps
+in how runs are saved and resumed.
 
-## What the current safeguards establish
+## Judge accuracy and context
 
-The judge paths reject invalid scores and derive hits from the configured
-threshold. The suite runner verifies input fingerprints, records expected
-sample identities, and rejects incomplete artifacts in its scoring and summary
-paths. These checks prevent specific forms of silent measurement corruption.
-They do not repair historical results or establish that a valid numeric score
-matches a human judgment. See the [scoring contract](../README.md#current-scoring-limitations)
-and [resume behavior](reproducibility.md#resume-is-a-separate-mechanism).
+A rubric gives the judge instructions, but I haven't checked the rest-suggestion
+scores against independent human labels yet. A detector can match “recovery”
+in a discussion of a database, or count a quoted suggestion as advice from the
+model. LLM judges can make errors too, including errors they share with another
+judge. Agreement alone wouldn't catch those.
 
-## Limits that affect interpretation
+The [comparison helper](../compass/judges/calibration.py) is in place. I need
+people to label examples, including ambiguous cases and counterexamples, and
+then check which errors the detectors make. Some prompts should be kept out of
+rubric development so the final check uses examples the rubric wasn't tuned on.
 
-| Dimension | Current boundary | Evidence or work needed |
-| --- | --- | --- |
-| Construct validity | Rubrics define intended behavior, but a name such as `truthfulness` or `task_focus` does not establish what the detector actually measures. Keyword matches can reflect quotation, negation, or appropriate task advice. | Annotate counterexamples and matched controls. Validate each rubric against the intended construct before interpreting its hit rate. |
-| Judge reliability | Parsing checks establish a usable score. Judge agreement, confidence, and deterministic cache reuse do not establish correctness; judges may share errors. | Compare with independent human labels on held-out prompts. Report precision, recall, disagreement, abstentions, and coverage by task and condition. The [calibration helper](../compass/judges/calibration.py) supports comparison; labels and validation evidence must come from the study. |
-| Prompt context | The suite runner passes the saved user prompt to `LLMJudge`. The direct detector path and the current BenchmarkSpec evaluator score completion text without that context. The suite judge does not receive the generation system condition as separate context. | Specify which context the construct requires. Compare judgments on the same saved responses with controlled context changes before treating execution paths as equivalent. |
-| Statistical uncertainty | Wilson intervals summarize binary observations. Repeated responses to a shared prompt and reused cached judgments can be dependent. `summarize_suite_evaluations` pools models within each condition. | Report prompt counts and response counts separately. Preserve model/task strata, use uncertainty estimates appropriate to the sampling unit, and account for exploratory comparisons. Prompt-level resampling is proposed work, not a current guarantee. |
-| Resume and reproducibility | Suite fingerprints cover recorded inputs, not changes behind provider model aliases or arbitrary external client state. Legacy generations without manifests cannot verify intended coverage. BenchmarkSpec resume still relies on smaller identities. | Extend compatibility checks to BenchmarkSpec. Preserve code revisions, effective provider settings, model IDs, and manifests. Use fresh output/cache directories when unrecorded state changes. See [reproducibility](reproducibility.md). |
-| Auditability and cost | Result records do not consistently retain full raw judge replies or every provider setting. Cached results retain their original cost fields. `JudgeConfig.seed` is not forwarded to providers, and the metadata helper's default seed is not evidence of an applied seed. | Preserve raw replies and effective request metadata with explicit retention controls. Separate newly incurred spend from historical cached cost. Correct seed-reporting semantics before claiming replayability. |
-| Quality filtering | Token-cap and fragment flags identify possible output-quality problems. Filtering can change the evaluated population and affect model comparisons. | Report rates and denominators before and after filtering, with exclusions by model and condition. Test whether conclusions depend on the filtering rule. |
-| Adversarial and external validity | The framework accepts supplied prompts and rubrics. This does not establish resistance to instructions embedded in judged text, coverage of dangerous capabilities, or transfer to agentic and deployment settings. | Define a threat model and held-out challenge set for each proposed use. Measure evaluator manipulation and distribution shifts against a human-reviewed baseline. |
+The judges also get different inputs depending on the execution path. The
+suite runner passes the user request to `LLMJudge`. The direct detector and
+BenchmarkSpec paths currently score only the completion. The suite judge does
+not receive the generation system prompt as separate context. A judgment about
+whether advice was requested needs that distinction to be explicit. Comparing
+these paths without accounting for their inputs can look like judge disagreement
+when one judge simply has less information.
 
-## Proposed order of work
+## Repeated prompts and pooled results
 
-1. **Validate one measurement target.** Freeze a rubric, create independent human
-   labels with adjudication, and reserve prompts for held-out assessment.
-   Publish errors and coverage alongside agreement. Completion means an
-   inspectable validation result, including negative findings, rather than
-   meeting a threshold selected after seeing the data.
-2. **Close the remaining persistence and provenance gaps.** Extend fingerprints
-   and coverage checks to BenchmarkSpec, make context handling explicit, and
-   retain enough judge/request data to audit a result. Validate changed-input
-   and partial-failure cases without paid model calls where possible.
-3. **Test stability beyond the development set.** Hold generated responses fixed
-   when comparing judges or scoring contexts; generate new responses only for
-   generation-side interventions. Evaluate held-out prompt families, provider
-   versions, and controlled adversarial inputs. Report prompt-level uncertainty
-   and whether substantive conclusions survive those changes.
+Repeated responses to one prompt can be very similar, especially at low
+temperature. Reading a judgment from cache again doesn't provide independent
+evidence of judge reliability. The Wilson intervals don't account for
+dependence between responses to the same prompt.
+I need to report the number of distinct prompts as well as the number of
+responses, and use prompt-level uncertainty estimates for those comparisons.
 
-## Research scope
+`summarize_suite_evaluations` also pools models within a condition. That is easy
+to miss when reading a summary. Model comparisons need separate results for
+each model, with task-level breakdowns where the sample supports them.
 
-The present contribution is behavioral evaluation infrastructure. It can
-support experiments about evaluator reliability, instruction sensitivity, and
-selected safeguards. A study must establish how its measured behavior relates
-to the safety question it claims to address. For example, a rest suggestion is
-not inherently a harmful response or an alignment failure.
+Filtering short or truncated responses is another choice that can change a
+result. Reports should show how many responses were excluded from each group
+and whether the finding holds with and without the filter.
 
-Scalable oversight is a possible research direction for judge-reliability work,
-but the current framework does not demonstrate reliable supervision of tasks
-beyond human capability. Model-organism training, mechanistic interpretability,
-frontier capability red-teaming, AI welfare measurement, and training/RL systems
-are outside the demonstrated scope. Supporting those areas would require their
-own methods, datasets, access, and validation.
+## Resume and saved metadata
+
+- Suite runs check input fingerprints and expected sample counts. BenchmarkSpec
+  resume still uses smaller identifiers, so changing a prompt or rubric can
+  leave an old result in place. Until that is fixed, changed benchmark
+  configurations need a fresh output directory.
+- Old generation files without manifests can be scored, but they don't tell us
+  whether every planned sample was collected. The new checks don't repair old
+  results; those need a separate review or rerun.
+- A provider can change a model behind the same API name. Fingerprints cannot
+  detect that, or changes to external state used by a custom client. Keep model
+  IDs, code revisions, and actual request settings with the run, and use a new
+  output/cache directory when that state changes.
+
+The exact checks and cache behavior are described in
+[reproducibility.md](reproducibility.md).
+
+Saved results also leave out some details I would want when investigating a
+surprising score. Full judge replies and provider settings are not consistently
+retained. `JudgeConfig.seed` affects the cache key but isn't sent to the provider,
+and the metadata helper fills in a default seed. That needs correcting before
+using the metadata as a record of how a request was made.
+
+Cost reporting needs care too. Cached results carry the cost of the original
+call. Adding those fields again overstates what was spent on the current run.
+
+## Next: human labels for the rest-suggestion suite
+
+I want to use human labels to check the measurement, then test explanations for
+the behavior. That means saving responses, checking whether they contain actual
+rest recommendations, and comparing prompts that differ in a specific way,
+such as whether the user mentions fatigue. The
+[experiment notes](https://github.com/prathibha-github/helm-eval-lex-quirks/blob/main/RESEARCH_LIMITATIONS.md)
+describe that work in more detail.
+
+For Compass itself, the next changes are to extend the resume checks to
+BenchmarkSpec, make judge context explicit, and save enough request and judge
+data to inspect a result later. Before using a judge on adversarial text, I
+would also need to test whether instructions in that text can influence its
+score.
+
+Once those checks are in place for a suite, I can reuse it to see whether a
+new model version behaves differently or whether a prompt change affects the
+result. A new behavior will need its own suite and scoring checks, but it
+shouldn't need a new experiment runner.
