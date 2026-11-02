@@ -16,6 +16,10 @@ truthfulness, task focus, and clarity. It provides:
 uses this library for experiment orchestration, scenario loading, and reports.
 Compass owns the shared evaluation primitives and does not import the harness.
 
+See [evaluation limits and next steps](docs/LIMITATIONS.md) for measurement
+assumptions, remaining implementation gaps, and proposed validation work.
+Passing infrastructure tests does not establish judge accuracy or model safety.
+
 ## Installation
 
 Python 3.9 or newer is required. To use the code and examples in this checkout:
