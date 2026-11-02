@@ -265,5 +265,5 @@ if missing_sample_idx:
 ✅ 4 new documentation files covering advanced topics
 ✅ 120+ tests passing (existing + new)
 ✅ compass v0.2.0 released with backward compatibility
-✅ helm_eval_lex_quirks no longer imports from compass (clean separation)
+✅ The experiment harness consumes Compass primitives; Compass never imports from the harness (one-way dependency)
 

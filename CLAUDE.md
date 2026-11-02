@@ -6,23 +6,27 @@ Compass is a Python library for evaluating subjective LLM behavior. It provides 
 
 ```
 compass/                        ← this repo — the library
-helm_eval_lex_quirks/           ← experiment runner — consumes compass
+compass-experiments/            ← experiment runner — consumes compass
 ```
 
 **compass owns:** rubric definitions, LLM judges, evaluation cache, checkpoint manager, client abstractions, detector/suite definitions, pairwise ranking, judge reliability auditing.
 
-**helm_eval_lex_quirks owns:** the runner, scenario loaders (MMLU/BoolQ/etc.), reporting, CLI, orchestration.
+**Compass Experiments owns:** the runner, scenario loaders (MMLU/BoolQ/etc.), reporting, CLI, orchestration.
 
-The dependency direction is one-way: helm_eval imports from compass. Compass never imports from helm_eval.
+The dependency direction is one-way: `compass_experiments` imports from `compass`. Compass never imports from the experiment harness.
 
 ## Benchmark definition pattern
 
 A benchmark has two parts that live in different places:
 
 - **Definition** (prompts, conditions, rubrics, detector config) → compass, as a versioned `TicSuite` or `Rubric`, registered in the suite/rubric library. This is the stable, reusable, hashable artifact.
-- **Execution** (run models, checkpoint, report) → helm_eval's runner.
+- **Execution** (run models, checkpoint, report) → the Compass Experiments runner.
 
-If a benchmark is worth repeating or sharing, define it in compass first, then run it from helm_eval.
+If a benchmark is worth repeating or sharing, define it in compass first, then run it from Compass Experiments.
+
+The harness project is named Compass Experiments; its Python package is
+`compass_experiments`. Existing local checkouts may retain their original
+directory names.
 
 ## Module structure
 
