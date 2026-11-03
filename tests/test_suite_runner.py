@@ -157,7 +157,7 @@ class GenerationPhaseTests(unittest.TestCase):
             client_factory=lambda _m: _CountingClient(),
         )
 
-        with self.assertRaisesRegex(ValueError, "different max token budget"):
+        with self.assertRaisesRegex(ValueError, "Cannot resume generation"):
             generate_suite_completions(
                 suite,
                 ["m"],

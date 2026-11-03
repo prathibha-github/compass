@@ -151,6 +151,7 @@ class BenchmarkReportingGoldenTests(unittest.TestCase):
             "\n".join(
                 [
                     "Computing pairwise model rankings...",
+                    "Coverage unverified: archived inputs do not establish the full planned population.",
                     "",
                     "CLARITY Rankings:",
                     "-" * 80,

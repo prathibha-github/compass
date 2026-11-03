@@ -179,3 +179,19 @@ Provider bills remain the source for actual charges; local pricing tables and
 reported token usage are estimates. Inspect invalid judge responses and
 missing evaluations separately from cost and cache statistics. See the
 [README's scoring limitations](../README.md#current-scoring-limitations).
+
+## Planned coverage through reporting
+
+Resuming a suite may add samples, but cannot remove or change previously
+planned samples, including ones whose calls failed. Use a new output directory
+for an intentionally smaller experiment. Keep the original plan to explain
+which observations were attempted.
+
+Modern generation and evaluation files require their manifests. Duplicate
+manifest identities, missing scores, and stale scoring contracts stop reporting.
+`analyze_results`, `rank_models`, and report validation check the evaluation
+manifest independently. Saved successful scores remain available for retry.
+
+Archived generations can still be scored, but suite summaries and benchmark
+summaries retain unverified generation coverage. Legacy benchmark evaluations
+without contracts are also identified as unverified in the text summary.

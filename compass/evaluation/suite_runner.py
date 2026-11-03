@@ -32,7 +32,7 @@ from compass.detectors.base import (
 )
 from compass.evaluation.checkpoint import CheckpointManager
 from compass.evaluation.record_schema import checkpoint_identity, suite_sample_identity
-from compass.evaluation.contracts import detector_definition, fingerprint, validate_suite_identities
+from compass.evaluation.contracts import detector_definition, fingerprint, validate_suite_identities, manifest_contracts
 from compass.evaluation.suite_io import (
     append_suite_generation,
     load_suite_generations,
@@ -247,9 +247,17 @@ def generate_suite_completions(
         })
         for model in models for prompt in suite.prompts for condition in suite.conditions
     }
+    planned = {key + (sample,): value for key, value in contracts.items() for sample in range(samples)}
+    prior_manifest = generations_path.with_suffix(".manifest.json")
+    if resume and prior_manifest.exists():
+        previous = manifest_contracts(json.loads(prior_manifest.read_text()))
+        if any(planned.get(key) != value for key, value in previous.items()):
+            raise ValueError("Cannot resume generation: Planned inputs changed; use a fresh output directory to change the sample population")
     if not resume:
         reset_suite_generations(generations_path)
     existing_generations = load_suite_generations(generations_path, strict=True)
+    if resume and not prior_manifest.exists() and any(row.get("generation_contract") for row in existing_generations.values()):
+        raise ValueError("Generation manifest is missing for modern artifacts; restore it or use a fresh output directory")
     _validate_resumed_suite_token_budgets(
         existing_generations.values(),
         effective_max_tokens_by_model,
@@ -388,12 +396,14 @@ def evaluate_suite_completions(
     generation_manifest_path = Path(generations_path).with_suffix(".manifest.json")
     if generation_manifest_path.exists():
         manifest = json.loads(generation_manifest_path.read_text())
-        expected = {tuple(row["identity"]): row["contract"] for row in manifest["expected"]}
+        expected = manifest_contracts(manifest)
         if set(generations) != set(expected) or any(
             row.get("generation_contract") != expected[key] for key, row in generations.items()
         ):
             raise ValueError("Incomplete or incompatible generations; resume generation before scoring")
     else:
+        if any("generation_contract" in row for row in generations.values()):
+            raise ValueError("Modern generation manifest is missing; restore it before scoring")
         logger.warning("Legacy generations have no manifest; intended generation coverage cannot be verified")
 
     contexts = {
@@ -416,6 +426,11 @@ def evaluate_suite_completions(
                 "scoring_version": SCORING_VERSION,
             })
 
+    previous_manifest = evaluations_path.with_suffix(".manifest.json")
+    if resume and previous_manifest.exists():
+        previous = manifest_contracts(json.loads(previous_manifest.read_text()))
+        if any(contracts.get(key) != value for key, value in previous.items()):
+            raise ValueError("Cannot resume evaluation: Planned inputs changed; re-score with resume=False")
     completed = set()
     if resume and evaluations_path.exists():
         with evaluations_path.open() as handle:
@@ -423,6 +438,8 @@ def evaluate_suite_completions(
                 if not line.strip():
                     continue
                 row = json.loads(line)
+                if row.get("evaluation_contract") and not previous_manifest.exists():
+                    raise ValueError("Evaluation manifest is missing for modern artifacts; restore it or re-score with resume=False")
                 identity = checkpoint_identity(row)
                 expected = contracts.get(identity)
                 if expected is None or row.get("evaluation_contract") != expected:
@@ -445,6 +462,7 @@ def evaluate_suite_completions(
     manifest_path = evaluations_path.with_suffix(".manifest.json")
     manifest = {
         "suite": suite.name,
+        "generation_coverage_verified": generation_manifest_path.exists(),
         "detectors": definitions,
         "expected": [{"identity": list(key), "contract": value} for key, value in contracts.items()],
     }
@@ -508,6 +526,7 @@ def evaluate_suite_completions(
                         "evaluation_contract": contracts[identity],
                         "judge_context": contexts.get((model, _suite, prompt_id, condition, sample_idx)) if _is_judge_detector(detector) else None,
                         "generation_fingerprint": fingerprint(gen),
+                        "generation_coverage_verified": generation_manifest_path.exists(),
                         "completion": completion[:200],
                         "generation_visible_chars": gen.get("visible_chars"),
                         "generation_visible_word_count": gen.get("visible_word_count"),
@@ -568,7 +587,7 @@ def summarize_suite_evaluations(
     definitions = {d.name: detector_definition(d) for d in suite.detectors}
     if manifest["suite"] != suite.name or manifest["detectors"] != json.loads(json.dumps(definitions)):
         raise ValueError("Evaluation definitions changed; re-score before summarizing")
-    expected = {tuple(row["identity"]): row["contract"] for row in manifest["expected"]}
+    expected = manifest_contracts(manifest)
     seen = set()
     with open(evaluations_path) as f:
         for line in f:
@@ -598,9 +617,8 @@ def summarize_suite_evaluations(
         group = "pooled" if pool_models else model
         model_records.setdefault(group, {}).setdefault(condition, []).append(detector_map)
 
-    if pool_models:
-        return summarize_detector_records(model_records.get("pooled", {}), suite)
-    return {
-        model: summarize_detector_records(records, suite)
-        for model, records in model_records.items()
-    }
+    summaries = {model: summarize_detector_records(records, suite) for model, records in model_records.items()}
+    for summary in summaries.values():
+        for condition in summary.values():
+            condition["generation_coverage_verified"] = manifest.get("generation_coverage_verified", False)
+    return summaries.get("pooled", {}) if pool_models else summaries

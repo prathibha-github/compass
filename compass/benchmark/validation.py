@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Mapping
 
+from compass.benchmark.resume import check_evaluation_coverage
 from compass.benchmark.io import load_evaluation_records
 from compass.benchmark.reporting import BenchmarkSummaryRow, analyze_results
 
@@ -105,6 +106,10 @@ def validate_benchmark_report(
 ) -> List[BenchmarkValidationIssue]:
     """Validate that a benchmark report includes required quality diagnostics."""
     rows = load_evaluation_records(evaluations_path, strict=True)
+    try:
+        check_evaluation_coverage(evaluations_path, rows)
+    except ValueError as exc:
+        return [BenchmarkValidationIssue(code="incomplete_evaluation_coverage", location="evaluation manifest", message=str(exc))]
     errors = validate_evaluation_records_for_quality(rows)
     if errors:
         return errors

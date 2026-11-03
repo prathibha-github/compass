@@ -8,6 +8,7 @@ from types import MappingProxyType
 from typing import Dict, Iterable, List, Mapping, Optional, Tuple
 
 from compass import PairwiseRanker
+from compass.benchmark.resume import check_evaluation_coverage
 from compass.benchmark.io import load_evaluation_records
 from compass.benchmark.specs import BenchmarkSpec
 
@@ -30,6 +31,8 @@ class BenchmarkSummaryRow:
     quality_filtered_hit_rate: Optional[float]
     quality_filter_mode: str
     raw_total: int
+    evaluation_coverage_verified: bool = False
+    generation_coverage_verified: bool = False
 
 
 @dataclass(frozen=True)
@@ -71,6 +74,8 @@ class BenchmarkPairwiseReport:
     segment_field: str
     quality_filter_mode: str
     rubrics: Mapping[str, PairwiseRubricReport]
+    evaluation_coverage_verified: bool = False
+    generation_coverage_verified: bool = False
 
 
 def _quality_filtered_results(results: Iterable[dict]) -> List[dict]:
@@ -115,6 +120,8 @@ def format_summary(
             f"{qf_hit_text:>7} | {s.total:>7}"
         )
 
+    if any(not row.evaluation_coverage_verified or not row.generation_coverage_verified for row in stats.values()):
+        lines.append("Coverage unverified: archived inputs do not establish the full planned population.")
     lines.extend(
         [
             "",
@@ -134,7 +141,9 @@ def analyze_results(
     """Analyze evaluation results and generate report data."""
     # Reserved for future report artifact paths; kept for API compatibility.
     results_by_key = defaultdict(list)
-    for result in load_evaluation_records(evaluations_path, strict=True):
+    rows = load_evaluation_records(evaluations_path, strict=True)
+    verified = check_evaluation_coverage(evaluations_path, rows)
+    for result in rows:
         key = (result["model"], result["rubric"])
         results_by_key[key].append(result)
 
@@ -177,6 +186,8 @@ def analyze_results(
             quality_filtered_hit_rate=qf_hit_rate,
             quality_filter_mode=quality_filter_mode,
             raw_total=raw_total,
+            evaluation_coverage_verified=verified,
+            generation_coverage_verified=all(r.get("generation_coverage_verified", False) for r in results),
         )
 
     return stats
@@ -264,6 +275,8 @@ def empty_pairwise_report(
 def format_pairwise_report(report: BenchmarkPairwiseReport) -> str:
     """Render a stable textual pairwise ranking report."""
     lines = ["Computing pairwise model rankings..."]
+    if not report.evaluation_coverage_verified or not report.generation_coverage_verified:
+        lines.append("Coverage unverified: archived inputs do not establish the full planned population.")
     for rubric in sorted(report.rubrics.keys()):
         rubric_report = report.rubrics[rubric]
         lines.extend(
@@ -328,7 +341,9 @@ def rank_models(
     # Reserved for future ranking artifact paths; kept for API compatibility.
     ranker = PairwiseRanker()
 
-    for result in load_evaluation_records(evaluations_path, strict=True):
+    rows = load_evaluation_records(evaluations_path, strict=True)
+    verified = check_evaluation_coverage(evaluations_path, rows)
+    for result in rows:
         if (
             quality_filter_mode == "exclude_flagged"
             and result.get("generation_quality_flagged")
@@ -349,6 +364,8 @@ def rank_models(
     return BenchmarkPairwiseReport(
         segment_field=benchmark_spec.pairwise_segment_field,
         quality_filter_mode=quality_filter_mode,
+        evaluation_coverage_verified=verified,
+        generation_coverage_verified=bool(rows) and all(row.get("generation_coverage_verified", False) for row in rows),
         rubrics=MappingProxyType(
             {
                 rubric: _build_pairwise_rubric_report(
