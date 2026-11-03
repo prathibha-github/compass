@@ -206,3 +206,21 @@ Built-in runner policies are included in resume contracts. Judge cache keys also
 include the client's reported settings. Custom client factories still need a
 fresh output directory when their behavior changes; Compass cannot verify
 settings that a custom client does not report.
+
+Suite summaries and benchmark reports include distinct prompt counts alongside
+response counts. Their `prompt_statistics` use a percentile bootstrap that
+resamples whole prompts and weights each response equally. Defaults are 2,000
+resamples, 95% confidence, and seed 0. A cell with fewer than two prompts has no
+interval. With only a few prompts, even a computed interval can be unstable;
+this does not make a small convenience sample representative of other tasks.
+
+The same record includes unfiltered and quality-filtered rates. The filtered
+population contains only responses explicitly marked clean; missing quality
+flags are counted as unknown. If filtering removes every response, the rate is
+`null`, not zero. Filtering may change which prompts remain, so compare the
+prompt counts as well as the rates. `exclude_flagged` follows this same rule
+for benchmark tables and rankings.
+
+These are intervals for individual cells. They are not intervals for differences
+between models or conditions. Such comparisons need joint resampling of shared
+prompts and a separately specified treatment of unmatched prompts.

@@ -51,6 +51,8 @@ def prompt_rate_summary(rows, *, confidence=.95, resamples=2000, seed=0):
     quality flags are excluded from the quality-filtered sensitivity analysis.
     """
     _validate(confidence, resamples)
+    if type(seed) is not int:
+        raise ValueError("seed must be an integer")
     rows = list(rows)
     for field in ('model', 'condition', 'detector', 'suite', 'rubric'):
         if len({row.get(field) for row in rows}) > 1:

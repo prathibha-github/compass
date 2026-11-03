@@ -1,5 +1,6 @@
 """Golden tests for shared benchmark reporting outputs."""
 
+from dataclasses import replace
 import pathlib
 import unittest
 
@@ -37,7 +38,7 @@ class BenchmarkReportingGoldenTests(unittest.TestCase):
         stats = analyze_results(path, path.parent)
 
         self.assertEqual(
-            stats,
+            {key: replace(row, prompt_statistics={}) for key, row in stats.items()},
             {
                 "m1|clarity": BenchmarkSummaryRow(
                     model="m1",
@@ -84,7 +85,7 @@ class BenchmarkReportingGoldenTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            stats["m1|clarity"],
+            replace(stats["m1|clarity"], prompt_statistics={}),
             BenchmarkSummaryRow(
                 model="m1",
                 rubric="clarity",
