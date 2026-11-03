@@ -6,6 +6,7 @@ import time
 from typing import Optional
 
 from compass.clients.base import CompletionClient, CompletionResponse
+from compass.clients.settings import request_settings
 from compass.clients.pricing import get_pricing
 
 logger = logging.getLogger(__name__)
@@ -114,6 +115,10 @@ class OpenAIResponsesClient(CompletionClient):
                     return secs + random.uniform(0.5, 2.0)
         return min(15 * (2 ** attempt), 60) + random.uniform(0, 5)
 
+    def request_settings(self, max_tokens, temperature):
+        return request_settings("openai_responses", self.model, max_tokens, temperature, required_temperature=self._required_temperature,
+                                token_multiplier=self._max_output_token_multiplier)
+
     def complete(
         self,
         prompt: str,
@@ -208,13 +213,14 @@ class OpenAIResponsesClient(CompletionClient):
                 self._output_tokens += output_tokens
 
                 return CompletionResponse(
+                    request_settings=self.request_settings(max_tokens, temperature),
                     completion=completion,
                     tokens_used={"input": input_tokens, "output": output_tokens},
                     cost_usd=(
                         input_tokens * self._pricing.input_cost_per_million / 1_000_000
                         + output_tokens * self._pricing.output_cost_per_million / 1_000_000
                     ),
-                    finish_reason=str(getattr(resp, "status", "") or ""),
+                    finish_reason=str(getattr(getattr(resp, "incomplete_details", None), "reason", None) or getattr(resp, "status", "") or ""),
                 )
 
             except self._openai.RateLimitError as exc:

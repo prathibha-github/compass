@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from compass.evaluation.contracts import fingerprint, manifest_contracts
+from compass.clients.settings import default_request_settings
 
 
 class ResumeMismatch(ValueError):
@@ -64,6 +65,7 @@ def generation_contracts(spec, models, samples, budgets):
                 contract = fingerprint({
                     "version": 1, "benchmark": spec.name, "benchmark_version": spec.version, "prompt": prompt.as_dict(),
                     "model": model, "max_tokens": budgets[model], "temperature": 0.7,
+                    "provider_settings": default_request_settings(model, budgets[model], 0.7),
                 })
                 for sample in range(samples):
                     expected[(model, rubric, prompt.id, sample)] = contract

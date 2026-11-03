@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Optional
 
 from compass.judges.base import EvaluationResult, JudgeConfig
+from compass.clients.settings import client_request_settings
 from compass.judges.context import build_judge_prompt, PROMPT_VERSION, JUDGE_SYSTEM_PROMPT
 from compass.judges.parsing import SCORING_VERSION, parse_scored_response
 
@@ -97,7 +98,8 @@ class LLMJudge(Judge):
         The context is hashed alongside the text so an identical response judged
         with and without surrounding context does not collide.
         """
-        keyed_text = json.dumps({"response": text, "user_request": context, "system_prompt": system_context}, sort_keys=True)
+        keyed_text = json.dumps({"response": text, "user_request": context, "system_prompt": system_context,
+            "provider_settings": client_request_settings(self.client, self.config.max_tokens, self.config.temperature)}, sort_keys=True)
         text_hash = hashlib.sha256(keyed_text.encode()).hexdigest()[:16]
         # Old caches may contain fabricated zeros from parse failures.
         return (self.config.config_hash, text_hash, f"{self.PROMPT_VERSION}:scoring-{SCORING_VERSION}")

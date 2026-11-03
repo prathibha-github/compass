@@ -6,6 +6,7 @@ import time
 from typing import Optional
 
 from compass.clients.base import CompletionClient, CompletionResponse
+from compass.clients.settings import request_settings
 from compass.clients.pricing import get_pricing
 
 logger = logging.getLogger(__name__)
@@ -115,6 +116,9 @@ class OpenAIClient(CompletionClient):
                     return secs + random.uniform(0.5, 2.0)
         return min(15 * (2 ** attempt), 60) + random.uniform(0, 5)
 
+    def request_settings(self, max_tokens, temperature):
+        return request_settings("openai", self.model, max_tokens, temperature, required_temperature=self._required_temperature)
+
     def complete(
         self,
         prompt: str,
@@ -196,6 +200,7 @@ class OpenAIClient(CompletionClient):
                 self._adapt_from_success_headers(headers)
 
                 return CompletionResponse(
+                    request_settings=self.request_settings(max_tokens, temperature),
                     completion=completion,
                     tokens_used={"input": input_tokens, "output": output_tokens},
                     cost_usd=(

@@ -1,6 +1,6 @@
 """Base client abstraction for LLM API calls."""
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 
@@ -13,6 +13,7 @@ class CompletionResponse:
     cost_usd: float = 0.0
     logprobs: Optional[list] = None
     finish_reason: str = ""
+    request_settings: dict = field(default_factory=dict)
 
 
 class CompletionClient(ABC):

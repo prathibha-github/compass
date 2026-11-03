@@ -195,3 +195,14 @@ manifest independently. Saved successful scores remain available for retry.
 Archived generations can still be scored, but suite summaries and benchmark
 summaries retain unverified generation coverage. Legacy benchmark evaluations
 without contracts are also identified as unverified in the text summary.
+
+Provider responses now carry both requested and effective temperature and token
+limits. Generation artifacts preserve these settings, and quality checks use
+the effective token limit. A missing temperature means the client omitted the
+parameter; it does not establish what sampling value the provider used. No seed
+is sent by these clients.
+
+Built-in runner policies are included in resume contracts. Judge cache keys also
+include the client's reported settings. Custom client factories still need a
+fresh output directory when their behavior changes; Compass cannot verify
+settings that a custom client does not report.
