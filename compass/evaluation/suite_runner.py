@@ -38,6 +38,7 @@ from compass.evaluation.suite_io import (
     load_suite_generations,
     reset_suite_generations,
 )
+from compass.clients.settings import default_request_settings
 from compass.judges import JudgeConfig, LLMJudge
 from compass.judges.context import saved_judge_context
 from compass.judges.parsing import SCORING_VERSION
@@ -244,6 +245,7 @@ def generate_suite_completions(
             "prompt": prompt.text, "task_type": prompt.task_type,
             "system": condition.system_prompt, "temperature": temperature,
             "max_tokens": effective_max_tokens_by_model[model],
+            "provider_settings": default_request_settings(model, effective_max_tokens_by_model[model], temperature, responses_api=True) if client_factory is _create_client else {"verified": False},
         })
         for model in models for prompt in suite.prompts for condition in suite.conditions
     }
@@ -313,10 +315,12 @@ def generate_suite_completions(
                         tokens_used = getattr(response, "tokens_used", {}) or {}
                         output_tokens = int(tokens_used.get("output", 0) or 0)
                         finish_reason = str(getattr(response, "finish_reason", "") or "")
+                        settings = getattr(response, "request_settings", {}) or {}
+                        effective = settings.get("effective") or {}
                         quality = _compute_suite_generation_quality(
                             completion=response.completion,
                             output_tokens=output_tokens,
-                            max_tokens_requested=max_tokens,
+                            max_tokens_requested=effective.get("max_tokens", max_tokens),
                             finish_reason=finish_reason,
                         )
                         append_suite_generation(
@@ -336,6 +340,8 @@ def generate_suite_completions(
                                 "tokens_used": tokens_used,
                                 "cost_usd": getattr(response, "cost_usd", 0.0),
                                 "max_tokens_requested": max_tokens,
+                                "request_settings": settings,
+                                "max_tokens_effective": effective.get("max_tokens"),
                                 "finish_reason": finish_reason,
                                 "visible_chars": quality["visible_chars"],
                                 "visible_word_count": quality["visible_word_count"],
@@ -422,6 +428,7 @@ def evaluate_suite_completions(
                 "detector": definitions[detector.name],
                 "judge_model": judge_model if _is_judge_detector(detector) else None,
                 "judge_context": contexts.get((model, source_suite, prompt_id, condition, sample_idx)),
+                "judge_provider_settings": default_request_settings(judge_model, getattr(detector, "max_tokens", 180), 0.0, responses_api=True) if _is_judge_detector(detector) and client_factory is _create_client else {"verified": False},
                 "judge_prompt_version": LLMJudge.PROMPT_VERSION,
                 "scoring_version": SCORING_VERSION,
             })

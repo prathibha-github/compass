@@ -4,6 +4,7 @@ import time
 from typing import Optional
 
 from compass.clients.base import CompletionClient, CompletionResponse
+from compass.clients.settings import request_settings
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,9 @@ class OllamaClient(CompletionClient):
         if gap > 0:
             time.sleep(gap)
 
+    def request_settings(self, max_tokens, temperature):
+        return request_settings("ollama", self.model, max_tokens, temperature)
+
     def complete(
         self,
         prompt: str,
@@ -133,6 +137,7 @@ class OllamaClient(CompletionClient):
             self._output_tokens += estimated_output_tokens
 
             return CompletionResponse(
+                    request_settings=self.request_settings(max_tokens, temperature),
                 completion=completion,
                 tokens_used={
                     "input": estimated_input_tokens,

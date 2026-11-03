@@ -4,6 +4,7 @@ import time
 from typing import Optional
 
 from compass.clients.base import CompletionClient, CompletionResponse
+from compass.clients.settings import request_settings
 from compass.clients.pricing import get_pricing
 
 logger = logging.getLogger(__name__)
@@ -99,6 +100,9 @@ class GoogleAIClient(CompletionClient):
         if gap > 0:
             time.sleep(gap)
 
+    def request_settings(self, max_tokens, temperature):
+        return request_settings("google_ai", self.model, max_tokens, temperature, disable_safety_filters=self._disable_safety_filters)
+
     def complete(
         self,
         prompt: str,
@@ -192,6 +196,7 @@ class GoogleAIClient(CompletionClient):
             )
 
             return CompletionResponse(
+                    request_settings=self.request_settings(max_tokens, temperature),
                 completion=completion.strip(),
                 tokens_used={"input": input_tokens, "output": output_tokens},
                 cost_usd=cost_usd,

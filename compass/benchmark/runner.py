@@ -39,6 +39,7 @@ from compass.benchmark.validation import (
 )
 from compass.clients import AnthropicClient, GoogleAIClient, OpenAIClient
 from compass.clients.pricing import get_pricing
+from compass.clients.settings import default_request_settings
 from compass.evaluation.contracts import fingerprint
 from compass.judges.parsing import SCORING_VERSION
 from compass.benchmark.schemas import evaluation_identity
@@ -112,7 +113,7 @@ def _generation_quality_from_record(
     tokens_used = record.get("tokens_used")
     if isinstance(tokens_used, dict):
         output_tokens = int(tokens_used.get("output", 0) or 0)
-    raw_max_tokens = record.get("max_tokens_requested")
+    raw_max_tokens = record.get("max_tokens_effective") or record.get("max_tokens_requested")
     max_tokens_requested = int(raw_max_tokens or 0)
     token_cap_inferred_legacy = False
     if not max_tokens_requested and output_tokens >= legacy_token_cap_threshold:
@@ -428,10 +429,12 @@ def generate_completions(
                             max_tokens=max_tokens,
                             temperature=0.7,
                         )
+                        settings = getattr(response, "request_settings", {}) or {}
+                        effective = settings.get("effective") or {}
                         quality = _compute_generation_quality(
                             completion=response.completion,
                             output_tokens=int(response.tokens_used.get("output", 0)),
-                            max_tokens_requested=max_tokens,
+                            max_tokens_requested=effective.get("max_tokens", max_tokens),
                             finish_reason=str(
                                 getattr(response, "finish_reason", "") or ""
                             ),
@@ -453,6 +456,8 @@ def generate_completions(
                                     "tokens_used": response.tokens_used,
                                     "cost_usd": response.cost_usd,
                                     "max_tokens_requested": max_tokens,
+                                    "request_settings": settings,
+                                    "max_tokens_effective": effective.get("max_tokens"),
                                     "finish_reason": str(
                                         getattr(response, "finish_reason", "") or ""
                                     ),
@@ -512,6 +517,7 @@ def evaluate_completions(
         key: fingerprint({
             "generation": gen, "benchmark": benchmark_spec.name, "benchmark_version": benchmark_spec.version,
             "judge": configs[key[1]].config_hash, "judge_context": contexts[key],
+            "judge_provider_settings": default_request_settings(judge_model, configs[key[1]].max_tokens, configs[key[1]].temperature),
             "prompt_version": JUDGE_PROMPT_VERSION, "scoring_version": SCORING_VERSION,
             "legacy_token_cap_threshold": legacy_token_cap_threshold,
         })

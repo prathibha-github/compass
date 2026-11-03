@@ -20,6 +20,8 @@ class ClientConformanceTests(unittest.TestCase):
         self.assertGreaterEqual(response.tokens_used["output"], 0)
         self.assertIsInstance(response.cost_usd, float)
         self.assertGreaterEqual(response.cost_usd, 0.0)
+        self.assertTrue(response.request_settings["verified"])
+        self.assertIsNone(response.request_settings["effective"]["seed"])
 
     def test_openai_client_conforms(self):
         openai_mock = MagicMock()
@@ -84,6 +86,8 @@ class ClientConformanceTests(unittest.TestCase):
         self.assertEqual(kwargs["instructions"], "system prompt")
         self.assertEqual(kwargs["input"], "prompt")
         self.assertEqual(kwargs["max_output_tokens"], 120)
+        self.assertEqual(response.request_settings["effective"]["max_tokens"], kwargs["max_output_tokens"])
+        self.assertEqual(response.request_settings["requested"]["max_tokens"], 12)
         self._assert_response_contract(response, 13, 5)
         self.assertEqual(client.total_tokens, {"input": 13, "output": 5})
 

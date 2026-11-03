@@ -6,6 +6,7 @@ import time
 from typing import Optional
 
 from compass.clients.base import CompletionClient, CompletionResponse
+from compass.clients.settings import request_settings
 from compass.clients.pricing import get_pricing
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,9 @@ class AnthropicClient(CompletionClient):
                     return secs + random.uniform(0.5, 2.0)
         return min(15 * (2 ** attempt), 60) + random.uniform(0, 5)
 
+    def request_settings(self, max_tokens, temperature):
+        return request_settings("anthropic", self.model, max_tokens, temperature, temperature_supported=_supports_temperature(self.model))
+
     def complete(
         self,
         prompt: str,
@@ -176,6 +180,7 @@ class AnthropicClient(CompletionClient):
                     continue
 
                 return CompletionResponse(
+                    request_settings=self.request_settings(max_tokens, temperature),
                     completion=completion,
                     tokens_used={"input": input_tokens, "output": output_tokens},
                     cost_usd=(
