@@ -117,7 +117,7 @@ _CLIENT_POLICY_TRANSLATIONS = (
         adapter="OllamaClient",
         category="prompt_wrapping",
         trigger="system is provided",
-        behavior="wraps system content into the generated prompt with <system> tags",
+        behavior="passes system content in the native system field, separate from the user prompt",
         explicit_to_caller=False,
         tested_by=("tests/test_client_conformance.py",),
     ),
