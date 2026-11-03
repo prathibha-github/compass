@@ -1,4 +1,6 @@
 """Judge reliability auditing: measure disagreement and detect drift."""
+from compass.judges.parsing import validate_score
+
 import logging
 import math
 from statistics import NormalDist
@@ -76,6 +78,8 @@ class JudgeReliabilityAuditor:
             judge2_score: Score from second judge (0.0-1.0)
             metadata: Optional metadata (e.g., prompt_id, model, etc.)
         """
+        validate_score(judge1_score)
+        validate_score(judge2_score)
         self.observations.append({
             "judge1": judge1_score,
             "judge2": judge2_score,
@@ -105,6 +109,10 @@ class JudgeReliabilityAuditor:
         """
         if len(judge1_scores) != len(judge2_scores):
             raise ValueError("Judge scores must have same length")
+
+        validate_score(hit_threshold, name="hit_threshold")
+        for score in (*judge1_scores, *judge2_scores):
+            validate_score(score)
 
         if not judge1_scores:
             return {
@@ -165,6 +173,10 @@ class JudgeReliabilityAuditor:
             - expected_score: Expected value (0.0 if no drift)
             - concern_level: "none", "warning", "critical"
         """
+        if type(expected_low) is not bool:
+            raise ValueError("expected_low must be a boolean")
+        for score in benign_control_scores:
+            validate_score(score)
         if not benign_control_scores:
             return {
                 "has_drift": False,

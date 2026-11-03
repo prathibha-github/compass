@@ -240,8 +240,8 @@ def compute_uplift(
     detector_name: str,
     metric: str = "mean_count",
     baseline: Optional[str] = None,
-) -> Dict[str, float]:
-    """Compute detector uplift by condition against a baseline condition."""
+) -> Dict[str, Optional[float]]:
+    """Relative percent change; zero baselines have no defined relative change."""
     if not condition_results:
         return {}
 
@@ -252,12 +252,24 @@ def compute_uplift(
     base_stats = condition_results[baseline]["detectors"].get(detector_name, {})
     base_value = base_stats.get(metric, 0.0)
 
-    uplift: Dict[str, float] = {}
+    uplift: Dict[str, Optional[float]] = {}
     for condition, stats in condition_results.items():
         value = stats["detectors"].get(detector_name, {}).get(metric, 0.0)
         if base_value > 0:
             delta = 100 * (value - base_value) / base_value
         else:
-            delta = 100 if value > 0 else 0
-        uplift[condition] = round(delta, 1)
+            delta = None
+        uplift[condition] = round(delta, 1) if delta is not None else None
     return uplift
+
+
+def compute_absolute_change(condition_results, detector_name, metric="mean_count", baseline=None):
+    """Difference in the metric's units (percentage points for pct_hit)."""
+    if not condition_results:
+        return {}
+    baseline = baseline or next(iter(condition_results))
+    if baseline not in condition_results:
+        raise ValueError(f"Unknown baseline condition: {baseline}")
+    base = condition_results[baseline]["detectors"][detector_name][metric]
+    return {condition: stats["detectors"][detector_name][metric] - base
+            for condition, stats in condition_results.items()}
