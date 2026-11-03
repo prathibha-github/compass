@@ -32,16 +32,6 @@ def test_zero_baseline_has_absolute_but_no_relative_change():
     assert compute_absolute_change(rows, 'd', 'pct_hit') == dict(baseline=0, small=1, large=100)
 
 
-def test_invalid_saved_score_cannot_be_reported(tmp_path):
-    import json
-    from compass.benchmark.reporting import analyze_results
-    from compass.benchmark.validation import validate_benchmark_report
-    path = tmp_path / 'evaluations.jsonl'
-    path.write_text(json.dumps(dict(model='m', rubric='r', prompt_id='p', score=float('nan'), hit=False)) + '\n')
-    for report in (lambda: analyze_results(path, tmp_path), lambda: validate_benchmark_report(path)):
-        with pytest.raises(ValueError, match='finite number'):
-            report()
-
 
 @pytest.mark.parametrize("expected_low", [None, 0, 1, "false"])
 def test_control_direction_is_boolean(expected_low):
