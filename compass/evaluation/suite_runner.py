@@ -416,6 +416,9 @@ def evaluate_suite_completions(
         key: saved_judge_context(gen, judge_context_mode)
         for key, gen in generations.items()
     } if suite_uses_llm_judge(suite) else {}
+    needs_judge = suite_uses_llm_judge(suite)
+    if needs_judge and not judge_model:
+        raise ValueError("suite has LLM-judge detectors; judge_model is required to evaluate")
     definitions = {d.name: detector_definition(d) for d in suite.detectors}
     contracts = {}
     for (model, source_suite, prompt_id, condition, sample_idx), gen in generations.items():
@@ -459,9 +462,6 @@ def evaluate_suite_completions(
                     raise ValueError(f"Duplicate evaluation identity: {identity}")
                 completed.add(identity)
 
-    needs_judge = suite_uses_llm_judge(suite)
-    if needs_judge and not judge_model:
-        raise ValueError("suite has LLM-judge detectors; judge_model is required to evaluate")
     checkpoint = CheckpointManager(str(evaluations_path))
     if not resume:
         checkpoint.reset()
