@@ -200,6 +200,7 @@ class GoogleAIClient(CompletionClient):
                 completion=completion.strip(),
                 tokens_used={"input": input_tokens, "output": output_tokens},
                 cost_usd=cost_usd,
+                usage_complete=usage is not None,
                 finish_reason=str(
                     getattr(
                         (getattr(response, "candidates", None) or [None])[0],

@@ -80,7 +80,7 @@ def test_missing_evaluation_manifest_cannot_hide_failed_detector(tmp_path):
         client_factory=lambda _: Mock(complete=Mock(return_value=response())))
     with pytest.raises(RuntimeError):
         evaluate_suite_completions(planned, generations, tmp_path)
-    evaluations = next(tmp_path.glob("suite_evaluations*.jsonl"))
+    evaluations = tmp_path / "suite_evaluations_heuristic.jsonl"
     evaluations.with_suffix(".manifest.json").unlink()
     before = {p.name: p.read_bytes() for p in tmp_path.iterdir() if p.is_file()}
     with pytest.raises(ValueError, match="Evaluation manifest is missing"):

@@ -1,3 +1,4 @@
+from compass.judges import EvaluationResult
 """Contract tests for benchmark specs and registry."""
 
 import json
@@ -488,7 +489,8 @@ class BenchmarkRegistryTests(unittest.TestCase):
                 self.config = config
 
             def evaluate(self, text, **kwargs):
-                return SimpleNamespace(
+                return EvaluationResult(
+                    name=self.config.rubric.name,
                     score=0.4,
                     hit=False,
                     confidence=0.8,
