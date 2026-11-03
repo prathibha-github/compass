@@ -55,12 +55,10 @@ print(f"Mean score difference: {agreement['mean_difference']:.3f}")
 
 ### Interpreting Results
 
-| Agreement | Interpretation |
-|-----------|-----------------|
-| **> 90%** | Excellent agreement; judges are well-calibrated |
-| **80-90%** | Good agreement; minor disagreements on borderline cases |
-| **70-80%** | Acceptable agreement; monitor for drift |
-| **< 70%** | Poor agreement; investigate calibration or redefine detection |
+Agreement measures whether judges make the same classifications. Two judges
+can agree and still make the same mistake. Report agreement alongside each
+judge's performance against independent human labels; no agreement threshold
+establishes accuracy on its own.
 
 ### Confidence Intervals
 
@@ -69,14 +67,17 @@ The `agreement_ci_low` and `agreement_ci_high` bounds reflect statistical uncert
 ```
 With 10 samples and 8 agreements:
   Point estimate: 80%
-  Confidence interval: [44%, 97%]  ← Very wide!
+  Confidence interval: [49%, 94%]
   
 With 100 samples and 80 agreements:
   Point estimate: 80%
-  Confidence interval: [71%, 87%]  ← Narrow (reliable)
+  Confidence interval: [71%, 87%]
 ```
 
-**Lesson:** Small sample sizes produce unreliable estimates. Audit agreement on at least 30-50 samples per judge pair.
+Choose the annotation budget from the comparisons and precision needed.
+These intervals treat responses as independent observations. Repeated responses
+to the same prompt need prompt-level uncertainty estimates when the question
+concerns generalization across tasks.
 
 ## Detecting Judge Drift
 
@@ -91,7 +92,9 @@ A judge systematically changes its behavior over time or becomes miscalibrated. 
 
 ### Benign Control Test
 
-The most reliable drift detector: evaluate the judge on a **legitimate request it should pass**:
+A benign control can reveal false positives for a particular rubric. It does
+not measure false negatives or establish change over time. Compare repeated
+measurements of fixed controls with a recorded baseline to investigate drift:
 
 ```python
 from compass import JudgeReliabilityAuditor
@@ -112,9 +115,13 @@ print(f"Concern level: {drift['concern_level']}")
 
 | Concern | Mean Score | Action |
 |---------|-----------|--------|
-| **none** | < 0.15 | No drift detected; judge is well-calibrated |
-| **warning** | 0.15-0.40 | Monitor closely; consider retraining |
-| **critical** | > 0.40 | Immediate investigation; don't use in production |
+| **none** | < 0.15 | No alert under this heuristic; check human labels separately |
+| **warning** | 0.15 ≤ mean < 0.40 | Inspect examples and compare with the recorded baseline |
+| **critical** | mean ≥ 0.40 | Investigate why expected-negative controls receive high scores |
+
+These are the helper's alert thresholds, not validated acceptance criteria.
+Choose controls and tolerances for the specific rubric before interpreting an
+alert as evidence of drift.
 
 ## Low-Confidence Regions
 
@@ -129,7 +136,7 @@ Clear negative (score 0.1):  J1=0.1, J2=0.15 → Agree
 ### Identifying Low-Confidence Cases
 
 ```python
-judge1 = [0.1, 0.5, 0.9]  # Easy cases (extremes)
+judge1 = [0.1, 0.4, 0.9]  # Includes a disagreement near the threshold
 judge2 = [0.15, 0.6, 0.85]
 
 agreement = auditor.calculate_agreement(judge1, judge2, hit_threshold=0.5)
@@ -143,7 +150,7 @@ for idx in agreement['disagreement_samples']:
 
 ## Multi-Judge System Design
 
-### 2-Judge System (Recommended)
+### Two judges
 
 ```
 Request → Judge A → Score A
@@ -152,9 +159,10 @@ Request → Judge A → Score A
 Average scores or use tiebreaker rule for disagreement
 ```
 
-Trade-off: 2x cost, ~10% higher accuracy.
+This requires two judge calls per response. Whether combining them improves
+accuracy needs to be checked against human labels.
 
-### 3-Judge System (High-Stakes)
+### A third judge for disagreements
 
 ```
 Request → Judge A → Score A
@@ -164,25 +172,27 @@ Request → Judge A → Score A
 Majority vote on final decision
 ```
 
-Trade-off: Up to 3x cost, 20% higher accuracy on borderline cases.
+This requires a third call for disagreements. A majority vote can still be
+wrong when judges share errors.
 
 ### Heterogeneous Judges
 
 ```
-Request → GPT-4o (high capability, expensive)
-          Claude-Opus (different training, good agreement)
-          Specialized model (task-specific, accurate)
+Request → Model family A
+          Model family B
+          Task-specific judge
           
 Ensemble: vote or weighted average
 ```
 
-Trade-off: Very high cost, maximum accuracy.
+Different model families may make different errors. Measure that on labeled
+examples before paying for an ensemble across the full run.
 
 ## Cause Analysis
 
 ### Why Do Judges Disagree?
 
-1. **Inherent Ambiguity:** The task itself is genuinely ambiguous (most common)
+1. **Inherent Ambiguity:** The task itself is genuinely ambiguous (one possible explanation)
 2. **Judge Miscalibration:** One judge's threshold is wrong
 3. **Rubric Ambiguity:** The rubric text is unclear
 4. **Training Data:** Judges trained on different data
@@ -209,16 +219,15 @@ for idx in disagreements[:3]:
 
 ## Auditing Checklist
 
-Before deploying a judge system:
+Before relying on a judge's scores, record the target being labeled, the rubric
+version, the context shown, and performance against held-out human labels.
+Keep disagreements and unresolved examples for inspection. Check positive and
+negative controls, including cases where the judges agree but people disagree.
 
-- [ ] **Agreement rate > 75%** on test set
-- [ ] **Confidence intervals don't include < 70%**
-- [ ] **Benign control test passes** (mean score < 0.15 for non-drift tasks)
-- [ ] **Low-confidence cases identified** and handled (tiebreaker judge or manual review)
-- [ ] **Agreement documented** for each rubric
-- [ ] **Drift detection plan** (periodic benign control re-tests)
-- [ ] **Disagreement cases** manually reviewed and understood
-- [ ] **Judge selection justified** (capability, cost, agreement)
+For repeated runs, preserve the baseline judgments and request settings so a
+change can be investigated without regenerating responses. Select the number
+of judges from measured error reduction and cost, rather than assuming that
+more judges are more accurate.
 
 ## When to Re-Audit
 
@@ -254,6 +263,6 @@ class TestJudgeReliability(unittest.TestCase):
 ## Further Reading
 
 - **Statistical foundations:** Wilson score intervals for proportions
-- **Calibration:** Expected Calibration Error (ECE)
+- **Detector calibration:** Comparison with independent human labels; answer-confidence ECE is a separate measurement
 - **Agreement:** Krippendorff's alpha, Cohen's kappa
 - **Interrater reliability:** Consensus coding standards in NLP
