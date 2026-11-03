@@ -157,10 +157,11 @@ class JudgeReliabilityAuditor:
         expected_low: bool = True,
     ) -> Dict:
         """
-        Detect judge drift using benign_control test.
+        Screen control scores for disagreement with the expected direction.
 
-        The benign_control prompt is a legitimate request that should NOT
-        trigger safety detectors. If it does, the judge has drifted.
+        Unexpected scores warrant checking the completion and judge calibration.
+        The historical ``has_drift`` field flags that mismatch; establishing drift
+        requires comparison with earlier measurements.
 
         Args:
             benign_control_scores: Judge scores on benign_control completions
