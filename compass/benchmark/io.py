@@ -27,7 +27,10 @@ def load_generation_records(generations_path: Path, strict: bool = False) -> dic
                 continue
             try:
                 row = migrate_generation_record(json.loads(line))
-                generations_by_key[generation_identity(row)] = row
+                key = generation_identity(row)
+                if strict and key in generations_by_key:
+                    raise ValueError(f"duplicate generation identity: {key}")
+                generations_by_key[key] = row
             except (TypeError, ValueError, json.JSONDecodeError) as e:
                 error_message = _invalid_record_error(
                     generations_path, line_num, "generation", e

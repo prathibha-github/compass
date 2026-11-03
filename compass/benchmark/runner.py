@@ -39,6 +39,15 @@ from compass.benchmark.validation import (
 )
 from compass.clients import AnthropicClient, GoogleAIClient, OpenAIClient
 from compass.clients.pricing import get_pricing
+from compass.evaluation.contracts import fingerprint
+from compass.judges.parsing import SCORING_VERSION
+from compass.benchmark.schemas import evaluation_identity
+from compass.benchmark.resume import (
+    ResumeMismatch, check_resume, check_generation_coverage,
+    generation_contracts, write_manifest, manifest_path,
+)
+
+JUDGE_PROMPT_VERSION = LLMJudge.PROMPT_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -367,7 +376,14 @@ def generate_completions(
     checkpoint_path = output_dir / "generations.jsonl"
     checkpoint = CheckpointManager(str(checkpoint_path))
 
-    completed = checkpoint.load()
+    max_tokens_by_model = validate_token_budget_policy(
+        models, allow_mixed=allow_mixed_token_budgets,
+        max_tokens_by_model=max_tokens_by_model, token_budget_defaults=token_budget_defaults,
+    )
+    expected = generation_contracts(benchmark_spec, models, samples, max_tokens_by_model)
+    completed = load_generation_records(checkpoint_path, strict=True) if checkpoint_path.exists() else {}
+    check_resume(checkpoint_path, completed, expected, "generation_contract")
+    write_manifest(checkpoint_path, expected)
     logger.info("Resuming: %d prior generations", len(completed))
 
     total_to_generate = 0
@@ -431,6 +447,7 @@ def generate_completions(
                                 "prompt_text": prompt.text,
                                 "task_type": prompt.task_type,
                                     "sample_idx": sample_idx,
+                                    "generation_contract": expected[identity],
                                     "completion": response.completion,
                                     "tokens_used": response.tokens_used,
                                     "cost_usd": response.cost_usd,
@@ -481,10 +498,31 @@ def evaluate_completions(
     checkpoint_path = output_dir / f"evaluations_{judge_model}.jsonl"
     checkpoint = CheckpointManager(str(checkpoint_path))
 
-    completed = checkpoint.load()
-    logger.info("Resuming: %d prior evaluations", len(completed))
-
     generations_by_key = load_generation_records(generations_path, strict=True)
+    check_generation_coverage(generations_path, generations_by_key)
+    configs = {
+        name: JudgeConfig(rubric=rubric, judge_model=judge_model)
+        for name, rubric in benchmark_spec.rubrics_by_name.items()
+    }
+    expected = {
+        key: fingerprint({
+            "generation": gen, "benchmark": benchmark_spec.name, "benchmark_version": benchmark_spec.version,
+            "judge": configs[key[1]].config_hash,
+            "prompt_version": JUDGE_PROMPT_VERSION, "scoring_version": SCORING_VERSION,
+            "legacy_token_cap_threshold": legacy_token_cap_threshold,
+        })
+        for key, gen in generations_by_key.items()
+    }
+    completed = {}
+    if checkpoint_path.exists():
+        for row in load_evaluation_records(checkpoint_path, strict=True):
+            key = evaluation_identity(row)
+            if key in completed:
+                raise ResumeMismatch(f"Duplicate evaluation in {checkpoint_path}")
+            completed[key] = row
+    check_resume(checkpoint_path, completed, expected, "evaluation_contract")
+    write_manifest(checkpoint_path, expected)
+    logger.info("Resuming: %d prior evaluations", len(completed))
     cache = EvaluationCache(cache_dir=str(output_dir / ".cache"))
 
     total_to_evaluate = 0
@@ -533,6 +571,8 @@ def evaluate_completions(
                         "prompt_id": prompt_id,
                         "task_type": gen["task_type"],
                         "sample_idx": sample_idx,
+                        "evaluation_contract": expected[identity],
+                        "generation_coverage_verified": manifest_path(generations_path).exists(),
                         "completion": gen["completion"][:200],
                         "score": result.score,
                         "hit": result.hit,
@@ -622,7 +662,6 @@ class SharedBenchmarkRunner:
         """Generate completions for a benchmark run config."""
         config = self._require_validated_run_config(run_config)
         output_dir = setup_output_dir(config.output_dir)
-        _write_benchmark_run_policy_artifact(output_dir, config)
         expected_rows = self.spec.total_evaluations(len(config.models), config.samples)
         try:
             result = generate_completions(
@@ -638,6 +677,8 @@ class SharedBenchmarkRunner:
                 allow_mixed_token_budgets=config.allow_mixed_token_budgets,
                 token_budget_defaults=config.token_budget_defaults,
             )
+        except (ValueError, KeyError, TypeError):
+            raise
         except Exception:
             _write_benchmark_run_outcome_artifact(
                 output_dir,
@@ -650,6 +691,7 @@ class SharedBenchmarkRunner:
                 status="failed",
             )
             raise
+        _write_benchmark_run_policy_artifact(output_dir, config)
         _write_benchmark_run_outcome_artifact(
             output_dir,
             benchmark_name=self.spec.name,
@@ -669,8 +711,18 @@ class SharedBenchmarkRunner:
         """Evaluate completions for a benchmark run config."""
         config = self._require_validated_run_config(run_config)
         output_dir = setup_output_dir(config.output_dir)
-        _write_benchmark_run_policy_artifact(output_dir, config)
-        expected_rows = _count_generation_rows(generations_path)
+        generations = load_generation_records(generations_path, strict=True)
+        budgets = validate_token_budget_policy(
+            list(config.models), allow_mixed=config.allow_mixed_token_budgets,
+            max_tokens_by_model=config.max_tokens_by_model,
+            token_budget_defaults=config.token_budget_defaults,
+        )
+        expected_contracts = generation_contracts(self.spec, list(config.models), config.samples, budgets)
+        expected_keys = set(expected_contracts)
+        if set(generations) != expected_keys:
+            raise ResumeMismatch("Saved generations do not match the requested models, prompts, and sample counts")
+        check_resume(generations_path, generations, expected_contracts, "generation_contract")
+        expected_rows = len(expected_keys)
         try:
             result = evaluate_completions(
                 generations_path=generations_path,
@@ -679,6 +731,8 @@ class SharedBenchmarkRunner:
                 output_dir=output_dir,
                 legacy_token_cap_threshold=config.legacy_token_cap_threshold,
             )
+        except (ValueError, KeyError, TypeError):
+            raise
         except Exception:
             _write_benchmark_run_outcome_artifact(
                 output_dir,
@@ -691,6 +745,7 @@ class SharedBenchmarkRunner:
                 status="failed",
             )
             raise
+        _write_benchmark_run_policy_artifact(output_dir, config)
         _write_benchmark_run_outcome_artifact(
             output_dir,
             benchmark_name=self.spec.name,

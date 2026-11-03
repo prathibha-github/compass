@@ -33,6 +33,20 @@ from compass.rubrics.library import RubricLibrary
 
 
 class BenchmarkRegistryTests(unittest.TestCase):
+    @staticmethod
+    def _write_generation_manifest(path, spec, config):
+        from compass.benchmark.resume import generation_contracts, write_manifest
+        from compass.benchmark.runner import validate_token_budget_policy
+        budgets = validate_token_budget_policy(list(config.models), allow_mixed=config.allow_mixed_token_budgets, token_budget_defaults=config.token_budget_defaults)
+        expected = generation_contracts(spec, list(config.models), config.samples, budgets)
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        for row in rows:
+            key = (row['model'], row['rubric'], row['prompt_id'], row['sample_idx'])
+            row['generation_contract'] = expected[key]
+        path.write_text(''.join(json.dumps(row)+'\n' for row in rows))
+        write_manifest(path, expected)
+
+
     def test_constitutional_benchmark_spec_registered(self):
         spec = get_benchmark_spec("constitutional_compliance")
         self.assertEqual(spec.name, "constitutional_compliance")
@@ -336,6 +350,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
                 )
                 + "\n"
             )
+            self._write_generation_manifest(generations_path, spec, run_config)
             with patch(
                 "compass.benchmark.runner.evaluate_completions",
                 return_value=PhaseOutcome(evaluations_path, 1, 0),
@@ -414,6 +429,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
                 )
                 + "\n"
             )
+            self._write_generation_manifest(generations_path, spec, run_config)
             with patch(
                 "compass.benchmark.runner.evaluate_completions",
                 return_value=PhaseOutcome(evaluations_path, 1, 0),
@@ -512,7 +528,11 @@ class BenchmarkRegistryTests(unittest.TestCase):
                 "compass.benchmark.runner.OllamaClient",
                 return_value=SimpleNamespace(),
             ):
-                evaluations_path = runner.evaluate(generations_path, run_config)
+                from compass.benchmark.runner import evaluate_completions
+                evaluations_path = evaluate_completions(
+                    generations_path, spec, run_config.judge_model, output_dir,
+                    legacy_token_cap_threshold=301,
+                ).path
 
             saved_rows = [
                 json.loads(line)
@@ -681,6 +701,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
                 )
                 + "\n"
             )
+            self._write_generation_manifest(generations_path, spec, run_config)
             with patch(
                 "compass.benchmark.runner.evaluate_completions",
                 return_value=PhaseOutcome(evaluations_path, 1, 0),
@@ -774,6 +795,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
                 )
                 + "\n"
             )
+            self._write_generation_manifest(generations_path, spec, run_config)
             with patch(
                 "compass.benchmark.runner.evaluate_completions",
                 side_effect=RuntimeError("evaluation crashed"),
