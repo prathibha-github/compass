@@ -49,3 +49,24 @@ def detector_definition(detector) -> dict:
     result = {"type": f"{cls.__module__}.{cls.__qualname__}", "definition": definition}
     fingerprint(result)  # Fail before writing artifacts if state is unsupported.
     return result
+
+
+def manifest_contracts(manifest):
+    """Read an expected population without silently collapsing duplicate IDs."""
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("expected"), list):
+        raise ValueError("Invalid manifest: expected an expected-row list")
+    expected = {}
+    for item in manifest["expected"]:
+        if not isinstance(item, dict):
+            raise ValueError("Invalid manifest row")
+        identity, contract = item.get("identity"), item.get("contract")
+        if (not isinstance(identity, list) or not identity
+                or any(not isinstance(part, str) for part in identity[:-1])
+                or type(identity[-1]) is not int or identity[-1] < 0
+                or not isinstance(contract, str) or not contract):
+            raise ValueError("Invalid manifest identity or contract")
+        key = tuple(identity)
+        if key in expected:
+            raise ValueError("Duplicate manifest identity")
+        expected[key] = contract
+    return expected

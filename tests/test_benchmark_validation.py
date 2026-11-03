@@ -73,6 +73,7 @@ class BenchmarkValidationTests(unittest.TestCase):
                 "Model           | Rubric          |  Hit Rate |  Q-Flag |   Cap |  Frag | LegacyCap |  QF Hit | Samples",
                 "-" * 100,
                 "llama3.1        | clarity         |     50.0% |   50.0% | 50.0% | 50.0% |      0.0% |    0.0% |       2",
+                "Coverage unverified: archived inputs do not establish the full planned population.",
                 "",
                 f"Results saved: {path}",
                 "=" * 100,
