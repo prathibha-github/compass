@@ -38,10 +38,12 @@ completion-only judging. Comparing different context modes still requires care.
 
 Repeated responses to one prompt can be very similar, especially at low
 temperature. Reading a judgment from cache again doesn't provide independent
-evidence of judge reliability. The Wilson intervals don't account for
-dependence between responses to the same prompt.
-I need to report the number of distinct prompts as well as the number of
-responses, and use prompt-level uncertainty estimates for those comparisons.
+evidence of judge reliability. The Wilson agreement intervals do not account for
+dependence between responses to the same prompt. Suite and benchmark behavior
+summaries now report distinct prompt counts and use whole-prompt resampling for
+individual rate intervals. Comparisons between conditions or models still need
+joint resampling of shared prompts; separate rate intervals do not supply an
+interval for the difference.
 
 `summarize_suite_evaluations` returns separate results for each model and
 condition. Its return shape is now `summary[model][condition]`. Callers that
@@ -50,8 +52,9 @@ that pools responses, so models with more samples carry more weight.
 Task-level breakdowns would help where the sample supports them.
 
 Filtering short or truncated responses is another choice that can change a
-result. Reports should show how many responses were excluded from each group
-and whether the finding holds with and without the filter.
+result. The summaries now show rates and counts with and without filtering,
+including unknown quality flags. I still need to check whether the finding
+holds across those choices.
 
 ## Resume and saved metadata
 

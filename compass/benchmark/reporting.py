@@ -2,12 +2,13 @@
 
 import logging
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Dict, Iterable, List, Mapping, Optional, Tuple
 
 from compass import PairwiseRanker
+from compass.evaluation.statistics import prompt_rate_summary
 from compass.benchmark.resume import check_evaluation_coverage
 from compass.benchmark.io import load_evaluation_records
 from compass.benchmark.specs import BenchmarkSpec
@@ -19,8 +20,8 @@ logger = logging.getLogger(__name__)
 class BenchmarkSummaryRow:
     model: str
     rubric: str
-    hit_rate: float
-    mean_score: float
+    hit_rate: Optional[float]
+    mean_score: Optional[float]
     hits: int
     total: int
     quality_flagged_pct: float
@@ -33,6 +34,7 @@ class BenchmarkSummaryRow:
     raw_total: int
     evaluation_coverage_verified: bool = False
     generation_coverage_verified: bool = False
+    prompt_statistics: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -79,7 +81,7 @@ class BenchmarkPairwiseReport:
 
 
 def _quality_filtered_results(results: Iterable[dict]) -> List[dict]:
-    return [result for result in results if not result.get("generation_quality_flagged")]
+    return [result for result in results if result.get("generation_quality_flagged") is False]
 
 
 def _scored_results_for_policy(results: List[dict], quality_filter_mode: str) -> List[dict]:
@@ -113,12 +115,23 @@ def format_summary(
             if s.quality_filtered_hit_rate is not None
             else "n/a"
         )
+        hit_text = f"{s.hit_rate:.1f}%" if s.hit_rate is not None else "n/a"
         lines.append(
-            f"{s.model:<15} | {s.rubric:<15} | {s.hit_rate:>8.1f}% | "
+            f"{s.model:<15} | {s.rubric:<15} | {hit_text:>9} | "
             f"{s.quality_flagged_pct:>6.1f}% | {s.token_cap_pct:>4.1f}% | "
             f"{s.fragment_pct:>4.1f}% | {s.legacy_cap_inferred_pct:>8.1f}% | "
             f"{qf_hit_text:>7} | {s.total:>7}"
         )
+
+        if s.prompt_statistics:
+            raw = s.prompt_statistics["all"]
+            clean = s.prompt_statistics["quality_filtered"]
+            interval = raw["interval"]
+            ci = f"{100*interval[0]:.1f}%–{100*interval[1]:.1f}%" if interval else "unavailable"
+            raw_rate = f"{100*raw['hit_rate']:.1f}%" if raw['hit_rate'] is not None else "n/a"
+            lines.append(f"  Prompts: {raw['distinct_prompts']} | Unfiltered: {raw_rate} ({raw['responses']}) | "
+                         f"Filtered samples: {clean['responses']} | Quality unknown: {s.prompt_statistics['quality_unknown']} | "
+                         f"Unfiltered prompt CI: {ci}")
 
     if any(not row.evaluation_coverage_verified or not row.generation_coverage_verified for row in stats.values()):
         lines.append("Coverage unverified: archived inputs do not establish the full planned population.")
@@ -153,9 +166,9 @@ def analyze_results(
         quality_filtered = _quality_filtered_results(results)
         hits = sum(1 for r in scored_results if r["hit"])
         total = len(scored_results)
-        hit_rate = (hits / total * 100) if total > 0 else 0.0
+        hit_rate = (hits / total * 100) if total > 0 else None
         mean_score = (
-            sum(r["score"] for r in scored_results) / total if total > 0 else 0.0
+            sum(r["score"] for r in scored_results) / total if total > 0 else None
         )
         flagged = sum(1 for r in results if r.get("generation_quality_flagged"))
         token_cap_hits = sum(1 for r in results if r.get("generation_hit_token_cap"))
@@ -186,6 +199,7 @@ def analyze_results(
             quality_filtered_hit_rate=qf_hit_rate,
             quality_filter_mode=quality_filter_mode,
             raw_total=raw_total,
+            prompt_statistics=prompt_rate_summary(results),
             evaluation_coverage_verified=verified,
             generation_coverage_verified=all(r.get("generation_coverage_verified", False) for r in results),
         )
@@ -346,7 +360,7 @@ def rank_models(
     for result in rows:
         if (
             quality_filter_mode == "exclude_flagged"
-            and result.get("generation_quality_flagged")
+            and result.get("generation_quality_flagged") is not False
         ):
             continue
         metadata = {}

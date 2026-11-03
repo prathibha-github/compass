@@ -40,6 +40,7 @@ from compass.evaluation.suite_io import (
 )
 from compass.clients.settings import default_request_settings
 from compass.judges import JudgeConfig, LLMJudge
+from compass.evaluation.statistics import prompt_rate_summary
 from compass.evaluation.audit import record_failure
 from compass.judges.context import saved_judge_context
 from compass.judges.parsing import SCORING_VERSION
@@ -603,6 +604,7 @@ def summarize_suite_evaluations(
         raise ValueError("Evaluation definitions changed; re-score before summarizing")
     expected = manifest_contracts(manifest)
     seen = set()
+    statistics_rows = {}
     with open(evaluations_path) as f:
         for line in f:
             if not line.strip():
@@ -612,6 +614,7 @@ def summarize_suite_evaluations(
             if identity in seen or identity not in expected or row.get("evaluation_contract") != expected[identity]:
                 raise ValueError("Duplicate, unexpected, or stale evaluation row; re-score before summarizing")
             seen.add(identity)
+            statistics_rows.setdefault((row["model"], row["condition"], row["detector"]), []).append(row)
             cell_key = (
                 row["model"],
                 row["prompt_id"],
@@ -635,4 +638,10 @@ def summarize_suite_evaluations(
     for summary in summaries.values():
         for condition in summary.values():
             condition["generation_coverage_verified"] = manifest.get("generation_coverage_verified", False)
+    for (model, condition, detector), rows in statistics_rows.items():
+        if pool_models:
+            destination = summaries["pooled"][condition].setdefault("prompt_statistics_by_model", {}).setdefault(model, {})
+        else:
+            destination = summaries[model][condition].setdefault("prompt_statistics", {})
+        destination[detector] = prompt_rate_summary(rows)
     return summaries.get("pooled", {}) if pool_models else summaries
