@@ -159,7 +159,7 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
                 self.client = client
                 self.cache = cache
 
-            def evaluate(self, text):
+            def evaluate(self, text, **kwargs):
                 _FakeJudge.calls += 1
                 return SimpleNamespace(
                     score=0.2,
@@ -230,7 +230,7 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
             def __init__(self, config, client, cache):
                 self.config = config
 
-            def evaluate(self, text):
+            def evaluate(self, text, **kwargs):
                 raise RuntimeError("judge failed")
 
         with tempfile.TemporaryDirectory() as tmpdir:

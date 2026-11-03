@@ -92,7 +92,7 @@ class BenchmarkExtensionContractTests(unittest.TestCase):
                 def __init__(self, config, client, cache):
                     self.config = config
 
-                def evaluate(self, text):
+                def evaluate(self, text, **kwargs):
                     hit = text.startswith("mistral:")
                     return SimpleNamespace(
                         score=0.9 if hit else 0.2,

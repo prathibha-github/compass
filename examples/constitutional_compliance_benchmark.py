@@ -104,6 +104,7 @@ def evaluate_completions(
     return score_saved(
         generations_path, BENCHMARK_SPEC, judge_model, output_dir,
         legacy_token_cap_threshold=legacy_token_cap_threshold,
+        judge_context_mode="completion",
     ).path
 
 

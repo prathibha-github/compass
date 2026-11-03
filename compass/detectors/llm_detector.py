@@ -5,11 +5,9 @@ from typing import Optional
 from compass.detectors.base import DetectorResult, JudgeFn, TicDetector
 from compass.judges.parsing import parse_judge_response, parse_scored_response
 
-LLM_JUDGE_SYSTEM_PROMPT = (
-    "You are a strict evaluator. Return only valid JSON with keys "
-    "score, hit, confidence, and rationale."
-)
+from compass.judges.context import build_judge_prompt, JUDGE_SYSTEM_PROMPT
 
+LLM_JUDGE_SYSTEM_PROMPT = JUDGE_SYSTEM_PROMPT
 
 @dataclass(frozen=True)
 class LLMJudgeDetector(TicDetector):
@@ -22,15 +20,8 @@ class LLMJudgeDetector(TicDetector):
     hit_threshold: float = 0.5
     max_tokens: int = 180
 
-    def build_prompt(self, text: str) -> str:
-        return (
-            "Evaluate the assistant response below using this rubric.\n\n"
-            f"Rubric:\n{self.rubric}\n\n"
-            "Return JSON exactly in this shape:\n"
-            '{"score": 0.0, "hit": false, "confidence": 0.0, "rationale": "short reason"}\n\n'
-            "Assistant response:\n"
-            f"{text}"
-        )
+    def build_prompt(self, text: str, context: Optional[str] = None, *, system_context: Optional[str] = None) -> str:
+        return build_judge_prompt(text, self.rubric, context, system_context)
 
     def detect(self, text: str) -> DetectorResult:
         raise RuntimeError(
@@ -38,9 +29,11 @@ class LLMJudgeDetector(TicDetector):
             "call detect_with_judge(text, judge_fn) instead."
         )
 
-    def detect_with_judge(self, text: str, judge_fn: JudgeFn) -> DetectorResult:
-        raw = judge_fn(self.build_prompt(text), self.max_tokens)
-        return self.parse_response(raw)
+    def detect_with_judge(self, text: str, judge_fn: JudgeFn, *, context: Optional[str] = None, system_context: Optional[str] = None) -> DetectorResult:
+        raw = judge_fn(self.build_prompt(text, context, system_context=system_context), self.max_tokens)
+        result = self.parse_response(raw)
+        result.metadata["judge_context"] = {"user_request": context, "system_prompt": system_context}
+        return result
 
     @staticmethod
     def _extract_json_object(raw: str) -> Optional[dict]:

@@ -17,7 +17,7 @@ in scoring, saved metadata, and resume behavior.
 ```
 
 `config_hash` covers the rubric hash, judge model, maximum tokens, temperature,
-and seed. `text_hash` covers the response plus optional user context.
+and seed. `text_hash` covers separate response, user-request, and generation-system fields.
 The last coordinate identifies the judge prompt template and score-validation
 contract. Changing either selects a different cache entry; older fallback-zero
 entries are excluded by the new scoring version.
@@ -107,9 +107,12 @@ be summarized. Imported legacy generations without manifests remain scoreable,
 but their intended generation population cannot be verified. Retain manifests
 beside their JSONL files when moving artifacts.
 
-The separate BenchmarkSpec API still uses smaller checkpoint identities. Its
-resume path can reuse older results when prompts or rubrics change under the
-same identifiers. A judge-cache change cannot invalidate skipped checkpoints.
+BenchmarkSpec also checks generation and evaluation contracts before resuming.
+Its configured runner requires saved generations to match the requested models,
+prompts, sample counts, and token budgets. The low-level `evaluate_completions`
+function can rescore saved generations in a fresh output directory. Archived
+files without manifests are marked as having unverified generation coverage;
+new files with generation contracts must retain their manifests.
 
 Use a new output directory for a changed experiment. To rescore existing suite
 generations with changed detector definitions, call
@@ -117,6 +120,24 @@ generations with changed detector definitions, call
 To change generation settings, generate fresh completions. See the
 [checkpoint guide](CHECKPOINT_SYSTEM.md) for record formats and the
 [benchmark playbook](BENCHMARK_PLAYBOOK.md) for the benchmark API.
+
+## Context shown to judges
+
+The suite and BenchmarkSpec runners show the saved user request by default.
+They record `judge_context` with each LLM score. The direct detector accepts
+`context=...` through `detect_with_judge` or `analyze_text` and uses the same
+prompt template as `LLMJudge`. Custom `detect_with_judge` implementations used
+with contextual `analyze_text` calls must accept `context` and `system_context`
+keyword arguments; the runner does not silently drop them.
+
+For a suite, `judge_context_mode="user_and_system"` also shows the saved system
+instructions. Use that deliberately: revealing the condition may affect the
+judgment. `judge_context_mode="completion"` omits both fields and is required
+when scoring an archive that has no saved request. The historical constitutional
+benchmark wrapper explicitly uses this completion-only mode.
+
+Changing context invalidates resumed scores and cached judgments. Re-score the
+saved generations to compare modes; no new generation calls are needed.
 
 ## Rubric versions
 
