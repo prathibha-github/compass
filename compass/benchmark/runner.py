@@ -48,6 +48,7 @@ from compass.benchmark.resume import (
 )
 
 JUDGE_PROMPT_VERSION = LLMJudge.PROMPT_VERSION
+from compass.judges.context import saved_judge_context
 
 logger = logging.getLogger(__name__)
 
@@ -493,6 +494,8 @@ def evaluate_completions(
     judge_model: str,
     output_dir: Path,
     legacy_token_cap_threshold: int = LEGACY_TOKEN_CAP_FALLBACK,
+    *,
+    judge_context_mode: str = "user",
 ) -> Path:
     """Evaluate benchmark completions with a judge model."""
     checkpoint_path = output_dir / f"evaluations_{judge_model}.jsonl"
@@ -500,6 +503,7 @@ def evaluate_completions(
 
     generations_by_key = load_generation_records(generations_path, strict=True)
     check_generation_coverage(generations_path, generations_by_key)
+    contexts = {key: saved_judge_context(gen, judge_context_mode) for key, gen in generations_by_key.items()}
     configs = {
         name: JudgeConfig(rubric=rubric, judge_model=judge_model)
         for name, rubric in benchmark_spec.rubrics_by_name.items()
@@ -507,7 +511,7 @@ def evaluate_completions(
     expected = {
         key: fingerprint({
             "generation": gen, "benchmark": benchmark_spec.name, "benchmark_version": benchmark_spec.version,
-            "judge": configs[key[1]].config_hash,
+            "judge": configs[key[1]].config_hash, "judge_context": contexts[key],
             "prompt_version": JUDGE_PROMPT_VERSION, "scoring_version": SCORING_VERSION,
             "legacy_token_cap_threshold": legacy_token_cap_threshold,
         })
@@ -555,7 +559,8 @@ def evaluate_completions(
 
         try:
             judge = judges[rubric]
-            result = judge.evaluate(gen["completion"])
+            context = contexts[(model, rubric, prompt_id, sample_idx)]
+            result = judge.evaluate(gen["completion"], context=context["user_request"], system_context=context["system_prompt"])
             quality = _generation_quality_from_record(
                 gen,
                 legacy_token_cap_threshold=legacy_token_cap_threshold,
@@ -579,6 +584,7 @@ def evaluate_completions(
                         "confidence": result.confidence,
                         "rationale": result.rationale[:100] if result.rationale else "",
                         "judge_model": judge_model,
+                        "judge_context": context,
                         "generation_visible_chars": quality["visible_chars"],
                         "generation_visible_word_count": quality["visible_word_count"],
                         "generation_hit_token_cap": quality["hit_token_cap"],

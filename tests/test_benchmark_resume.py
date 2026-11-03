@@ -156,7 +156,7 @@ def test_archived_generation_scores_record_unknown_coverage(tmp_path):
     generation.write_text(json.dumps(dict(model='m', rubric='clarity', prompt_id='p1',
                                          task_type='general', completion='old reply'))+'\n')
     with patch('compass.benchmark.runner._create_client', return_value=client()):
-        evaluation = evaluate_completions(generation, spec(), 'judge', tmp_path).path
+        evaluation = evaluate_completions(generation, spec(), 'judge', tmp_path, judge_context_mode='completion').path
     assert json.loads(evaluation.read_text())['generation_coverage_verified'] is False
 
 

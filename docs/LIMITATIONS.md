@@ -21,13 +21,18 @@ people to label examples, including ambiguous cases and counterexamples, and
 then check which errors the detectors make. Some prompts should be kept out of
 rubric development so the final check uses examples the rubric wasn't tuned on.
 
-The judges also get different inputs depending on the execution path. The
-suite runner passes the user request to `LLMJudge`. The direct detector and
-BenchmarkSpec paths currently score only the completion. The suite judge does
-not receive the generation system prompt as separate context. A judgment about
-whether advice was requested needs that distinction to be explicit. Comparing
-these paths without accounting for their inputs can look like judge disagreement
-when one judge simply has less information.
+The library's suite and BenchmarkSpec runners now give judges the saved user
+request by default. The direct detector accepts the same context and uses the
+same judge prompt. Saved evaluation rows record what context was shown.
+
+Generation system instructions can be included explicitly with
+`judge_context_mode="user_and_system"` in the suite runner. They are omitted by
+default so a condition does not automatically reveal itself to the judge.
+`judge_context_mode="completion"` provides a completion-only baseline, and is
+required for old files that lack the original request. Changing the context
+invalidates cached judgments and resumed scores; it does not require new model
+responses. The historical constitutional benchmark wrapper explicitly uses
+completion-only judging. Comparing different context modes still requires care.
 
 ## Repeated prompts and pooled results
 

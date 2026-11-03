@@ -39,6 +39,7 @@ from compass.evaluation.suite_io import (
     reset_suite_generations,
 )
 from compass.judges import JudgeConfig, LLMJudge
+from compass.judges.context import saved_judge_context
 from compass.judges.parsing import SCORING_VERSION
 from compass.rubrics.base import Rubric
 
@@ -365,6 +366,7 @@ def evaluate_suite_completions(
     *,
     judge_model: Optional[str] = None,
     resume: bool = True,
+    judge_context_mode: str = "user",
     client_factory=_create_client,
 ) -> Path:
     """Score saved completions with the suite's detectors.
@@ -394,6 +396,10 @@ def evaluate_suite_completions(
     else:
         logger.warning("Legacy generations have no manifest; intended generation coverage cannot be verified")
 
+    contexts = {
+        key: saved_judge_context(gen, judge_context_mode)
+        for key, gen in generations.items()
+    } if suite_uses_llm_judge(suite) else {}
     definitions = {d.name: detector_definition(d) for d in suite.detectors}
     contracts = {}
     for (model, source_suite, prompt_id, condition, sample_idx), gen in generations.items():
@@ -405,6 +411,7 @@ def evaluate_suite_completions(
                 "generation": gen,
                 "detector": definitions[detector.name],
                 "judge_model": judge_model if _is_judge_detector(detector) else None,
+                "judge_context": contexts.get((model, source_suite, prompt_id, condition, sample_idx)),
                 "judge_prompt_version": LLMJudge.PROMPT_VERSION,
                 "scoring_version": SCORING_VERSION,
             })
@@ -477,8 +484,10 @@ def evaluate_suite_completions(
             try:
                 completion = gen["completion"]
                 if _is_judge_detector(detector):
+                    selected_context = contexts[(model, _suite, prompt_id, condition, sample_idx)]
                     result = judges[detector.name].evaluate(
-                        completion, context=gen.get("prompt_text")
+                        completion, context=selected_context["user_request"],
+                        system_context=selected_context["system_prompt"],
                     )
                     score, hit = result.score, result.hit
                     count = 1 if hit else 0
@@ -497,6 +506,7 @@ def evaluate_suite_completions(
                         "task_type": gen.get("task_type", "general"),
                         "sample_idx": sample_idx,
                         "evaluation_contract": contracts[identity],
+                        "judge_context": contexts.get((model, _suite, prompt_id, condition, sample_idx)) if _is_judge_detector(detector) else None,
                         "generation_fingerprint": fingerprint(gen),
                         "completion": completion[:200],
                         "generation_visible_chars": gen.get("visible_chars"),

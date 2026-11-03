@@ -487,7 +487,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
             def __init__(self, config, client, cache):
                 self.config = config
 
-            def evaluate(self, text):
+            def evaluate(self, text, **kwargs):
                 return SimpleNamespace(
                     score=0.4,
                     hit=False,
@@ -531,7 +531,7 @@ class BenchmarkRegistryTests(unittest.TestCase):
                 from compass.benchmark.runner import evaluate_completions
                 evaluations_path = evaluate_completions(
                     generations_path, spec, run_config.judge_model, output_dir,
-                    legacy_token_cap_threshold=301,
+                    legacy_token_cap_threshold=301, judge_context_mode="completion",
                 ).path
 
             saved_rows = [

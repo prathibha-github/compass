@@ -122,6 +122,9 @@ def analyze_text(
     text: str,
     suite: TicSuite,
     judge_fn: Optional[JudgeFn] = None,
+    *,
+    context: Optional[str] = None,
+    system_context: Optional[str] = None,
 ) -> Dict[str, DetectorResult]:
     """Run all suite detectors on a completion."""
     results: Dict[str, DetectorResult] = {}
@@ -129,7 +132,12 @@ def analyze_text(
         if hasattr(detector, "detect_with_judge"):
             if judge_fn is None:
                 raise ValueError(f"Detector {detector.name!r} requires a judge function")
-            results[detector.name] = detector.detect_with_judge(text, judge_fn)
+            if context is None and system_context is None:
+                results[detector.name] = detector.detect_with_judge(text, judge_fn)
+            else:
+                results[detector.name] = detector.detect_with_judge(
+                    text, judge_fn, context=context, system_context=system_context,
+                )
         else:
             results[detector.name] = detector.detect(text)
     return results
