@@ -7,6 +7,7 @@ from typing import Optional
 
 from compass.clients.base import CompletionClient, CompletionResponse
 from compass.clients.settings import request_settings
+from compass.clients.usage import UsageLedger, CompletionFailure
 from compass.clients.pricing import get_pricing
 
 logger = logging.getLogger(__name__)
@@ -129,6 +130,8 @@ class AnthropicClient(CompletionClient):
             )
         del top_logprobs
 
+        ledger = UsageLedger(self._pricing)
+        settings = self.request_settings(max_tokens, temperature)
         max_attempts = 10
         for attempt in range(max_attempts):
             self._throttle()
@@ -158,19 +161,20 @@ class AnthropicClient(CompletionClient):
                     if getattr(block, "type", None) == "text"
                 ]
                 completion = "\n".join(chunks).strip()
+                ledger.record(input_tokens, output_tokens, completion, stop_reason, known=bool(usage))
                 if not completion:
                     if stop_reason == "max_tokens" or output_tokens >= max_tokens:
-                        raise RuntimeError(
+                        raise CompletionFailure(
                             "Empty response from "
                             f"{self.model} after exhausting max_tokens="
                             f"{max_tokens} (stop_reason={stop_reason!r}, "
-                            f"output_tokens={output_tokens}). Increase max_tokens."
+                            f"output_tokens={output_tokens}). Increase max_tokens.", ledger, settings
                         )
                     # The API occasionally returns a transiently empty response.
                     # Retry those rather than failing the cell outright.
                     if attempt == max_attempts - 1:
-                        raise RuntimeError(
-                            f"Empty response from {self.model} after {max_attempts} attempts"
+                        raise CompletionFailure(
+                            f"Empty response from {self.model} after {max_attempts} attempts", ledger, settings
                         )
                     logger.warning(
                         "Empty response from %s (attempt %d/%d) — retrying",
@@ -183,10 +187,7 @@ class AnthropicClient(CompletionClient):
                     request_settings=self.request_settings(max_tokens, temperature),
                     completion=completion,
                     tokens_used={"input": input_tokens, "output": output_tokens},
-                    cost_usd=(
-                        input_tokens * self._pricing.input_cost_per_million / 1_000_000
-                        + output_tokens * self._pricing.output_cost_per_million / 1_000_000
-                    ),
+                    **ledger.fields(),
                     finish_reason=stop_reason,
                 )
 
@@ -202,16 +203,17 @@ class AnthropicClient(CompletionClient):
                 time.sleep(wait)
 
             except self._anthropic.APIError as exc:
+                ledger.record(0, 0, "", "api_error", known=False)
                 status = getattr(exc, "status_code", None)
                 if status is not None and 400 <= status < 500:
-                    raise RuntimeError(
-                        f"Anthropic inference failed for {self.model}: {exc}"
+                    raise CompletionFailure(
+                        f"Anthropic inference failed for {self.model}: {exc}", ledger, settings
                     ) from exc
                 logger.error("Anthropic API error on attempt %d: %s", attempt + 1, exc)
                 if attempt == max_attempts - 1:
-                    raise RuntimeError(
-                        f"Anthropic inference failed for {self.model}: {exc}"
+                    raise CompletionFailure(
+                        f"Anthropic inference failed for {self.model}: {exc}", ledger, settings
                     ) from exc
                 time.sleep(min(4 * (2 ** attempt), 30))
 
-        raise RuntimeError(f"Anthropic call failed after {max_attempts} attempts")
+        raise CompletionFailure(f"Anthropic call failed after {max_attempts} attempts", ledger, settings)

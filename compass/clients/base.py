@@ -14,6 +14,9 @@ class CompletionResponse:
     logprobs: Optional[list] = None
     finish_reason: str = ""
     request_settings: dict = field(default_factory=dict)
+    billing_tokens: Optional[dict] = None
+    usage_complete: bool = False
+    usage_attempts: list = field(default_factory=list)
 
 
 class CompletionClient(ABC):

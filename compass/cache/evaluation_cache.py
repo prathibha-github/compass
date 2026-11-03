@@ -1,4 +1,5 @@
 """Deterministic caching for evaluation results."""
+from copy import deepcopy
 import hashlib
 import json
 import logging
@@ -48,7 +49,7 @@ class EvaluationCache:
 
         # Check memory first
         if key in self.memory:
-            return self.memory[key]
+            return deepcopy(self.memory[key])
 
         # Check disk (EAFP: attempt read directly, handle if missing)
         cache_file = self.cache_dir / f"{key}.json"
@@ -56,8 +57,8 @@ class EvaluationCache:
             with open(cache_file) as f:
                 data = json.load(f)
                 result = EvaluationResult(**data)
-                self.memory[key] = result
-                return result
+                self.memory[key] = deepcopy(result)
+                return deepcopy(result)
         except (FileNotFoundError, json.JSONDecodeError, TypeError):
             # Missing or corrupted cache file, skip
             return None
@@ -71,7 +72,7 @@ class EvaluationCache:
     ) -> None:
         """Store result in cache (memory and disk)."""
         key = self._cache_key(config_hash, text_hash, prompt_version)
-        self.memory[key] = result
+        self.memory[key] = deepcopy(result)
 
         cache_file = self.cache_dir / f"{key}.json"
         temp_path: Optional[Path] = None

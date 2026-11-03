@@ -7,6 +7,7 @@ from typing import Optional
 
 from compass.clients.base import CompletionClient, CompletionResponse
 from compass.clients.settings import request_settings
+from compass.clients.usage import UsageLedger, CompletionFailure
 from compass.clients.pricing import get_pricing
 
 logger = logging.getLogger(__name__)
@@ -168,6 +169,8 @@ class OpenAIResponsesClient(CompletionClient):
         if system is not None:
             request_kwargs["instructions"] = system
 
+        ledger = UsageLedger(self._pricing)
+        settings = self.request_settings(max_tokens, temperature)
         max_attempts = 10
         for attempt in range(max_attempts):
             self._throttle()
@@ -181,46 +184,28 @@ class OpenAIResponsesClient(CompletionClient):
                 input_tokens = getattr(usage, "input_tokens", 0) if usage else 0
                 output_tokens = getattr(usage, "output_tokens", 0) if usage else 0
 
-                if not completion.strip():
-                    logger.warning(
-                        "Responses API returned empty output. status=%s, "
-                        "incomplete_details=%s, usage=%s, attempt=%d/%d",
-                        getattr(resp, "status", "unknown"),
-                        getattr(resp, "incomplete_details", None),
-                        usage,
-                        attempt + 1, max_attempts,
-                    )
-                    if attempt == max_attempts - 1:
-                        raise RuntimeError(
-                            f"Responses API returned empty output after {max_attempts} attempts"
-                        )
-                    time.sleep(min(4 * (2 ** attempt), 30))
-                    continue
-
-                if not usage:
-                    if not self._allow_estimated_usage:
-                        raise RuntimeError(
-                            "Responses API did not return usage metadata. "
-                            "Re-run with allow_estimated_usage=True to accept "
-                            "estimated token accounting."
-                        )
-                    logger.warning(
-                        "Responses API omitted usage metadata; estimating token counts."
-                    )
+                finish_reason = str(getattr(getattr(resp, "incomplete_details", None), "reason", None)
+                                    or getattr(resp, "status", "") or "")
+                if not usage and self._allow_estimated_usage:
                     output_tokens = len(completion) // 4
-
+                ledger.record(input_tokens, output_tokens, completion, finish_reason, known=bool(usage))
                 self._input_tokens += input_tokens
                 self._output_tokens += output_tokens
+                if not usage and not self._allow_estimated_usage:
+                    raise CompletionFailure("Responses API did not return usage metadata. "
+                        "Re-run with allow_estimated_usage=True to accept estimated token accounting.", ledger, settings)
+                if not completion.strip():
+                    if attempt == max_attempts - 1:
+                        raise CompletionFailure(f"Responses API returned empty output after {max_attempts} attempts", ledger, settings)
+                    time.sleep(min(4 * (2 ** attempt), 30))
+                    continue
 
                 return CompletionResponse(
                     request_settings=self.request_settings(max_tokens, temperature),
                     completion=completion,
                     tokens_used={"input": input_tokens, "output": output_tokens},
-                    cost_usd=(
-                        input_tokens * self._pricing.input_cost_per_million / 1_000_000
-                        + output_tokens * self._pricing.output_cost_per_million / 1_000_000
-                    ),
-                    finish_reason=str(getattr(getattr(resp, "incomplete_details", None), "reason", None) or getattr(resp, "status", "") or ""),
+                    **ledger.fields(),
+                    finish_reason=finish_reason,
                 )
 
             except self._openai.RateLimitError as exc:
@@ -235,11 +220,12 @@ class OpenAIResponsesClient(CompletionClient):
                 time.sleep(wait)
 
             except self._openai.APIError as exc:
+                ledger.record(0, 0, "", "api_error", known=False)
                 logger.error("API error on attempt %d: %s", attempt + 1, exc)
                 if attempt == max_attempts - 1:
-                    raise RuntimeError(
-                        f"OpenAI Responses API failed for {self.model}: {exc}"
+                    raise CompletionFailure(
+                        f"OpenAI Responses API failed for {self.model}: {exc}", ledger, settings
                     ) from exc
                 time.sleep(min(4 * (2 ** attempt), 30))
 
-        raise RuntimeError(f"Responses API call failed after {max_attempts} attempts")
+        raise CompletionFailure(f"Responses API call failed after {max_attempts} attempts", ledger, settings)

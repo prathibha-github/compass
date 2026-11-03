@@ -40,6 +40,7 @@ from compass.evaluation.suite_io import (
 )
 from compass.clients.settings import default_request_settings
 from compass.judges import JudgeConfig, LLMJudge
+from compass.evaluation.audit import record_failure
 from compass.judges.context import saved_judge_context
 from compass.judges.parsing import SCORING_VERSION
 from compass.rubrics.base import Rubric
@@ -341,6 +342,9 @@ def generate_suite_completions(
                                 "cost_usd": getattr(response, "cost_usd", 0.0),
                                 "max_tokens_requested": max_tokens,
                                 "request_settings": settings,
+                                "billing_tokens": getattr(response, "billing_tokens", None),
+                                "usage_complete": getattr(response, "usage_complete", False),
+                                "usage_attempts": getattr(response, "usage_attempts", []),
                                 "max_tokens_effective": effective.get("max_tokens"),
                                 "finish_reason": finish_reason,
                                 "visible_chars": quality["visible_chars"],
@@ -354,6 +358,7 @@ def generate_suite_completions(
                         if written % 10 == 0:
                             logger.info("  Generated %d completions", written)
                     except Exception as e:  # noqa: BLE001 - log and continue per cell
+                        record_failure(generations_path, identity, e)
                         failures += 1
                         logger.error(
                             "  Failed to generate %s/%s[%s] sample %d: %s",
@@ -544,6 +549,7 @@ def evaluate_suite_completions(
                         "generation_max_tokens_requested": gen.get(
                             "max_tokens_requested"
                         ),
+                        "judge_result": result.to_dict() if _is_judge_detector(detector) else None,
                         "score": score,
                         "hit": hit,
                         "count": count,
@@ -553,6 +559,7 @@ def evaluate_suite_completions(
                 )
                 scored += 1
             except Exception as e:  # noqa: BLE001 - log and continue per detector
+                record_failure(evaluations_path, identity, e)
                 failures += 1
                 logger.error(
                     "  Failed to score %s/%s[%s] sample %d with %s: %s",

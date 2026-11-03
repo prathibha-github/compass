@@ -163,17 +163,27 @@ and code revision as well.
 
 ## Cost accounting
 
-`cost_summary` and `cost_per_judge` add the cost fields in the supplied results.
-Cached results retain the original call's token usage and cost, so summing them
-again does not measure new API spend. Client counters track calls made by that
-client instance. For the example above:
+`cost_summary` and `cost_per_judge` count newly incurred usage. A cache hit has
+zero cost and tokens; `source_cost_usd` and `source_tokens_used` retain the
+original request's estimates. Cached results are independent copies, so a later
+cache lookup cannot change an earlier result.
 
-```python
-from compass import cost_summary
+Successful suite and benchmark score rows retain the full `judge_result`,
+including raw judge output, settings, and usage. Failed calls go into a separate
+`.failures.jsonl` file with sample identity and any available audit record.
+These failed attempts never enter scoring or the cache. Retrying preserves the
+failure file so its costs can still be inspected.
 
-print(cost_summary([first]))  # Cost recorded on this evaluation
-print(client.total_cost_usd)  # Estimated API spend by this client instance
-```
+OpenAI and Anthropic clients retain usage for empty responses that trigger
+retries. `tokens_used` describes the final response; `billing_tokens` and
+`cost_usd` include all recorded attempts. `usage_complete=False` means that
+some usage was estimated or unavailable. Summaries over successful judgments
+alone exclude failed attempts; inspect the failure file when accounting for a
+whole run.
+
+`requested_seed` records the judge configuration. `effective_seed` is unknown
+because the clients do not send it. Metadata from older results also leaves
+this field unknown.
 
 Provider bills remain the source for actual charges; local pricing tables and
 reported token usage are estimates. Inspect invalid judge responses and
