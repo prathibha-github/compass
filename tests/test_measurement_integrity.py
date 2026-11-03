@@ -147,7 +147,7 @@ def test_offline_summary_rejects_wholly_missing_sample(tmp_path):
     with pytest.raises(ValueError, match="Incomplete evaluation coverage"):
         summarize_suite_evaluations(output, original)
     evaluate_suite_completions(original, path, tmp_path)
-    assert summarize_suite_evaluations(output, original)["c"]["n_outputs"] == 2
+    assert summarize_suite_evaluations(output, original)["m"]["c"]["n_outputs"] == 2
 
 
 def test_generation_failure_stops_pipeline_and_retry_keeps_successes(tmp_path):

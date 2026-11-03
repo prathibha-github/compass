@@ -38,9 +38,11 @@ dependence between responses to the same prompt.
 I need to report the number of distinct prompts as well as the number of
 responses, and use prompt-level uncertainty estimates for those comparisons.
 
-`summarize_suite_evaluations` also pools models within a condition. That is easy
-to miss when reading a summary. Model comparisons need separate results for
-each model, with task-level breakdowns where the sample supports them.
+`summarize_suite_evaluations` returns separate results for each model and
+condition. Its return shape is now `summary[model][condition]`. Callers that
+need the old condition-only shape must explicitly pass `pool_models=True`;
+that pools responses, so models with more samples carry more weight.
+Task-level breakdowns would help where the sample supports them.
 
 Filtering short or truncated responses is another choice that can change a
 result. Reports should show how many responses were excluded from each group
