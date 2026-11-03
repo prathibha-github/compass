@@ -1,6 +1,7 @@
 """Judge reliability auditing: measure disagreement and detect drift."""
 import logging
 import math
+from statistics import NormalDist
 from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -10,7 +11,7 @@ def wilson_interval(hits: int, total: int, confidence: float = 0.95) -> Tuple[fl
     """
     Calculate Wilson score interval for a proportion.
 
-    More reliable than Clopper-Pearson (normal) for small samples.
+    Uses the normal quantile for the requested confidence level.
     Used to measure confidence intervals on judge agreement rates.
 
     Args:
@@ -21,22 +22,22 @@ def wilson_interval(hits: int, total: int, confidence: float = 0.95) -> Tuple[fl
     Returns:
         (lower_bound, upper_bound) for the proportion
     """
+    if type(hits) is not int or type(total) is not int or not 0 <= hits <= total:
+        raise ValueError("Counts must be integers with 0 <= hits <= total")
+    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not math.isfinite(confidence) or not 0 < confidence < 1:
+        raise ValueError("confidence must be finite and between 0 and 1")
     if total == 0:
         return (0.0, 1.0)
 
     p = hits / total
-    try:
-        from scipy.stats import norm
-        z = norm.ppf((1 + confidence) / 2)
-    except ImportError:
-        z = 1.96 if confidence == 0.95 else 1.645
+    z = NormalDist().inv_cdf((1 + confidence) / 2)
 
     denominator = 1 + z * z / total
     centre_adjusted_p = (p + z * z / (2 * total)) / denominator
     adjusted_standard_error = math.sqrt((p * (1 - p) + z * z / (4 * total)) / total) / denominator
 
-    lower = max(0.0, centre_adjusted_p - z * adjusted_standard_error)
-    upper = min(1.0, centre_adjusted_p + z * adjusted_standard_error)
+    lower = 0.0 if hits == 0 else max(0.0, centre_adjusted_p - z * adjusted_standard_error)
+    upper = 1.0 if hits == total else min(1.0, centre_adjusted_p + z * adjusted_standard_error)
 
     return (lower, upper)
 
