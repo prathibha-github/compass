@@ -10,6 +10,7 @@ from compass.detectors.base import (
     TicSuite,
     analyze_text,
     compute_uplift,
+    compute_absolute_change,
     suite_uses_llm_judge,
     summarize_detector_records,
     summarize_outputs,
@@ -59,6 +60,7 @@ __all__ = [
     # analytics
     "analyze_text",
     "compute_uplift",
+    "compute_absolute_change",
     "suite_uses_llm_judge",
     "summarize_detector_records",
     "summarize_outputs",

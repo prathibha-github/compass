@@ -1,6 +1,7 @@
 """JSON parsing with defensive fallbacks for judge responses."""
 import json
 import math
+from numbers import Real
 from typing import Optional
 
 
@@ -9,6 +10,13 @@ SCORING_VERSION = "2"
 
 class JudgeResponseError(ValueError):
     """A judge response cannot be interpreted as a valid measurement."""
+
+
+def validate_score(value, *, name="score"):
+    """Validate a stored or supplied score without coercion or clamping."""
+    if isinstance(value, bool) or not isinstance(value, Real) or not 0 <= value <= 1 or not math.isfinite(value):
+        raise ValueError(f"{name} must be a finite number between zero and one")
+    return value
 
 
 def parse_scored_response(raw: str) -> dict:

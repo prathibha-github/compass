@@ -1,6 +1,7 @@
 """Schema normalization for benchmark generation and evaluation records."""
 
 from typing import Any, Dict, Tuple
+from compass.judges.parsing import validate_score
 
 from compass.schema_fields import (
     BENCHMARK_RECORD_TYPE_FIELD,
@@ -112,6 +113,9 @@ def migrate_evaluation_record(record: Dict[str, Any]) -> Dict[str, Any]:
     if "score" not in data or "hit" not in data:
         raise ValueError("evaluation record missing score/hit")
 
+    validate_score(data["score"])
+    if type(data["hit"]) is not bool:
+        raise ValueError("evaluation hit must be a boolean")
     data[BENCHMARK_SCHEMA_VERSION_FIELD] = BENCHMARK_SCHEMA_VERSION
     data[BENCHMARK_RECORD_TYPE_FIELD] = EVALUATION_RECORD_TYPE
     return data
