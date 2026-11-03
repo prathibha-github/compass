@@ -156,6 +156,7 @@ class BenchmarkReportingGoldenTests(unittest.TestCase):
                     "-" * 80,
                     "  1. m1               1.0/1    wins (100.0%)",
                     "  2. m2               0.0/1    wins (  0.0%)",
+                    "  m1 vs m2: 1 matched, 0 ties, 0/1 unmatched",
                     "",
                     "  Segmented by task_type:",
                     "    explanation:",

@@ -61,11 +61,11 @@ from compass import PairwiseRanker
 ranker = PairwiseRanker()
 
 # Add evaluation records
-for model, completion, score in evaluations:
+for model, prompt_id, condition, sample_idx, score in evaluations:
     ranker.add_record(
         suite="task_focus",
         model=model,
-        comparison_key=(prompt_id, condition),  # Shared across models
+        comparison_key=(prompt_id, condition, sample_idx),  # Shared across models
         score=score,
     )
 
@@ -302,3 +302,17 @@ class TestPairwiseRanking(unittest.TestCase):
 4. **Manual review:** Spot-check surprising results
 5. **Document:** Record which models/suites were compared, when, on what data
 6. **Iterate:** Rerun after new models/prompts/judges are added
+
+## Matching repeated samples
+
+Each model may contribute one score per comparison key. Include the sample
+index when prompts have repeated responses: `(prompt_id, condition, sample_idx)`.
+Duplicate model/key records are rejected. Ranking matches shared keys, reports
+unmatched counts, and applies `min_matches` across all shared keys for each
+model pair. File order does not define a match.
+
+Matching sample indices is a descriptive convention. Independent model draws
+with the same index are not experimentally paired replicates. For inference
+across tasks, compare prompt-level results and account for shared prompts when
+estimating uncertainty. Unequal coverage and quality exclusions can change the
+set of matched samples; inspect unmatched counts before interpreting a rank.

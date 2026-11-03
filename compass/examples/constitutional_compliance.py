@@ -81,7 +81,7 @@ def demo_constitutional_compliance_evaluation():
                 ranker.add_record(
                     suite="task_focus",
                     model=model,
-                    comparison_key=(prompt_id, "neutral"),
+                    comparison_key=(prompt_id, "neutral", sample_idx),
                     score=score,
                     metadata={"task_type": "coding" if "bug" in prompt_id else "other"},
                 )

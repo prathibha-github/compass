@@ -1,5 +1,6 @@
 """Pairwise model comparison with segmentation support."""
 import logging
+import math
 from collections import defaultdict
 from itertools import combinations
 from typing import Any, Dict, List, Optional, Tuple
@@ -52,10 +53,14 @@ class PairwiseRanker:
         Args:
             suite: Suite name (e.g., "task_focus")
             model: Model name (e.g., "gpt-4o")
-            comparison_key: Tuple of (prompt_id, condition) for matching
+            comparison_key: Unique sample key, usually (prompt_id, condition, sample_idx)
             score: Score for this evaluation (lower is better)
             metadata: Optional metadata (e.g., task_type, segment)
         """
+        if isinstance(score, bool) or not isinstance(score, (int, float)) or not math.isfinite(score):
+            raise ValueError("Pairwise scores must be finite")
+        if any(row["model"] == model for row in self.records[suite][comparison_key]):
+            raise ValueError("Duplicate model/comparison key; include sample identity in comparison_key")
         self.records[suite][comparison_key].append({
             "model": model,
             "score": score,
@@ -72,7 +77,7 @@ class PairwiseRanker:
 
         Args:
             suite: Suite name
-            min_matches: Minimum shared records to rank a pair
+            min_matches: Minimum shared sample keys across the model pair
 
         Returns:
             Dict with:
@@ -87,86 +92,39 @@ class PairwiseRanker:
                 "summary": {"total_pairs": 0, "models": 0},
             }
 
+        if type(min_matches) is not int or min_matches < 1:
+            raise ValueError("min_matches must be a positive integer")
         records = self.records[suite]
-
-        # Collect all models
-        all_models = set()
-        for comparison_records in records.values():
-            for record in comparison_records:
-                all_models.add(record["model"])
-
-        all_models = sorted(all_models)
-
-        # Calculate pairwise comparisons
+        by_model = defaultdict(dict)
+        for key, rows in records.items():
+            for row in rows:
+                by_model[row["model"]][key] = row["score"]
+        models = sorted(by_model)
         pairwise_results = {}
-        model_wins = defaultdict(int)
+        model_wins = defaultdict(float)
         model_total = defaultdict(int)
-
-        for comparison_key, comparison_records in records.items():
-            # Group by model
-            by_model = defaultdict(list)
-            for record in comparison_records:
-                by_model[record["model"]].append(record["score"])
-
-            # Compare all model pairs
-            for model_a, model_b in combinations(all_models, 2):
-                if model_a not in by_model or model_b not in by_model:
-                    continue
-
-                scores_a = by_model[model_a]
-                scores_b = by_model[model_b]
-
-                # Match on count (zip pairs them)
-                matches = min(len(scores_a), len(scores_b))
-                if matches < min_matches:
-                    continue
-
-                # Count wins and ties
-                comparisons = list(zip(scores_a[:matches], scores_b[:matches]))
-                wins_a = sum(1 for sa, sb in comparisons if sa < sb)
-                ties = sum(1 for sa, sb in comparisons if sa == sb)
-                wins_b = matches - wins_a - ties
-
-                pair_key = tuple(sorted([model_a, model_b]))
-                if pair_key not in pairwise_results:
-                    pairwise_results[pair_key] = {
-                        "model_a": model_a,
-                        "model_b": model_b,
-                        "matches": 0,
-                        "wins_a": 0,
-                        "wins_b": 0,
-                        "ties": 0,
-                    }
-
-                pairwise_results[pair_key]["matches"] += matches
-                if model_a == pair_key[0]:
-                    pairwise_results[pair_key]["wins_a"] += wins_a
-                    pairwise_results[pair_key]["wins_b"] += wins_b
-                else:
-                    pairwise_results[pair_key]["wins_a"] += wins_b
-                    pairwise_results[pair_key]["wins_b"] += wins_a
-
-                model_wins[model_a] += wins_a + 0.5 * ties
-                model_total[model_a] += matches
-
-                model_wins[model_b] += wins_b + 0.5 * ties
-                model_total[model_b] += matches
-
-        # Generate overall ranking
-        overall_ranking = [
-            (model, model_wins[model], model_total[model])
-            for model in all_models
-            if model_total[model] > 0
-        ]
-        overall_ranking.sort(key=lambda x: (-x[1], -x[2]))  # Sort by wins desc, total desc
-
+        for a, b in combinations(models, 2):
+            shared = by_model[a].keys() & by_model[b].keys()
+            if len(shared) < min_matches:
+                continue
+            wins_a = sum(by_model[a][key] < by_model[b][key] for key in shared)
+            ties = sum(by_model[a][key] == by_model[b][key] for key in shared)
+            wins_b = len(shared) - wins_a - ties
+            pairwise_results[(a, b)] = {
+                "model_a": a, "model_b": b, "matches": len(shared),
+                "wins_a": wins_a, "wins_b": wins_b, "ties": ties,
+                "unmatched_a": len(by_model[a]) - len(shared),
+                "unmatched_b": len(by_model[b]) - len(shared),
+            }
+            model_wins[a] += wins_a + 0.5 * ties
+            model_wins[b] += wins_b + 0.5 * ties
+            model_total[a] += len(shared)
+            model_total[b] += len(shared)
+        ranking = [(model, model_wins[model], model_total[model]) for model in models if model_total[model]]
+        ranking.sort(key=lambda row: (-row[1], -row[2], row[0]))
         return {
-            "overall_ranking": overall_ranking,
-            "pairwise_results": pairwise_results,
-            "summary": {
-                "total_pairs": len(pairwise_results),
-                "models": len(all_models),
-            },
+            "overall_ranking": ranking, "pairwise_results": pairwise_results,
+            "summary": {"total_pairs": len(pairwise_results), "models": len(models)},
         }
 
     def rank_by_segment(
@@ -192,6 +150,11 @@ class PairwiseRanker:
 
         records = self.records[suite]
 
+        for rows in records.values():
+            values = {row.get("metadata", {}).get(segment_by) for row in rows}
+            values.discard(None)
+            if len(values) > 1:
+                raise ValueError(f"Conflicting {segment_by} metadata for a shared comparison key")
         # Collect all segments
         segments = set()
         for comparison_records in records.values():

@@ -47,6 +47,8 @@ class PairwiseMatchupResult:
     wins_a: int
     wins_b: int
     ties: int
+    unmatched_a: int = 0
+    unmatched_b: int = 0
 
 
 @dataclass(frozen=True)
@@ -210,6 +212,8 @@ def _coerce_pairwise_matchups(
                 wins_a=result["wins_a"],
                 wins_b=result["wins_b"],
                 ties=result["ties"],
+                unmatched_a=result.get("unmatched_a", 0),
+                unmatched_b=result.get("unmatched_b", 0),
             )
             for pair_key, result in pairwise_results.items()
         }
@@ -280,6 +284,9 @@ def format_pairwise_report(report: BenchmarkPairwiseReport) -> str:
                 f"  {index}. {entry.model:<15} {entry.wins:>4.1f}/{entry.total:<4} wins ({win_rate:>5.1f}%)"
             )
 
+        for pair in rubric_report.pairwise_results.values():
+            lines.append(f"  {pair.model_a} vs {pair.model_b}: {pair.matches} matched, "
+                         f"{pair.ties} ties, {pair.unmatched_a}/{pair.unmatched_b} unmatched")
         lines.extend(
             [
                 "",
@@ -334,7 +341,7 @@ def rank_models(
         ranker.add_record(
             suite=result["rubric"],
             model=result["model"],
-            comparison_key=(result["prompt_id"], "default"),
+            comparison_key=(result["prompt_id"], "default", result.get("sample_idx", 0)),
             score=result["score"],
             metadata=metadata,
         )

@@ -403,7 +403,7 @@ for model_name, values in scores.items():
             metadata={"task_type": "coding"}
         )
 
-# min_matches applies within each comparison key; there is one sample per key.
+# min_matches counts shared sample keys across each model pair.
 rankings = ranker.rank("task_focus", min_matches=1)
 for model, wins, total in rankings["overall_ranking"]:
     print(f"{model}: {wins:.1f}/{total} wins ({100*wins/total:.0f}%)")
