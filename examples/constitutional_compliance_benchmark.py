@@ -93,14 +93,18 @@ def evaluate_completions(
     output_dir: Path,
     legacy_token_cap_threshold: int = DEFAULT_PRESET.legacy_token_cap_threshold,
 ) -> Path:
-    """Backward-compatible wrapper around shared benchmark evaluation."""
-    run_config = BENCHMARK_SPEC.make_run_config(
-        judge_model=judge_model,
-        output_dir=str(output_dir),
+    """Score saved generations, including historical subsets of this benchmark.
+
+    This wrapper has no requested generation population. New generation files
+    must retain their manifest; archived files are scored with coverage unknown.
+    Use SharedBenchmarkRunner.evaluate for a configured, complete benchmark run.
+    """
+    from compass.benchmark.runner import evaluate_completions as score_saved
+
+    return score_saved(
+        generations_path, BENCHMARK_SPEC, judge_model, output_dir,
         legacy_token_cap_threshold=legacy_token_cap_threshold,
-    )
-    run_config = BENCHMARK_RUNNER.validate_run_config(run_config)
-    return BENCHMARK_RUNNER.evaluate(generations_path, run_config)
+    ).path
 
 
 def rank_models(evaluations_path: Path, output_dir: Path) -> None:

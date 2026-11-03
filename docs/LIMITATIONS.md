@@ -50,10 +50,15 @@ and whether the finding holds with and without the filter.
 
 ## Resume and saved metadata
 
-- Suite runs check input fingerprints and expected sample counts. BenchmarkSpec
-  resume still uses smaller identifiers, so changing a prompt or rubric can
-  leave an old result in place. Until that is fixed, changed benchmark
-  configurations need a fresh output directory.
+- Suite and BenchmarkSpec runs check input fingerprints and expected samples.
+  Changed prompts, token budgets, rubrics, or saved responses cannot silently
+  reuse old results. Use a fresh scoring output directory to apply a changed
+  rubric to saved generations; that does not require generating again.
+  Generation files from new runs must retain their `.manifest.json` sidecar.
+  Older files can be rescored through `evaluate_completions`, which marks their
+  generation coverage as unverified. They cannot resume generation without a
+  manifest. `SharedBenchmarkRunner.evaluate` also requires the saved population
+  to match the configured models, prompts, and sample counts.
 - Old generation files without manifests can be scored, but they don't tell us
   whether every planned sample was collected. The new checks don't repair old
   results; those need a separate review or rerun.

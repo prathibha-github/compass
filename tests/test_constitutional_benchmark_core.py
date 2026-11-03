@@ -197,34 +197,13 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
             ]
             generations_path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
 
-            # Pre-mark sample_idx=0 as already evaluated.
+            # Save a valid run, then simulate interruption after the first score.
             eval_path = out / "evaluations_llama3.1.jsonl"
-            eval_path.write_text(
-                json.dumps(
-                    migrate_evaluation_record(
-                        {
-                            "model": "llama3.1",
-                            "rubric": "clarity",
-                            "prompt_id": "p1",
-                            "task_type": "general",
-                            "sample_idx": 0,
-                            "score": 0.1,
-                            "hit": False,
-                            "confidence": 0.8,
-                            "rationale": "cached",
-                            "judge_model": "llama3.1",
-                            "generation_visible_chars": 120,
-                            "generation_visible_word_count": 20,
-                            "generation_hit_token_cap": False,
-                            "generation_is_fragment": False,
-                            "generation_quality_flagged": False,
-                            "generation_finish_reason": "stop",
-                            "generation_token_cap_inferred_legacy": False,
-                        }
-                    )
-                )
-                + "\n"
-            )
+            with patch("compass.benchmark.runner.LLMJudge", side_effect=_FakeJudge), patch(
+                "compass.benchmark.runner.OllamaClient", return_value=SimpleNamespace()
+            ):
+                benchmark.evaluate_completions(generations_path, "llama3.1", out)
+            eval_path.write_text(eval_path.read_text().splitlines()[0] + "\n")
 
             _FakeJudge.calls = 0
             with patch("compass.benchmark.runner.LLMJudge", side_effect=_FakeJudge), patch(
