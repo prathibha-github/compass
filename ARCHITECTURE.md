@@ -58,9 +58,10 @@ sequenceDiagram
 ```
 
 The configuration hash includes the rubric hash, judge model, maximum tokens,
-temperature, and seed. The text hash includes optional user context, and the
-prompt-template and scoring-contract versions share a separate coordinate. `JudgeConfig.seed` affects
-the key but is not forwarded by `LLMJudge` to the client call.
+temperature, and seed. The text hash covers the completion, user request,
+generation system context, and client-reported request settings. Prompt-template
+and scoring-contract versions share a separate coordinate. `JudgeConfig.seed`
+affects the key but is not forwarded by `LLMJudge` to the client call.
 
 `LLMJudge` recomputes `hit` from the score threshold. Invalid scores raise before
 cache insertion. The scoring-contract namespace prevents reuse of historical
@@ -86,8 +87,10 @@ flowchart TD
 and parsing. It does not instantiate `LLMJudge` or use `EvaluationCache`
 internally. Both judge paths use `parse_scored_response`, reject invalid scores,
 and derive `hit` from the configured threshold. The main CLI in Compass
-Experiments uses this direct path. Prompt construction and context still differ
-from the cached suite judge, so generated judgments need not be identical.
+Experiments uses this direct path. Both paths use the same judge-prompt builder
+and accept user and system context. Direct callbacks and cached judges still
+have different persistence and audit behavior; separate provider calls need not
+produce identical judgments.
 
 ## Two-phase TicSuite execution
 
@@ -145,15 +148,16 @@ schema migration and strict loading for analysis; report validation checks
 required quality diagnostics.
 
 The benchmark evaluator constructs cached `LLMJudge` instances from the spec's
-rubrics. Unlike the suite evaluator, it currently judges completion text
-without passing the original request as context. These APIs should not be
-assumed to produce interchangeable judgments.
+rubrics and passes the saved user request by default. The low-level evaluator
+accepts an explicit context mode; the historical constitutional benchmark
+wrapper selects completion-only judging.
 
 `analyze` and `rank` honor configured analysis lanes and quality-filter policy.
 They can also consume saved files independently of generation/evaluation;
 call `validate_report` explicitly when importing artifacts through that route.
-Quality flags identify issues such as token caps and fragments. They do not
-by themselves distinguish malformed judge output from genuine nonviolations.
+Quality flags identify issues such as token caps and fragments. Invalid judge
+scores raise before successful evaluation rows are written; strict benchmark
+readers also reject nonfinite scores and nonboolean hit values.
 
 ## Persistence boundaries
 
@@ -164,9 +168,10 @@ evaluation manifests preserve expected identities so failures cannot disappear
 from suite summaries. Custom detectors with external state must provide an
 explicit versioned contract. Provider alias changes remain outside this check.
 
-BenchmarkSpec checkpoints still use identities without complete input
-fingerprints. Keep those experiment configurations isolated and deliberately
-rebuild affected artifacts when definitions change.
+BenchmarkSpec checkpoints validate generation and evaluation contracts. The
+configured runner also checks that saved generations match the requested models,
+prompts, and sample counts. Report validation checks an artifact against its own
+manifest; it does not establish compatibility with an unrelated run configuration.
 
 The generic checkpoint loader logs and skips malformed rows; strict suite and
 benchmark record readers reject invalid data. Neither behavior should be

@@ -46,8 +46,8 @@ The conformance tests enforce these rules:
   the request.
 
 If a provider cannot supply an exact field, the adapter must still make the
-behavior explicit. Ollama, for example, estimates token counts because its API
-does not return exact usage metrics.
+behavior explicit. Ollama's current adapter, for example, uses word-count
+estimates for token usage.
 
 ## Provider-Specific Notes
 
@@ -59,11 +59,11 @@ includes these named behaviors:
 - `OpenAIClient`: explicit required-temperature policy; retry and quota-pause
   behavior
 - `OpenAIResponsesClient`: explicit output-token multiplier, explicit
-  estimated-usage fallback, unsupported `temperature`, unsupported `logprobs`
+  estimated-usage fallback, required-temperature policy, unsupported `logprobs`
 - `AnthropicClient`: retry/backoff behavior, unsupported `logprobs`
 - `GoogleAIClient`: explicit request ceiling, explicit estimated-usage
   fallback, optional safety override, unsupported `logprobs`
-- `OllamaClient`: system-prompt wrapping, token estimation, unsupported
+- `OllamaClient`: native system-instruction mapping, token estimation, unsupported
   `logprobs`
 
 This inventory should be updated before changing adapter semantics. The goal is
@@ -85,7 +85,7 @@ explicit enough to audit.
 - Requires provider usage metadata unless the caller opts into
   `allow_estimated_usage=True`.
 - Omits `instructions` unless the caller supplies a `system` prompt.
-- Rejects non-zero `temperature` values instead of silently ignoring them.
+- Sends the requested temperature, or the configured `required_temperature` override.
 - Preserves the shared completion contract even though the upstream request
   shape differs.
 - Rejects `logprobs` because the current adapter contract does not support them
@@ -99,7 +99,8 @@ explicit enough to audit.
 
 ### Google AI
 
-- Maps the shared request into `generate_content(...)`.
+- Maps the shared request into `generate_content(...)`, with user text in
+  `contents` and system text in `GenerateContentConfig.system_instruction`.
 - Applies a request ceiling only when the caller configures
   `max_requests_per_window`.
 - Requires provider usage metadata unless the caller opts into
@@ -108,9 +109,11 @@ explicit enough to audit.
 
 ### Ollama
 
-- Runs against a local Ollama server rather than a hosted API.
+- Sends user text as `prompt` and supplied system instructions as `system` to
+  the configured Ollama server.
 - Uses adapter-side throttling to avoid hammering the local server.
-- Estimates token usage because the API does not provide exact counts.
+- Estimates token usage from word counts; the adapter does not use provider
+  token counts.
 - Rejects unsupported `logprobs` requests explicitly.
 
 ## Benchmark and Judge Integration

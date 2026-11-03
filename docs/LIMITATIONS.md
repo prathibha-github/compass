@@ -5,34 +5,29 @@ I can define a test suite and compare the behavior across model versions,
 prompts, and conditions. Rest suggestions are one example. Unprompted safety
 guidance could be another. The same infrastructure should support both.
 
-I still need to check the scores against human labels and test which
-comparisons the experiments can support.
+The remaining work is checking the measurements against human labels and
+establishing which comparisons the experiments can support. Implemented resume,
+cache, and audit behavior is documented in [reproducibility.md](reproducibility.md).
 
 ## Judge accuracy and context
 
-A rubric gives the judge instructions, but I haven't checked the rest-suggestion
-scores against independent human labels yet. A detector can match “recovery”
+A rubric gives the judge instructions, but the rest-suggestion scores still
+need validation against independent human labels. A detector can match “recovery”
 in a discussion of a database, or count a quoted suggestion as advice from the
 model. LLM judges can make errors too, including errors they share with another
 judge. Agreement alone wouldn't catch those.
 
-The [comparison helper](../compass/judges/calibration.py) is in place. I need
-people to label examples, including ambiguous cases and counterexamples, and
-then check which errors the detectors make. Some prompts should be kept out of
-rubric development so the final check uses examples the rubric wasn't tuned on.
+The [comparison helper](../compass/judges/calibration.py) and the harness's
+[local labeling page](https://github.com/prathibha-github/helm-eval-lex-quirks/blob/main/CALIBRATION.md#label-responses-in-a-browser)
+are available. I need independent labels, including ambiguous cases and
+counterexamples, to check which errors the detectors make. Some prompts should
+be kept out of rubric development so the final check uses examples the rubric wasn't tuned on.
 
-The library's suite and BenchmarkSpec runners now give judges the saved user
-request by default. The direct detector accepts the same context and uses the
-same judge prompt. Saved evaluation rows record what context was shown.
-
-Generation system instructions can be included explicitly with
-`judge_context_mode="user_and_system"` in the suite runner. They are omitted by
-default so a condition does not automatically reveal itself to the judge.
-`judge_context_mode="completion"` provides a completion-only baseline, and is
-required for old files that lack the original request. Changing the context
-invalidates cached judgments and resumed scores; it does not require new model
-responses. The historical constitutional benchmark wrapper explicitly uses
-completion-only judging. Comparing different context modes still requires care.
+Suite and BenchmarkSpec runners give judges the saved user request by default. Including generation system
+instructions can reveal the condition and affect the judgment; a completion-only
+judge lacks context needed for questions such as whether advice was requested.
+Compare context modes on the same saved responses and record which mode was used.
+The [context guide](reproducibility.md#context-shown-to-judges) describes those options.
 
 ## Repeated prompts and pooled results
 
@@ -40,53 +35,40 @@ Repeated responses to one prompt can be very similar, especially at low
 temperature. Reading a judgment from cache again doesn't provide independent
 evidence of judge reliability. The Wilson agreement intervals do not account for
 dependence between responses to the same prompt. Suite and benchmark behavior
-summaries now report distinct prompt counts and use whole-prompt resampling for
+summaries report distinct prompt counts and use whole-prompt resampling for
 individual rate intervals. Comparisons between conditions or models still need
 joint resampling of shared prompts; separate rate intervals do not supply an
 interval for the difference.
 
 `summarize_suite_evaluations` returns separate results for each model and
-condition. Its return shape is now `summary[model][condition]`. Callers that
-need the old condition-only shape must explicitly pass `pool_models=True`;
-that pools responses, so models with more samples carry more weight.
-Task-level breakdowns would help where the sample supports them.
+condition. Explicitly setting `pool_models=True` pools responses, so models
+with more samples carry more weight. Check task-level differences where the
+sample supports them rather than assuming that an aggregate holds across tasks.
 
 Filtering short or truncated responses is another choice that can change a
-result. The summaries now show rates and counts with and without filtering,
+result. The summaries show rates and counts with and without filtering,
 including unknown quality flags. I still need to check whether the finding
 holds across those choices.
 
-## Resume and saved metadata
+## Historical files and provider changes
 
-- Suite and BenchmarkSpec runs check input fingerprints and expected samples.
-  Changed prompts, token budgets, rubrics, or saved responses cannot silently
-  reuse old results. Use a fresh scoring output directory to apply a changed
-  rubric to saved generations; that does not require generating again.
-  Generation files from new runs must retain their `.manifest.json` sidecar.
-  Older files can be rescored through `evaluate_completions`, which marks their
-  generation coverage as unverified. They cannot resume generation without a
-  manifest. `SharedBenchmarkRunner.evaluate` also requires the saved population
-  to match the configured models, prompts, and sample counts.
-- Old generation files without manifests can be scored, but they don't tell us
-  whether every planned sample was collected. The new checks don't repair old
-  results; those need a separate review or rerun.
-- A provider can change a model behind the same API name. Fingerprints cannot
-  detect that, or changes to external state used by a custom client. Keep model
-  IDs, code revisions, and actual request settings with the run, and use a new
-  output/cache directory when that state changes.
+Current suite and BenchmarkSpec runs check input fingerprints and planned
+populations. Old files without manifests still cannot tell us whether every
+planned sample was collected. Rescoring them marks generation coverage as
+unverified; it doesn't recover missing context or establish what was omitted.
 
-The exact checks and cache behavior are described in
-[reproducibility.md](reproducibility.md).
+The built-in Gemini and Ollama clients use native system-instruction fields,
+and provider policies participate in resume and judge-cache identity. A provider
+can still change a model behind the same API name. Fingerprints cannot detect
+that change or external state used by a custom client. Preserve the model IDs,
+code revisions, and effective request settings with each experiment.
 
-Suite and benchmark scores now retain the full judge reply and request settings.
-Failed attempts are saved separately from successful scores. Requested seeds are
-recorded without claiming they were sent to the provider. Custom clients may
-still omit settings or usage; those fields remain unverified.
-
-Cache lookups add no new cost or tokens. The original request's usage remains
-available in separate source fields. Recorded retries and failed attempts help
-account for a run, but missing provider usage still leaves an incomplete estimate.
-The provider's bill is the source for actual charges.
+Requested seeds are recorded, but the built-in clients don't send them to the
+provider. Custom clients can omit settings or usage, which remain unverified.
+Missing provider usage and local pricing estimates can also leave cost totals
+incomplete. The [cost accounting guide](reproducibility.md#cost-accounting)
+explains how to inspect recorded retries, failed attempts, and cache usage;
+provider bills remain the source for actual charges.
 
 ## Next: human labels for the rest-suggestion suite
 

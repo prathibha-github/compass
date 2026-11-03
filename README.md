@@ -132,9 +132,9 @@ result = judge.evaluate(
 ### Caching
 
 `LLMJudge` uses a persistent cache by default. Its key combines the judge
-configuration hash, a hash of the text and optional context, and the prompt
-template version. The configuration hash includes the rubric hash, judge model,
-maximum tokens, temperature, and seed.
+configuration hash, a hash of the text, context, and client-reported request
+settings, and the prompt-template/scoring versions. The configuration hash
+includes the rubric hash, judge model, maximum tokens, temperature, and seed.
 
 ```python
 from compass import EvaluationCache
@@ -246,8 +246,10 @@ saved generations without regenerating them. Keep each JSONL file with its
 resume the failed phase before reporting. Custom detectors with external state
 must expose a versioned `resume_contract()`; see `evaluation/contracts.py`.
 
-The separate `BenchmarkSpec` API still uses identity-based checkpoints. Use a
-fresh output directory when its prompts, rubrics, or generation settings change.
+The `BenchmarkSpec` API also verifies generation and evaluation contracts. Its
+configured runner checks saved generations against the requested population.
+Use a fresh output directory when prompts or generation settings change; saved
+generations can be rescored with a revised rubric.
 
 ## Reproducibility
 
@@ -272,6 +274,11 @@ cached or saved as successful evaluations. Both derive `hit` from the configured
 score threshold, ignoring a model-supplied `hit`. The new cache namespace excludes
 older fallback-zero entries; it does not repair historical evaluation files.
 Re-score those files before drawing conclusions.
+
+Strict benchmark readers reject invalid stored scores, and reliability auditing
+rejects invalid observations before calculating agreement or recording them.
+Zero-baseline relative uplift is undefined and returns `None`; use
+`compute_absolute_change` for differences in the metric's original units.
 
 Valid JSON is not evidence of judge accuracy. Calibrate detectors against human
 labels; `compass.judges.calibration.compare_human_labels` reports coverage,

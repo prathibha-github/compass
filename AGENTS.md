@@ -49,11 +49,11 @@ compass/
 ## Key conventions
 
 - Rubrics are frozen dataclasses with a content hash. Never mutate; bump the version instead.
-- The cache key is `(rubric_hash, text_hash, judge_model, temperature, seed)`. All five must be stable for a cache hit to be valid.
+- The cache key combines the judge configuration hash, a hash of response/context/provider settings, and prompt/scoring versions. See `docs/reproducibility.md` for the fields.
 - `hit` is always recomputed from `score >= hit_threshold`. The judge's own `hit` field is ignored.
 - Client pricing uses exact model names with prefix-based fallback. Update the pricing table when adding new models.
 - GPT-5 and o4 models require `temperature=1.0` — enforce this in the client, not the caller.
-- All clients retry on 429 with exponential backoff and header-based wait times (up to 10 attempts).
+- OpenAI and Anthropic clients retry transient provider failures. Retry and usage policies differ by adapter; check `docs/CLIENT_ADAPTERS.md` and `compass/clients/policy_audit.py`.
 
 ## Commit style
 

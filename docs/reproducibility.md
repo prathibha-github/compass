@@ -6,7 +6,7 @@ provider call can return a different score, even with the same visible inputs;
 Compass does not guarantee identical model outputs across time or environments.
 
 See [limitations and work left to do](LIMITATIONS.md) for the remaining gaps
-in scoring, saved metadata, and resume behavior.
+in measurement validity, comparison uncertainty, and historical metadata.
 
 ## Cache identity
 
@@ -17,7 +17,8 @@ in scoring, saved metadata, and resume behavior.
 ```
 
 `config_hash` covers the rubric hash, judge model, maximum tokens, temperature,
-and seed. `text_hash` covers separate response, user-request, and generation-system fields.
+and seed. `text_hash` covers separate response, user-request, generation-system,
+and client-reported provider-settings fields.
 The last coordinate identifies the judge prompt template and score-validation
 contract. Changing either selects a different cache entry; older fallback-zero
 entries are excluded by the new scoring version.
