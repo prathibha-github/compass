@@ -147,17 +147,13 @@ class GoogleAIClient(CompletionClient):
         self._last_call_at = time.monotonic()
 
         try:
-            # Build request with system prompt if provided
-            if system:
-                full_prompt = f"{system}\n\n{prompt}"
-            else:
-                full_prompt = prompt
-
             # Call Gemini API
             config_kwargs = {
                 "max_output_tokens": max_tokens,
                 "temperature": temperature,
             }
+            if system is not None:
+                config_kwargs["system_instruction"] = system
             if self._disable_safety_filters:
                 config_kwargs["safety_settings"] = [
                     self._types.SafetySetting(**setting) for setting in _SAFETY_OFF
@@ -165,7 +161,7 @@ class GoogleAIClient(CompletionClient):
 
             response = self.client.models.generate_content(
                 model=self.model,
-                contents=full_prompt,
+                contents=prompt,
                 config=self._types.GenerateContentConfig(**config_kwargs),
             )
 
@@ -185,7 +181,7 @@ class GoogleAIClient(CompletionClient):
                 logger.warning(
                     "Gemini response omitted usage metadata; estimating token counts."
                 )
-                input_tokens = len(full_prompt.split())
+                input_tokens = len(prompt.split()) + len((system or "").split())
                 output_tokens = len(completion.split())
 
             self._input_tokens += input_tokens

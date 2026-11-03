@@ -107,16 +107,12 @@ class OllamaClient(CompletionClient):
         self._throttle()
         self._last_call_at = time.monotonic()
 
-        # Build full prompt with system message if provided
-        full_prompt = prompt
-        if system:
-            full_prompt = f"<system>\n{system}\n</system>\n\n{prompt}"
-
         try:
             # Call Ollama API
             response = self.api_client.generate(
                 model=self.model,
-                prompt=full_prompt,
+                prompt=prompt,
+                **({"system": system} if system is not None else {}),
                 stream=False,
                 options={
                     "temperature": temperature,
@@ -130,7 +126,7 @@ class OllamaClient(CompletionClient):
 
             # Ollama doesn't expose exact token counts,
             # but we can estimate from response length
-            estimated_input_tokens = len(full_prompt.split())
+            estimated_input_tokens = len(prompt.split()) + len((system or "").split())
             estimated_output_tokens = len(completion.split())
 
             self._input_tokens += estimated_input_tokens

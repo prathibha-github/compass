@@ -237,8 +237,8 @@ class ClientConformanceTests(unittest.TestCase):
             )
 
         kwargs = client.client.models.generate_content.call_args.kwargs
-        self.assertIn("system prompt", kwargs["contents"])
-        self.assertIn("prompt", kwargs["contents"])
+        self.assertEqual(kwargs["contents"], "prompt")
+        self.assertEqual(kwargs["config"]["system_instruction"], "system prompt")
         self.assertEqual(kwargs["config"]["max_output_tokens"], 40)
         self.assertEqual(kwargs["config"]["temperature"], 0.1)
         self._assert_response_contract(response, 8, 6)
@@ -267,9 +267,8 @@ class ClientConformanceTests(unittest.TestCase):
         self.assertEqual(kwargs["model"], "llama3.1")
         self.assertEqual(kwargs["options"]["num_predict"], 18)
         self.assertEqual(kwargs["options"]["temperature"], 0.7)
-        self.assertIn("<system>", kwargs["prompt"])
-        self.assertIn("system prompt", kwargs["prompt"])
-        self.assertIn("prompt", kwargs["prompt"])
+        self.assertEqual(kwargs["prompt"], "prompt")
+        self.assertEqual(kwargs["system"], "system prompt")
         self.assertEqual(response.completion, "answer")
         self._assert_response_contract(
             response,
