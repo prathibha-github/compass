@@ -14,7 +14,9 @@ def request_settings(provider, model, max_tokens, temperature, *, required_tempe
         },
         "policy": {"token_multiplier": token_multiplier,
                    "required_temperature": required_temperature,
-                   "temperature_supported": temperature_supported, **policy},
+                   "temperature_supported": temperature_supported,
+                   **({"system_instruction_transport": "native_v1"}
+                      if provider in {"google_ai", "ollama"} else {}), **policy},
     }
 
 
