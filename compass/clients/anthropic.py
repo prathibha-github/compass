@@ -192,6 +192,7 @@ class AnthropicClient(CompletionClient):
                 )
 
             except self._anthropic.RateLimitError as exc:
+                ledger.record(0, 0, "", "rate_limit", known=False)
                 headers: dict = {}
                 if hasattr(exc, "response") and exc.response is not None:
                     headers = dict(exc.response.headers)

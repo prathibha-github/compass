@@ -216,6 +216,7 @@ class OpenAIClient(CompletionClient):
                 )
 
             except self._openai.RateLimitError as exc:
+                ledger.record(0, 0, "", "rate_limit", known=False)
                 headers_429: dict = {}
                 if hasattr(exc, "response") and exc.response is not None:
                     headers_429 = dict(exc.response.headers)
@@ -233,14 +234,14 @@ class OpenAIClient(CompletionClient):
                 ledger.record(0, 0, "", "api_error", known=False)
                 status = getattr(exc, "status_code", None)
                 if status is not None and 400 <= status < 500:
-                    raise RuntimeError(
-                        f"OpenAI inference failed for {self.model}: {exc}"
+                    raise CompletionFailure(
+                        f"OpenAI inference failed for {self.model}: {exc}", ledger, settings
                     ) from exc
                 logger.error("OpenAI API error on attempt %d: %s", attempt + 1, exc)
                 if attempt == max_attempts - 1:
-                    raise RuntimeError(
-                        f"OpenAI inference failed for {self.model}: {exc}"
+                    raise CompletionFailure(
+                        f"OpenAI inference failed for {self.model}: {exc}", ledger, settings
                     ) from exc
                 time.sleep(min(4 * (2 ** attempt), 30))
 
-        raise RuntimeError(f"OpenAI call failed after {max_attempts} attempts")
+        raise CompletionFailure(f"OpenAI call failed after {max_attempts} attempts", ledger, settings)

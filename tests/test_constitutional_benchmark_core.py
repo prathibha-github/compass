@@ -1,3 +1,4 @@
+from compass.judges import EvaluationResult
 """Focused unit tests for constitutional benchmark core loops.
 
 These tests intentionally target extraction-risk behavior in
@@ -161,7 +162,8 @@ class ConstitutionalBenchmarkCoreTests(unittest.TestCase):
 
             def evaluate(self, text, **kwargs):
                 _FakeJudge.calls += 1
-                return SimpleNamespace(
+                return EvaluationResult(
+                    name=self.config.rubric.name,
                     score=0.2,
                     hit=False,
                     confidence=0.9,

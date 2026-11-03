@@ -109,3 +109,39 @@ def test_suite_failed_parse_writes_audit_and_retry_writes_full_result(tmp_path):
     assert row['judge_result']['raw_response'] == '{"score":0}'
     assert row['judge_result']['cost_usd'] == .001
     assert failure['audit']['raw_response'] in next(tmp_path.glob('suite_evaluations*.failures.jsonl')).read_text()
+
+
+@pytest.mark.parametrize('status', [400, 500, 429])
+def test_chat_provider_errors_keep_usage_and_judge_provenance(tmp_path, status):
+    from compass.clients.openai import OpenAIClient
+    sdk = MagicMock()
+    class APIError(Exception):
+        status_code = status
+    class RateLimitError(Exception):
+        response = None
+    sdk.APIError, sdk.RateLimitError = APIError, RateLimitError
+    with patch.dict('sys.modules', {'openai': sdk}):
+        client = OpenAIClient('gpt-4o-mini', api_key='fake')
+    client.client.chat.completions.with_raw_response.create.side_effect = RateLimitError('limited') if status==429 else APIError('failed')
+    judge = LLMJudge(JudgeConfig(RubricLibrary.clarity, 'gpt-4o-mini', seed=123), client, EvaluationCache(str(tmp_path)))
+    with patch('time.sleep'), pytest.raises(CompletionFailure) as caught:
+        judge.evaluate('answer')
+    audit = caught.value.audit_record
+    assert audit['usage_complete'] is False
+    assert len(audit['usage_attempts']) == (1 if status == 400 else 10)
+    assert audit['request_settings']['model'] == 'gpt-4o-mini'
+    assert audit['requested_seed'] == 123
+    assert audit['rubric_hash'] == RubricLibrary.clarity.hash
+
+
+def test_billed_response_followed_by_rate_limits_is_incomplete():
+    client = responses_client()
+    error = client._openai.RateLimitError('limited')
+    client.client.responses.create.side_effect = [response('', 7)] + [error]*9
+    with patch('time.sleep'), pytest.raises(CompletionFailure) as caught:
+        client.complete('task')
+    audit = caught.value.audit_record
+    assert len(audit['usage_attempts']) == 10
+    assert audit['billing_tokens'] == {'input': 10, 'output': 7}
+    assert audit['cost_usd'] > 0
+    assert audit['usage_complete'] is False

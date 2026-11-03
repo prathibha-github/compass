@@ -76,12 +76,24 @@ class LLMJudge(Judge):
         prompt = self._build_prompt(text, context, system_context=system_context)
 
         # Call judge
-        response = self.client.complete(
-            prompt,
-            max_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
-            system=self.SYSTEM_PROMPT,
-        )
+        try:
+            response = self.client.complete(
+                prompt,
+                max_tokens=self.config.max_tokens,
+                temperature=self.config.temperature,
+                system=self.SYSTEM_PROMPT,
+            )
+        except Exception as exc:
+            audit = deepcopy(getattr(exc, "audit_record", {"usage_complete": False}))
+            audit.update({"judge_model": self.config.judge_model,
+                          "rubric_hash": self.config.rubric.hash,
+                          "prompt_version": self.PROMPT_VERSION,
+                          "requested_seed": self.config.seed, "effective_seed": None,
+                          "judge_context": {"user_request": context, "system_prompt": system_context}})
+            audit.setdefault("request_settings", client_request_settings(self.client, self.config.max_tokens, self.config.temperature))
+            exc.audit_record = audit
+            raise
+
 
         settings = deepcopy(getattr(response, "request_settings", {}) or
                             client_request_settings(self.client, self.config.max_tokens, self.config.temperature))

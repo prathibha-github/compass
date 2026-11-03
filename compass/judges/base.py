@@ -75,7 +75,7 @@ class EvaluationResult:
 class JudgeConfig:
     """Configuration for judge evaluation.
 
-    Immutable configuration that uniquely identifies a judge setup.
+    Configuration used to identify a judge setup.
     The same config can reuse cached results. Recomputed results can differ.
 
     Attributes:

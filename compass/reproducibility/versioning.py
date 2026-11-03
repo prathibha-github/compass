@@ -116,6 +116,7 @@ def reproducibility_report(
     lines.append(f"  Output tokens:    {costs['total_output_tokens']:,}")
     lines.append(f"  Total tokens:     {costs['total_tokens']:,}")
     lines.append(f"  Total cost:       ${costs['total_cost_usd']:.4f}")
+    lines.append("  Usage accounting: " + ("complete" if costs["usage_complete"] else "incomplete or estimated"))
     lines.append("")
 
     if results:

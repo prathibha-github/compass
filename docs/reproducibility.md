@@ -73,10 +73,9 @@ SHAs with each experiment. `EvaluationResult` records the rubric hash, judge
 model, prompt version, timestamp, cache status, token usage, and cost, but does
 not store all inputs or the full configuration.
 
-`EvaluationMetadata.from_result()` currently fills in `seed=42`; it cannot
-recover a non-default seed from an `EvaluationResult`. Save the configuration
-explicitly rather than treating that helper's default as evidence of the seed
-used by the provider.
+`EvaluationMetadata.from_result()` preserves the requested seed and leaves the
+effective seed unknown when it was not sent. Older results without this metadata
+also remain unknown.
 
 A report can summarize the results you collected:
 
@@ -86,9 +85,8 @@ from compass import reproducibility_report
 print(reproducibility_report([first]))
 ```
 
-The report's generated instructions still describe seed 42 as deterministic.
-Treat them as configuration hints, not a promise of exact reproduction. The
-saved artifacts and actual provider settings are the evidence for a run.
+The report describes how to repeat a request. Hosted model outputs can differ
+between calls; retain the original artifacts for exact comparisons.
 
 ## Resume is a separate mechanism
 
