@@ -1,3 +1,4 @@
+from compass.judges import EvaluationResult
 """Extension-contract tests for benchmark families on the shared runner."""
 
 import json
@@ -94,7 +95,8 @@ class BenchmarkExtensionContractTests(unittest.TestCase):
 
                 def evaluate(self, text, **kwargs):
                     hit = text.startswith("mistral:")
-                    return SimpleNamespace(
+                    return EvaluationResult(
+                        name=self.config.rubric.name,
                         score=0.9 if hit else 0.2,
                         hit=hit,
                         confidence=0.95,

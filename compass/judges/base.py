@@ -10,8 +10,8 @@ from compass.rubrics.base import Rubric
 class EvaluationResult:
     """Result from a single evaluation by a judge.
 
-    All fields are deterministic and reproducible given the same inputs.
-    This enables auditing, reproducibility, and cost tracking across evaluations.
+    Saved results preserve the judgment and its request metadata. Repeating an
+    API request can produce a different judgment, even with identical settings.
 
     Attributes:
         name: Rubric name (e.g., "sycophancy").
@@ -28,9 +28,9 @@ class EvaluationResult:
         cost_usd: USD cost of this evaluation (useful for budgeting large runs).
 
     Note:
-        To reproduce identical results, ensure the same judge configuration, prompt
-        template version, and input text. The cache key is
-        (config_hash, text_hash, prompt_version).
+        Cache hits reuse a saved judgment. Their cost and token counts describe
+        this lookup (zero); source_cost_usd and source_tokens_used retain the
+        original request usage.
     """
 
     # Core evaluation results
@@ -54,6 +54,14 @@ class EvaluationResult:
         default_factory=dict
     )  # {"input": X, "output": Y}
     cost_usd: float = 0.0
+    source_cost_usd: Optional[float] = None
+    source_tokens_used: Dict[str, int] = field(default_factory=dict)
+    request_settings: dict = field(default_factory=dict)
+    requested_seed: Optional[int] = None
+    effective_seed: Optional[int] = None
+    raw_response: str = ""
+    usage_complete: bool = False
+    usage_attempts: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         """Convert to serializable dict."""
@@ -67,16 +75,15 @@ class EvaluationResult:
 class JudgeConfig:
     """Configuration for judge evaluation.
 
-    Immutable configuration that uniquely identifies a judge setup.
-    All evaluations with the same config on the same text will produce
-    identical results (pulled from cache or recomputed).
+    Configuration used to identify a judge setup.
+    The same config can reuse cached results. Recomputed results can differ.
 
     Attributes:
         rubric: The rubric to evaluate against.
         judge_model: LLM model name (e.g., "gpt-4o", "claude-opus-4-7").
         max_tokens: Maximum tokens in judge response (default 180).
-        temperature: LLM temperature (default 0.0 for deterministic).
-        seed: Random seed (default 42, for any stochastic components).
+        temperature: Requested LLM temperature (default 0.0).
+        seed: Requested seed recorded in the cache identity; not sent by the clients.
 
     The config_hash property provides a stable identifier for this configuration,
     used in cache keys and reproducibility tracking.
@@ -85,7 +92,7 @@ class JudgeConfig:
     rubric: Rubric
     judge_model: str  # e.g., "gpt-4o", "claude-opus-4-7"
     max_tokens: int = 180
-    temperature: float = 0.0  # Deterministic
+    temperature: float = 0.0
     seed: int = 42
 
     @property

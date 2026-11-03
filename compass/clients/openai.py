@@ -7,6 +7,7 @@ from typing import Optional
 
 from compass.clients.base import CompletionClient, CompletionResponse
 from compass.clients.settings import request_settings
+from compass.clients.usage import UsageLedger, CompletionFailure
 from compass.clients.pricing import get_pricing
 
 logger = logging.getLogger(__name__)
@@ -169,6 +170,8 @@ class OpenAIClient(CompletionClient):
             kwargs["logprobs"] = True
             kwargs["top_logprobs"] = top_logprobs
 
+        ledger = UsageLedger(self._pricing)
+        settings = self.request_settings(max_tokens, temperature)
         max_attempts = 10
         for attempt in range(max_attempts):
             self._throttle()
@@ -182,8 +185,6 @@ class OpenAIClient(CompletionClient):
                 headers = dict(raw.headers)
 
                 completion = resp.choices[0].message.content or ""
-                if not completion:
-                    raise RuntimeError(f"Empty response from {self.model}")
 
                 raw_logprobs = None
                 if logprobs:
@@ -196,6 +197,10 @@ class OpenAIClient(CompletionClient):
                 output_tokens = usage.completion_tokens if usage else 0
                 self._input_tokens += input_tokens
                 self._output_tokens += output_tokens
+                ledger.record(input_tokens, output_tokens, completion,
+                    str(getattr(resp.choices[0], "finish_reason", "") or ""), known=bool(usage))
+                if not completion:
+                    raise CompletionFailure(f"Empty response from {self.model}", ledger, settings)
 
                 self._adapt_from_success_headers(headers)
 
@@ -203,10 +208,7 @@ class OpenAIClient(CompletionClient):
                     request_settings=self.request_settings(max_tokens, temperature),
                     completion=completion,
                     tokens_used={"input": input_tokens, "output": output_tokens},
-                    cost_usd=(
-                        input_tokens * self._pricing.input_cost_per_million / 1_000_000
-                        + output_tokens * self._pricing.output_cost_per_million / 1_000_000
-                    ),
+                    **ledger.fields(),
                     logprobs=raw_logprobs,
                     finish_reason=str(
                         getattr(resp.choices[0], "finish_reason", "") or ""
@@ -214,6 +216,7 @@ class OpenAIClient(CompletionClient):
                 )
 
             except self._openai.RateLimitError as exc:
+                ledger.record(0, 0, "", "rate_limit", known=False)
                 headers_429: dict = {}
                 if hasattr(exc, "response") and exc.response is not None:
                     headers_429 = dict(exc.response.headers)
@@ -228,16 +231,17 @@ class OpenAIClient(CompletionClient):
                 time.sleep(wait)
 
             except self._openai.APIError as exc:
+                ledger.record(0, 0, "", "api_error", known=False)
                 status = getattr(exc, "status_code", None)
                 if status is not None and 400 <= status < 500:
-                    raise RuntimeError(
-                        f"OpenAI inference failed for {self.model}: {exc}"
+                    raise CompletionFailure(
+                        f"OpenAI inference failed for {self.model}: {exc}", ledger, settings
                     ) from exc
                 logger.error("OpenAI API error on attempt %d: %s", attempt + 1, exc)
                 if attempt == max_attempts - 1:
-                    raise RuntimeError(
-                        f"OpenAI inference failed for {self.model}: {exc}"
+                    raise CompletionFailure(
+                        f"OpenAI inference failed for {self.model}: {exc}", ledger, settings
                     ) from exc
                 time.sleep(min(4 * (2 ** attempt), 30))
 
-        raise RuntimeError(f"OpenAI call failed after {max_attempts} attempts")
+        raise CompletionFailure(f"OpenAI call failed after {max_attempts} attempts", ledger, settings)

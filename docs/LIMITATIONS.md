@@ -5,8 +5,8 @@ I can define a test suite and compare the behavior across model versions,
 prompts, and conditions. Rest suggestions are one example. Unprompted safety
 guidance could be another. The same infrastructure should support both.
 
-I still need to check the scores against human labels and close a few gaps
-in how runs are saved and resumed.
+I still need to check the scores against human labels and test which
+comparisons the experiments can support.
 
 ## Judge accuracy and context
 
@@ -75,14 +75,15 @@ and whether the finding holds with and without the filter.
 The exact checks and cache behavior are described in
 [reproducibility.md](reproducibility.md).
 
-Saved results also leave out some details I would want when investigating a
-surprising score. Full judge replies and provider settings are not consistently
-retained. `JudgeConfig.seed` affects the cache key but isn't sent to the provider,
-and the metadata helper fills in a default seed. That needs correcting before
-using the metadata as a record of how a request was made.
+Suite and benchmark scores now retain the full judge reply and request settings.
+Failed attempts are saved separately from successful scores. Requested seeds are
+recorded without claiming they were sent to the provider. Custom clients may
+still omit settings or usage; those fields remain unverified.
 
-Cost reporting needs care too. Cached results carry the cost of the original
-call. Adding those fields again overstates what was spent on the current run.
+Cache lookups add no new cost or tokens. The original request's usage remains
+available in separate source fields. Recorded retries and failed attempts help
+account for a run, but missing provider usage still leaves an incomplete estimate.
+The provider's bill is the source for actual charges.
 
 ## Next: human labels for the rest-suggestion suite
 
@@ -93,11 +94,9 @@ such as whether the user mentions fatigue. The
 [experiment notes](https://github.com/prathibha-github/helm-eval-lex-quirks/blob/main/RESEARCH_LIMITATIONS.md)
 describe that work in more detail.
 
-For Compass itself, the next changes are to extend the resume checks to
-BenchmarkSpec, make judge context explicit, and save enough request and judge
-data to inspect a result later. Before using a judge on adversarial text, I
-would also need to test whether instructions in that text can influence its
-score.
+Before using a judge on adversarial text, I need to test whether instructions
+in that text can influence its score. Saved context and raw judge replies make
+those failures easier to inspect, but they do not prevent them.
 
 Once those checks are in place for a suite, I can reuse it to see whether a
 new model version behaves differently or whether a prompt change affects the

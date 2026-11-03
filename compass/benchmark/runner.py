@@ -40,6 +40,7 @@ from compass.benchmark.validation import (
 from compass.clients import AnthropicClient, GoogleAIClient, OpenAIClient
 from compass.clients.pricing import get_pricing
 from compass.clients.settings import default_request_settings
+from compass.evaluation.audit import record_failure
 from compass.evaluation.contracts import fingerprint
 from compass.judges.parsing import SCORING_VERSION
 from compass.benchmark.schemas import evaluation_identity
@@ -457,6 +458,9 @@ def generate_completions(
                                     "cost_usd": response.cost_usd,
                                     "max_tokens_requested": max_tokens,
                                     "request_settings": settings,
+                                    "billing_tokens": getattr(response, "billing_tokens", None),
+                                    "usage_complete": getattr(response, "usage_complete", False),
+                                    "usage_attempts": getattr(response, "usage_attempts", []),
                                     "max_tokens_effective": effective.get("max_tokens"),
                                     "finish_reason": str(
                                         getattr(response, "finish_reason", "") or ""
@@ -475,6 +479,7 @@ def generate_completions(
                             logger.info("  Generated %d/%d", count, total_to_generate)
 
                     except Exception as e:
+                        record_failure(checkpoint_path, identity, e)
                         failure_count += 1
                         logger.error(
                             "  Failed to generate %s/%s/%s: %s",
@@ -585,6 +590,7 @@ def evaluate_completions(
                         "evaluation_contract": expected[identity],
                         "generation_coverage_verified": manifest_path(generations_path).exists(),
                         "completion": gen["completion"][:200],
+                        "judge_result": result.to_dict(),
                         "score": result.score,
                         "hit": result.hit,
                         "confidence": result.confidence,
@@ -609,6 +615,7 @@ def evaluate_completions(
                 logger.info("  Evaluated %d/%d", count, total_to_evaluate)
 
         except Exception as e:
+            record_failure(checkpoint_path, identity, e)
             failure_count += 1
             logger.error(
                 "  Failed to evaluate %s/%s/%s: %s",

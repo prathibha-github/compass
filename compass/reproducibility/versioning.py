@@ -11,17 +11,18 @@ from compass.judges import EvaluationResult
 class EvaluationMetadata:
     """Metadata for reproducible evaluations.
 
-    Captures the complete context of an evaluation run, enabling
-    reproduction of exact results across time and environments.
+    Records available context for inspecting and repeating an evaluation.
+    Provider behavior can change and identical API requests can produce different results.
     """
 
     compass_version: str
     rubric_hash: str
     judge_model: str
-    seed: int
+    seed: Optional[int]
     timestamp: str
     python_version: str
     prompt_version: str = "1.0"
+    requested_seed: Optional[int] = None
 
     @classmethod
     def from_result(
@@ -32,7 +33,8 @@ class EvaluationMetadata:
             compass_version=compass_version,
             rubric_hash=result.rubric_hash,
             judge_model=result.judge_model,
-            seed=42,  # Would come from JudgeConfig in practice
+            seed=result.effective_seed,
+            requested_seed=result.requested_seed,
             timestamp=result.timestamp,
             python_version=sys.version.split()[0],
             prompt_version=result.prompt_version,
@@ -57,6 +59,8 @@ def cost_summary(results: List[EvaluationResult]) -> Dict[str, float]:
     total_output_tokens = 0
 
     for result in results:
+        if result.cache_hit:
+            continue
         total_cost += result.cost_usd
         if result.tokens_used:
             total_input_tokens += result.tokens_used.get("input", 0)
@@ -68,6 +72,7 @@ def cost_summary(results: List[EvaluationResult]) -> Dict[str, float]:
         "total_output_tokens": total_output_tokens,
         "total_tokens": total_input_tokens + total_output_tokens,
         "results_count": len(results),
+        "usage_complete": all(r.cache_hit or r.usage_complete for r in results),
     }
 
 
@@ -111,6 +116,7 @@ def reproducibility_report(
     lines.append(f"  Output tokens:    {costs['total_output_tokens']:,}")
     lines.append(f"  Total tokens:     {costs['total_tokens']:,}")
     lines.append(f"  Total cost:       ${costs['total_cost_usd']:.4f}")
+    lines.append("  Usage accounting: " + ("complete" if costs["usage_complete"] else "incomplete or estimated"))
     lines.append("")
 
     if results:
@@ -128,8 +134,8 @@ def reproducibility_report(
         )
         lines.append(f"  2. Load rubric with hash: {sample.rubric_hash}")
         lines.append(f"  3. Initialize judge: {sample.judge_model}")
-        lines.append(f"  4. Set seed to 42 (deterministic)")
-        lines.append(f"  5. Run evaluation on same texts")
+        lines.append("  4. Reuse the saved request settings and input context")
+        lines.append("  5. Rerun on the same texts; API results may differ")
 
     lines.append("")
     lines.append("=" * 80)
@@ -153,7 +159,7 @@ def cost_per_judge(results: List[EvaluationResult]) -> Dict[str, Dict[str, float
 
     summary = {}
     for judge_model, judge_results in by_judge.items():
-        total_cost = sum(r.cost_usd for r in judge_results)
+        total_cost = sum(r.cost_usd for r in judge_results if not r.cache_hit)
         count = len(judge_results)
         summary[judge_model] = {
             "total_cost_usd": round(total_cost, 4),
