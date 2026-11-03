@@ -540,11 +540,14 @@ def evaluate_suite_completions(
 def summarize_suite_evaluations(
     evaluations_path: _PathLike,
     suite: TicSuite,
+    *,
+    pool_models: bool = False,
 ) -> Dict[str, dict]:
-    """Aggregate per-detector hit rates and Wilson CIs by condition.
+    """Return per-detector summaries indexed by model, then condition.
 
-    Regroups the per-detector evaluation rows back into per-sample records and
-    delegates to :func:`summarize_detector_records`.
+    Set ``pool_models=True`` to explicitly combine models and return the older
+    condition-indexed shape. Pooling weights each response equally, so models
+    with more responses contribute more to the result.
     """
     # (model, prompt_id, condition, sample_idx) -> {detector_name: {count, hit}}
     cells: Dict[Any, Dict[str, dict]] = {}
@@ -580,8 +583,14 @@ def summarize_suite_evaluations(
     if seen != set(expected):
         raise ValueError("Incomplete evaluation coverage; retry failed evaluations before summarizing")
 
-    condition_records: Dict[str, List[Dict[str, dict]]] = {}
-    for (_model, _prompt_id, condition, _sample_idx), detector_map in cells.items():
-        condition_records.setdefault(condition, []).append(detector_map)
+    model_records: Dict[str, Dict[str, list]] = {}
+    for (model, _prompt_id, condition, _sample_idx), detector_map in cells.items():
+        group = "pooled" if pool_models else model
+        model_records.setdefault(group, {}).setdefault(condition, []).append(detector_map)
 
-    return summarize_detector_records(condition_records, suite)
+    if pool_models:
+        return summarize_detector_records(model_records.get("pooled", {}), suite)
+    return {
+        model: summarize_detector_records(records, suite)
+        for model, records in model_records.items()
+    }

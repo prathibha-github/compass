@@ -221,7 +221,7 @@ class EvaluationPhaseTests(unittest.TestCase):
         suite = _heuristic_suite()
         gen_path = self._generate(suite)
         eval_path = evaluate_suite_completions(suite, gen_path, self.out)
-        summary = summarize_suite_evaluations(eval_path, suite)
+        summary = summarize_suite_evaluations(eval_path, suite)["m"]
         self.assertEqual(set(summary), {"default", "strict"})
         # Each condition: 4 samples (2 prompts x 2), half fatigue -> 50% hit.
         for cond in ("default", "strict"):
