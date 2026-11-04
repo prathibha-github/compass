@@ -65,7 +65,7 @@ result = judge.evaluate("response text")
 
 ### Results / Findings (Paragraph 7)
 
-Use the [historical pilot findings](https://github.com/prathibha-github/helm-eval-lex-quirks/blob/main/CAI_FINDINGS.md): rest-related phrase matches persisted in some saved outputs under the tested suppression prompt. The pilot used heuristic detectors; current suites also include a prompt-aware LLM judge. Human-label validation is still needed before interpreting either as a reliable measure of unsolicited advice.
+Use the [historical pilot findings](https://github.com/prathibha-github/compass-experiments/blob/main/CAI_FINDINGS.md): rest-related phrase matches persisted in some saved outputs under the tested suppression prompt. The pilot used heuristic detectors; current suites also include a prompt-aware LLM judge. Human-label validation is still needed before interpreting either as a reliable measure of unsolicited advice.
 
 The matched fatigue prompts and task-only condition now in the suites are definitions for follow-up experiments. They do not establish a cause for the historical pattern.
 
