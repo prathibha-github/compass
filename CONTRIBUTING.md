@@ -13,7 +13,7 @@ python -m venv venv
 source venv/bin/activate
 
 # Install in development mode
-pip install -e ".[dev]"
+pip install -e ".[dev,openai,anthropic,google]"
 ```
 
 ## Running Tests
@@ -47,11 +47,12 @@ isort compass/ tests/ examples/
 
 1. Add to `compass/rubrics/library.py`:
 ```python
-CLARITY = Rubric(
-    name="clarity",
+CONCISENESS = Rubric(
+    name="conciseness",
     version="1.0",
-    category="constitutional",
-    text="Score 1.0 when the explanation is clear and well-structured...",
+    category="style",
+    text="Score 1.0 for unnecessary repetition; score 0.0 for a concise answer.",
+    created_at="2026-11-04",
     hit_threshold=0.5,
 )
 ```
@@ -59,10 +60,14 @@ CLARITY = Rubric(
 2. Add to `RubricLibrary` class:
 ```python
 class RubricLibrary:
-    clarity = CLARITY
+    conciseness = CONCISENESS
 ```
 
-3. Write tests in `tests/test_rubrics.py`
+3. Add the rubric to `RubricLibrary.all_rubrics()` so name lookup can find it.
+4. Write tests in `tests/test_rubrics.py`.
+
+Built-in behavior rubrics score unwanted behavior higher. Preserve that direction
+when adding a rubric used by reports or rankings that assume lower is better.
 
 ### Adding a New Judge Type
 
@@ -161,6 +166,9 @@ compass/
 ├── rubrics/                # Rubric definitions
 ├── cache/                  # Caching system
 ├── comparison/             # Multi-model comparison
+├── evaluation/             # Checkpoints and two-phase suite runners
+├── detectors/              # Heuristics, LLM detectors, and suites
+├── benchmark/              # Benchmark contracts, execution, and reporting
 ├── reproducibility/        # Versioning and reproducibility
 ├── clients/                # Client abstractions
 └── utils/                  # Utilities (currently empty)
@@ -172,9 +180,9 @@ docs/                        # Documentation
 
 ## Code Principles
 
-1. **Immutability where possible** — Rubrics, configs, and metadata are frozen
-2. **Determinism** — Same inputs always produce same outputs
-3. **Reproducibility** — Results are tied to rubric version, model, and seed
+1. Keep rubrics immutable. Configurations and metadata are mutable, so preserve the versions used for each run.
+2. Keep local transformations deterministic and reuse cached judgments when the inputs match. New hosted-model calls may differ.
+3. Retain inputs, definitions, effective provider settings, and code revisions with results. A requested seed may not be sent to the provider.
 4. **Clarity over brevity** — Use meaningful names and avoid cryptic patterns
 5. **Test-first for complex features** — Write tests before implementation
 
@@ -192,7 +200,8 @@ If you get a circular import error:
 If cached results seem wrong:
 - Check that rubric hash hasn't changed
 - Verify cache directory has proper permissions
-- Delete `.compass_cache/` and re-run (safe to do)
+- Preserve the original cache for inspection. Use a new cache directory to request
+  fresh judgments; this incurs API costs and may produce different scores.
 
 ## Reporting Bugs
 

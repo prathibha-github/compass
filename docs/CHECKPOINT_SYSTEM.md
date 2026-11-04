@@ -2,7 +2,10 @@
 
 ## Overview
 
-The CheckpointManager enables evaluations to be interrupted and resumed without re-evaluating completed work. This is essential for:
+The `CheckpointManager` is a low-level JSONL writer and identity loader. Callers
+use its completed identities to skip saved work. Higher-level TicSuite and
+BenchmarkSpec runners additionally validate input contracts and coverage
+manifests; the manager alone does not verify experiment compatibility. It supports:
 
 - **Large benchmarks** (1000+ samples × multiple models)
 - **API-based evaluations** (slow + expensive per sample)
@@ -13,7 +16,7 @@ The CheckpointManager enables evaluations to be interrupted and resumed without 
 
 ### Basic Concept
 
-Each evaluation has an **identity tuple**:
+Suite evaluation records use this identity tuple:
 ```
 (model, suite, detector, prompt_id, condition, sample_idx)
 ```
@@ -23,7 +26,7 @@ This tuple uniquely identifies one evaluation. When interrupted and resumed:
 1. **Load** all completed identities from checkpoint file
 2. **Skip** evaluations whose identities are already in completed set
 3. **Evaluate** remaining work
-4. **Save** results immediately (not buffered)
+4. **Save** each result and add its identity to the caller's completed set
 
 ### Checkpoint Format
 
@@ -37,8 +40,8 @@ The checkpoint is a **JSONL file** (one JSON object per line):
   "prompt_id": "bug_fix",
   "condition": "default",
   "sample_idx": 0,
-  "score": 0.75,
-  "hit": true,
+  "score": 0.1,
+  "hit": false,
   "confidence": 0.95,
   "rationale": "Response stayed focused on the bug fix.",
   "input_tokens": 100,
@@ -46,7 +49,9 @@ The checkpoint is a **JSONL file** (one JSON object per line):
 }
 ```
 
-Each line is **appended** immediately after evaluation (not buffered), so data persists even if the process crashes.
+`save()` appends and closes the file for each row. It does not call `fsync` or
+provide a transaction across rows, so this is not a power-loss durability
+guarantee. It also does not deduplicate writes; the caller controls skipping.
 
 ## Usage
 
@@ -85,6 +90,7 @@ for model in models:
             "score": result.score,
             "hit": result.hit,
         })
+        completed.add(identity)
 ```
 
 ### Resume from Checkpoint
@@ -106,7 +112,7 @@ print(f"Resuming: {len(completed)} prior evaluations")
 
 Checkpoints written **before sample_idx existed** are still readable. Legacy records default to `sample_idx=0`:
 
-```python
+```text
 # Old checkpoint (no sample_idx field)
 {"model": "gpt-4o", "suite": "task_focus", ...}
 
@@ -118,18 +124,20 @@ Checkpoints written **before sample_idx existed** are still readable. Legacy rec
 - Sample 0, 1, 2 all treated as sample 0
 - Subsequent samples won't resume correctly
 
-**Best practice:** When upgrading to a new evaluation system with sample-level tracking, start a fresh checkpoint.
+For new work, use a fresh output directory when historical sample identities
+cannot be recovered. Modern runner resume checks reject legacy artifacts
+without verified input contracts even though the low-level loader can read them.
 
 ### Type Coercion
 
 String sample_idx values are automatically converted to int:
 
-```python
+```text
 # Manually-created checkpoint (sample_idx as string)
 {"model": "gpt-4o", "sample_idx": "0", ...}
 
 # Automatically converted to int(0)
-# Logs: "Loaded 5 legacy checkpoint records without sample_idx"
+# This is distinct from a record that omits sample_idx.
 ```
 
 ## Sample-Level Granularity
@@ -195,6 +203,11 @@ Behavior:
 
 ## Error Handling
 
+The examples below describe the low-level suite-record loader. Production
+TicSuite and BenchmarkSpec resume/report paths validate their artifacts
+strictly and can reject corruption rather than skip it. Preserve artifacts
+before repair; readable rows alone do not establish complete coverage.
+
 ### Malformed JSON
 
 If a line in the checkpoint is invalid JSON:
@@ -233,7 +246,7 @@ Result: Line is skipped, evaluation continues
 # ✓ Good
 identity = (model, suite, detector, prompt_id, condition, sample_idx)
 if identity not in completed:
-    # evaluate and save
+    ...  # evaluate, save, and add identity to completed
 ```
 
 ```python
@@ -315,20 +328,14 @@ checkpoint = CheckpointManager(checkpoint_path)
 
 ## Advanced: Custom Identity Tuples
 
-The identity tuple is arbitrary—you can use any fields:
+The loader supports fixed schema-specific identities:
 
-```python
-# Default (recommended)
-identity = (model, suite, detector, prompt_id, condition, sample_idx)
+- Suite evaluations: `(model, suite, detector, prompt_id, condition, sample_idx)`
+- Benchmark records: `(model, rubric, prompt_id, sample_idx)`
 
-# Alternative: include task type
-identity = (model, suite, detector, prompt_id, condition, task_type, sample_idx)
-
-# Alternative: segmented evaluation
-identity = (model, suite, detector, segment, sample_idx)
-```
-
-The important part: **identities must be unique across your evaluation set** and **consistent across runs**.
+Adding metadata such as `task_type` does not add it to the identity. If a custom
+workflow needs another key shape, implement its loader and skip logic explicitly.
+Keep identities unique and stable across runs.
 
 ## Checkpoint vs. Database
 
@@ -337,7 +344,7 @@ The important part: **identities must be unique across your evaluation set** and
 | **Format** | Text lines (JSON) | Structured tables |
 | **Read speed** | O(n) - scan all lines | O(log n) - indexed |
 | **Append speed** | O(1) - fast | O(log n) - indexed |
-| **Corruption recovery** | Skip bad lines | Crash/rollback |
+| **Corruption recovery** | Low-level loader may skip; runner validation is strict | Depends on engine/transaction policy |
 | **Storage** | Human-readable | Opaque binary |
 | **Portability** | Works anywhere | DB-specific |
 
@@ -350,6 +357,7 @@ The important part: **identities must be unique across your evaluation set** and
 ```python
 import tempfile
 from pathlib import Path
+from compass import CheckpointManager
 
 # Test fresh run + resume cycle
 with tempfile.TemporaryDirectory() as tmpdir:
@@ -361,7 +369,11 @@ with tempfile.TemporaryDirectory() as tmpdir:
     completed = cp.load()
     assert len(completed) == 0
     
-    cp.save({"model": "gpt-4o", "suite": "task_focus", ...})
+    cp.save({
+        "model": "gpt-4o", "suite": "task_focus", "detector": "focus",
+        "prompt_id": "p1", "condition": "neutral", "sample_idx": 0,
+        "score": 0.1, "hit": False,
+    })
     
     # Resume
     cp2 = CheckpointManager(str(checkpoint_path))

@@ -359,7 +359,7 @@ See `docs/CHECKPOINT_SYSTEM.md` for full details.
 
 ## Judge Reliability & Auditing
 
-Measure inter-judge disagreement and detect drift:
+Measure inter-judge disagreement and screen unexpected control scores:
 
 ```python
 from compass import JudgeReliabilityAuditor
@@ -375,18 +375,20 @@ agreement = auditor.calculate_agreement(
 print(f"Agreement: {agreement['agreement_rate']:.1%}")
 print(f"CI: [{agreement['agreement_ci_low']:.1%}, {agreement['agreement_ci_high']:.1%}]")
 
-# Detect judge drift on benign requests
+# Screen scores on controls expected to have low scores
 drift = auditor.detect_drift([0.05, 0.10, 0.08], expected_low=True)
 print(f"Concern level: {drift['concern_level']}")  # "none", "warning", or "critical"
 ```
 
 **Features:**
-- Wilson score intervals for reliable confidence bounds
-- Benign control test for drift detection
+- Wilson agreement intervals under an independent-observation assumption
+- Control-score screening; a flagged score alone does not establish drift
 - Disagreement sample identification
 - Multi-judge system design patterns
 
-See `docs/JUDGE_RELIABILITY.md` for full details.
+Investigate flagged controls by inspecting the response and rubric. To assess
+change over time, compare repeated evaluations of a fixed control set with a
+saved baseline. See `docs/JUDGE_RELIABILITY.md` for details.
 
 ## Pairwise Model Comparison
 

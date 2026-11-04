@@ -94,8 +94,8 @@ The `BenchmarkRunner` contract is registration-time enforced and must expose:
 - `generate(run_config) -> Path`
 - `evaluate(generations_path, run_config) -> Path`
 - `analyze(evaluations_path, run_config) -> dict`
-- `rank(evaluations_path, run_config) -> None`
-- `validate_report(evaluations_path, run_config) -> Sequence[str]`
+- `rank(evaluations_path, run_config) -> BenchmarkPairwiseReport`
+- `validate_report(evaluations_path, run_config) -> Sequence[BenchmarkValidationIssue]`
 
 Registration invariants:
 - `runner.spec.name` must match `spec.name`
@@ -138,12 +138,15 @@ Benchmark outputs should be self-describing and operationally predictable.
 
 Write and document these artifacts:
 - `generations.jsonl`
-  Append-only generation checkpoint. Resume paths may salvage a valid prefix
-  and warn on malformed rows, but downstream benchmark execution should treat
-  malformed generation input as a hard failure.
+  Append-only generation checkpoint. The shared runner reads it strictly and
+  verifies input contracts before resuming; malformed input is a hard failure.
 - `evaluations_<judge>.jsonl`
   Append-only evaluation checkpoint. Shared summary, ranking, and report
   validation paths read this strictly and fail on malformed rows.
+- `generations.manifest.json` and `evaluations_<judge>.manifest.json`
+  Expected identities and contracts. Preserve these with modern JSONL outputs.
+  Generation must be complete before evaluation, and evaluation coverage must
+  be complete before reporting.
 - `benchmark_run_policy.json`
   Atomic sidecar artifact that records the resolved preset and effective run
   policy used to produce the outputs.
@@ -154,14 +157,15 @@ Write and document these artifacts:
 Runtime failure behavior should also be explicit:
 - generation and evaluation runtime failures are logged per row
 - the run emits a final warning when failures occurred
-- benchmark artifacts contain successful rows only; do not treat missing rows as
-  silent success
+- benchmark artifacts retain successful rows for retry; manifest checks block
+  downstream scoring/reporting when planned rows are missing
 
 ### 6. Include quality diagnostics
 
-Benchmark outputs are not valid unless they carry quality-gate metadata.
+Report validation requires quality-gate metadata. Passing this check does not
+establish that a rubric or judge measures the intended behavior accurately.
 
-Required generation/evaluation fields:
+Required evaluation fields:
 - `generation_visible_chars`
 - `generation_visible_word_count`
 - `generation_hit_token_cap`
@@ -169,6 +173,10 @@ Required generation/evaluation fields:
 - `generation_quality_flagged`
 - `generation_finish_reason`
 - `generation_token_cap_inferred_legacy`
+
+Generation rows record `visible_chars`, `visible_word_count`, `hit_token_cap`,
+`is_fragment`, `quality_flagged`, and `finish_reason`. Legacy token-cap inference
+is added when older generations are read for evaluation.
 
 Required aggregated metrics:
 - `quality_flagged_pct`
@@ -200,8 +208,9 @@ Check, in order:
 4. `quality_filtered_hit_rate`
 
 If `quality_flagged_pct` is high, the benchmark is first reporting a generation
-quality problem. Use the quality-filtered view before drawing conclusions about
-model behavior.
+quality problem. Inspect the quality-filtered view alongside the raw results.
+Filtering changes the evaluated population and can exclude different fractions
+of each model's outputs; it is not an unbiased correction for truncation.
 
 ## CI Requirements
 

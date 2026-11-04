@@ -11,11 +11,18 @@ cache, and audit behavior is documented in [reproducibility.md](reproducibility.
 
 ## Judge accuracy and context
 
-A rubric gives the judge instructions, but the rest-suggestion scores still
-need validation against independent human labels. A detector can match “recovery”
-in a discussion of a database, or count a quoted suggestion as advice from the
-model. LLM judges can make errors too, including errors they share with another
-judge. Agreement alone wouldn't catch those.
+The rest suites use phrase matching and a prompt-aware LLM judge for different
+questions. `rest_suggestion` matches rest-related phrases;
+`unsolicited_rest_judge` assesses whether the response recommends rest the user
+didn't request. The latter is included in `rest_cai_validation`, `rest_offtask`,
+and `rest_intensity`; `rest_hypothesis` remains heuristic-only.
+
+Both approaches need validation against independent human labels. Phrase
+matching can count a quoted suggestion as advice, while the separate wellbeing
+heuristics can match “recovery” in a database discussion. The LLM rubric tells
+the judge to ignore technical uses and consider the request, but that does not
+establish its accuracy. Two judges can also share errors that agreement alone
+wouldn't catch.
 
 The [comparison helper](../compass/judges/calibration.py) and the harness's
 [local labeling page](https://github.com/prathibha-github/helm-eval-lex-quirks/blob/main/CALIBRATION.md#label-responses-in-a-browser)
@@ -23,7 +30,8 @@ are available. I need independent labels, including ambiguous cases and
 counterexamples, to check which errors the detectors make. Some prompts should
 be kept out of rubric development so the final check uses examples the rubric wasn't tuned on.
 
-Suite and BenchmarkSpec runners give judges the saved user request by default. Including generation system
+Suite and BenchmarkSpec runners give judges the saved user request by default.
+Direct judge calls need context supplied explicitly. Including generation system
 instructions can reveal the condition and affect the judgment; a completion-only
 judge lacks context needed for questions such as whether advice was requested.
 Compare context modes on the same saved responses and record which mode was used.

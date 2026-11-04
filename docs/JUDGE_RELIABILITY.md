@@ -123,17 +123,18 @@ These are the helper's alert thresholds, not validated acceptance criteria.
 Choose controls and tolerances for the specific rubric before interpreting an
 alert as evidence of drift.
 
-## Low-Confidence Regions
+## Disagreements near the threshold
 
-Judges naturally disagree on **borderline cases**:
+Scores on opposite sides of a threshold produce different classifications.
+That disagreement does not, by itself, measure either judge's confidence:
 
 ```
 Clear positive (score 0.9):  J1=0.9, J2=0.85 → Agree
-Borderline case (score 0.5): J1=0.4, J2=0.6 → Disagree ← Problem!
+Near the threshold:        J1=0.4, J2=0.6 → Disagree
 Clear negative (score 0.1):  J1=0.1, J2=0.15 → Agree
 ```
 
-### Identifying Low-Confidence Cases
+### Inspecting classification disagreements
 
 ```python
 judge1 = [0.1, 0.4, 0.9]  # Includes a disagreement near the threshold
@@ -146,7 +147,8 @@ for idx in agreement['disagreement_samples']:
     print(f"Borderline case {idx}: J1={judge1[idx]}, J2={judge2[idx]}")
 ```
 
-**Action:** Create a third "tiebreaker" judge for low-confidence cases, or require human review.
+Inspect these cases with independent human labels. A third judge is another
+measurement to assess, not a substitute for validating the label.
 
 ## Multi-Judge System Design
 
@@ -233,7 +235,7 @@ more judges are more accurate.
 
 - **After retraining judges:** New model = new calibration
 - **After rubric changes:** Rewording can shift meaning
-- **Quarterly (production):** Detect slow drift
+- **Periodically in production:** Choose a cadence based on observed changes and risk
 - **After major model upgrades:** New base models may behave differently
 - **When accuracy drops:** Check if judge drift, not model regression
 
