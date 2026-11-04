@@ -1,5 +1,7 @@
 # A-Grade Codebase Plan
 
+Historical engineering proposal, not a current work queue. Strict readers, run policies, outcome records, and provider-policy tracking have since landed. This does not certify every acceptance criterion below; see [ARCHITECTURE.md](ARCHITECTURE.md) and [current limitations](docs/LIMITATIONS.md) for present behavior and remaining work.
+
 ## Target
 
 The path from the current codebase to a real A is mostly about systems rigor:

@@ -1,5 +1,7 @@
 # Porting Phase 2 Infrastructure: helm_eval_lex_quirks → compass
 
+Historical migration plan. The clients, checkpoint manager, reliability auditor, and pairwise ranker described below are implemented. Original source paths and migration steps are retained for context; use [ARCHITECTURE.md](ARCHITECTURE.md) for the current layout.
+
 ## Overview
 Extract successful patterns from helm_eval_lex_quirks Phase 2 work and integrate into compass core, examples, and documentation.
 

@@ -1,5 +1,7 @@
 # Compass 0.1.0 Release Notes
 
+Archived 0.1.0 release draft. The API examples and roadmap below are historical. Claims of exact reproduction overstate what metadata can guarantee: a cache reuses a saved judgment, while a new hosted-model call can differ. Use the current [README](../README.md) and [reproducibility guide](../docs/reproducibility.md).
+
 **Evaluating subjective model behavior, reproducibly.**
 
 ## What is Compass?

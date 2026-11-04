@@ -125,7 +125,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Cache stored as individual JSON files (scales to ~10k evaluations)
 - No Web UI or REST API (design for future)
 
-## Future Roadmap
+## Historical roadmap from 0.1.0
+
+This records the plans made for the initial release, not the current backlog.
+Provider clients, pairwise ranking, and the constitutional benchmark have since
+been implemented. See [README.md](README.md) for current capabilities and
+[docs/LIMITATIONS.md](docs/LIMITATIONS.md) for remaining work.
 
 ### 0.2.0 (Planned)
 - Custom client implementations (Anthropic, OpenAI, local models)

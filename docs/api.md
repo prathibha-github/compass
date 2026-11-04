@@ -1,8 +1,8 @@
 # Compass API Reference
 
-Complete reference for the Compass evaluation framework.
+Reference for the main evaluation, comparison, and benchmark APIs.
 
-For shared provider-adapter behavior, see `docs/CLIENT_ADAPTERS.md`.
+For provider behavior, see [Client adapters](CLIENT_ADAPTERS.md). Examples that call a model require its credentials or local server.
 
 ## Core Classes
 
@@ -17,12 +17,13 @@ rubric = Rubric(
     name="sycophancy",
     version="1.0",
     category="constitutional",
+    created_at="2026-05-21T00:00:00Z",
     text="Score 1.0 when the response validates or flatters...",
     hit_threshold=0.5,
 )
 
 # Properties
-rubric.hash          # Immutable hash - changes if text changes
+rubric.hash          # Hash of name, version, text, and hit_threshold
 rubric.name          # "sycophancy"
 rubric.version       # "1.0"
 rubric.category      # "constitutional"
@@ -69,8 +70,8 @@ config = JudgeConfig(
     rubric=RubricLibrary.sycophancy,
     judge_model="claude-opus-4-7",
     max_tokens=180,           # Default 180
-    temperature=0.0,          # Default 0.0 (deterministic)
-    seed=42,                  # Default 42
+    temperature=0.0,          # Requested value; providers may override it
+    seed=42,                  # Recorded in cache identity; not sent to providers
 )
 
 # Properties
@@ -78,6 +79,9 @@ config.config_hash      # Stable ID for this config
 config.rubric          # The rubric being used
 config.judge_model     # "claude-opus-4-7"
 ```
+
+Identical settings do not guarantee identical API outputs. `JudgeConfig` records
+the requested setup; the client determines effective request settings.
 
 ### EvaluationResult
 
@@ -93,19 +97,24 @@ result = judge.evaluate("Some text")
 result.name            # Rubric name ("sycophancy")
 result.score           # 0.0-1.0 (float)
 result.hit             # True/False
-result.confidence      # Judge's confidence (optional)
+result.confidence      # Self-reported confidence, not calibrated probability
 result.rationale       # Explanation of the score
 
 # Reproducibility metadata
 result.rubric_hash     # Which rubric version was used
 result.judge_model     # "claude-opus-4-7"
-result.prompt_version  # "1.0"
+result.prompt_version  # Current judge prompt-template version
 result.timestamp       # ISO 8601 timestamp
 result.cache_hit       # Was this from cache?
 
 # Resource tracking
 result.tokens_used     # {"input": 123, "output": 45}
-result.cost_usd        # 0.00189
+result.cost_usd        # Cost attributed to this evaluation/lookup
+result.source_cost_usd # Original request cost when a judgment is reused
+result.usage_complete  # Whether recorded usage covers all attempts
+result.request_settings # Requested and effective provider settings
+result.requested_seed # Recorded configuration seed
+result.effective_seed # None when the provider did not receive a seed
 
 # Methods
 result.to_dict()       # Serialize to dict
@@ -116,10 +125,9 @@ result.to_dict()       # Serialize to dict
 Judge that uses an LLM to evaluate text.
 
 ```python
-from compass import LLMJudge, JudgeConfig, EvaluationCache
-from anthropic import Anthropic
+from compass import AnthropicClient, LLMJudge, JudgeConfig, EvaluationCache, RubricLibrary
 
-client = Anthropic()
+client = AnthropicClient(model="claude-opus-4-7")
 cache = EvaluationCache()
 
 config = JudgeConfig(
@@ -130,8 +138,19 @@ config = JudgeConfig(
 judge = LLMJudge(config, client, cache)
 
 # Evaluate
-result = judge.evaluate("Some response text")
+result = judge.evaluate(
+    "Some response text",
+    context="The original user request",
+    system_context="The generation system instructions",
+)
 ```
+
+Use a Compass client implementing `complete(...)`, not the raw provider SDK.
+Its model must match `JudgeConfig.judge_model`; that config field does not
+retarget the client. Invalid or missing scores raise `JudgeResponseError` and
+are not cached. `hit` is computed from the rubric threshold; the model
+response's own `hit` value is ignored. Cache hits have zero incremental cost
+and tokens while preserving the original usage in `source_*` fields.
 
 ### EvaluationCache
 
@@ -147,15 +166,18 @@ cache = EvaluationCache()
 cache = EvaluationCache(cache_dir="/tmp/my_cache")
 
 # Methods
-cached = cache.get("cache_key")        # Get cached result
-cache.put("cache_key", result)         # Store result
+cached = cache.get(config_hash, text_hash, prompt_version)
+cache.put(config_hash, text_hash, prompt_version, result)
 stats = cache.stats()                  # Cache statistics
 
-# Cache is safe to:
-# - Copy to another machine
-# - Back up and restore
-# - Delete (results will be recomputed)
+# Preserve cache files with run artifacts when saved judgments matter.
+# Deleting them permits new provider calls, with new costs and possibly
+# different results. Copying a cache reuses judgments only for matching inputs.
 ```
+
+`LLMJudge` constructs these three coordinates, including response/context,
+provider settings, and scoring version. Usually let the judge manage the cache;
+manual callers must define compatible coordinates themselves.
 
 ### ComparisonResult
 
@@ -173,7 +195,7 @@ comparison.rubric_name # Name of the rubric
 
 # Metrics
 comparison.agreement_score()   # 1.0 = perfect, 0.0 = max disagreement
-comparison.hit_agreement()     # Fraction agreeing on hit/miss
+comparison.hit_agreement()     # Majority fraction on hit/miss (0.5 to 1.0)
 comparison.score_range()       # (min_score, max_score)
 
 # Display
@@ -185,7 +207,7 @@ print(comparison.summary())    # Human-readable summary
 Compare the same text across multiple judge models.
 
 ```python
-from compass import MultiModelComparator, LLMJudge, JudgeConfig
+from compass import AnthropicClient, MultiModelComparator, LLMJudge, JudgeConfig, RubricLibrary
 
 judges = {}
 for model in ["claude-opus-4-7", "claude-sonnet-4-6"]:
@@ -194,7 +216,7 @@ for model in ["claude-opus-4-7", "claude-sonnet-4-6"]:
             rubric=RubricLibrary.sycophancy,
             judge_model=model,
         ),
-        client,
+        AnthropicClient(model=model),
     )
 
 comparator = MultiModelComparator(judges)
@@ -209,6 +231,10 @@ results = comparator.compare_batch(["text1", "text2", "text3"])
 stats = comparator.agreement_stats(results)
 # Returns: {mean_agreement, std_agreement, min_agreement, max_agreement, ...}
 ```
+
+The comparator methods accept completion text only. For prompt-dependent
+rubrics, call each judge's `evaluate(text, context=..., system_context=...)`
+with the same recorded context and compare those results explicitly.
 
 ## Utility Functions
 
@@ -272,7 +298,9 @@ report = reproducibility_report(results, metadata)
 
 ### EvaluationMetadata
 
-Capture complete evaluation context.
+Capture selected metadata for inspecting an evaluation. Preserve the input
+text, context, request settings, and artifacts separately; this object does not
+contain the complete request.
 
 ```python
 from compass import EvaluationMetadata
@@ -281,7 +309,8 @@ metadata = EvaluationMetadata(
     compass_version="0.1.0",
     rubric_hash="abc123def456",
     judge_model="claude-opus-4-7",
-    seed=42,
+    seed=None,             # Effective seed; built-in clients do not send one
+    requested_seed=42,
     timestamp="2026-05-21T10:00:00",
     python_version="3.9.7",
 )
@@ -357,8 +386,8 @@ methods:
 - `generate(run_config) -> Path`
 - `evaluate(generations_path, run_config) -> Path`
 - `analyze(evaluations_path, run_config) -> dict`
-- `rank(evaluations_path, run_config) -> None`
-- `validate_report(evaluations_path, run_config) -> Sequence[str]`
+- `rank(evaluations_path, run_config) -> BenchmarkPairwiseReport`
+- `validate_report(evaluations_path, run_config) -> Sequence[BenchmarkValidationIssue]`
 
 Use `SharedBenchmarkRunner` when the default shared core is enough:
 
@@ -402,22 +431,29 @@ from compass.benchmark import (
     validate_benchmark_report,
 )
 
-generations_path = generate_completions(
+generation = generate_completions(
     models=["llama3.1"],
     benchmark_spec=spec,
     samples=2,
     output_dir=Path("results/toy_benchmark"),
 )
-evaluations_path = evaluate_completions(
-    generations_path=generations_path,
+evaluation = evaluate_completions(
+    generations_path=generation.path,
     benchmark_spec=spec,
     judge_model="llama3.1",
     output_dir=Path("results/toy_benchmark"),
 )
-stats = analyze_results(evaluations_path, Path("results/toy_benchmark"))
-print_summary(stats, evaluations_path)
-errors = validate_benchmark_report(evaluations_path)
+stats = analyze_results(evaluation.path, Path("results/toy_benchmark"))
+print_summary(stats, evaluation.path)
+errors = validate_benchmark_report(evaluation.path)
 ```
+
+These low-level generation/evaluation functions return a `PhaseOutcome` with
+`path`, `successful`, and `runtime_failures`. `SharedBenchmarkRunner.generate`
+and `.evaluate` return paths and manage run policy/outcome artifacts. Modern
+artifacts also require their `.manifest.json` files: incomplete generation
+coverage blocks evaluation, and incomplete evaluation coverage blocks reports.
+Use a fresh output directory when an input contract changes.
 
 ### Benchmark Schemas
 

@@ -4,7 +4,8 @@
 
 Compare multiple models head-to-head on a shared evaluation set. Generates win/loss/tie statistics and ranks models by pairwise preference.
 
-**Key insight:** Lower score is better (fewer violations = more compliant).
+`PairwiseRanker` treats lower scores as better. This matches Compass's built-in
+violation rubrics; invert a higher-is-better score before passing it to the ranker.
 
 ## Concepts
 
@@ -26,7 +27,8 @@ Scoring rules:
 
 ### Preference Score
 
-A model's preference score is the sum of its win fractions:
+A model's preference score is its total wins plus half its ties across eligible
+opponent/sample matchups:
 
 ```
 Model A: 3 wins + 0.5 tie = 3.5 preference points
@@ -34,6 +36,10 @@ Model B: 1 win + 0.5 tie = 1.5 preference points
 
 A ranks higher (3.5 > 1.5)
 ```
+
+Overall ranking sorts by these accumulated points, not normalized win rate.
+Unequal matched coverage can affect the order; report totals, opponents, and
+unmatched counts alongside ranks.
 
 ### Minimum Matches
 
@@ -48,7 +54,7 @@ GPT-4o vs Claude:
 GPT-4o vs Llama:
   Shared evaluations: 1
   Win rate: 100% (but n=1!)
-  ✗ Flag as low-n, don't rank
+  Omit this pair; the helper does not emit a separate low-n flag
 ```
 
 ## Usage
@@ -61,12 +67,13 @@ from compass import PairwiseRanker
 ranker = PairwiseRanker()
 
 # Add evaluation records
-for model, prompt_id, condition, sample_idx, score in evaluations:
+for model, prompt_id, condition, sample_idx, task_type, score in evaluations:
     ranker.add_record(
         suite="task_focus",
         model=model,
         comparison_key=(prompt_id, condition, sample_idx),  # Shared across models
         score=score,
+        metadata={"task_type": task_type},
     )
 
 # Calculate rankings
@@ -102,7 +109,7 @@ for task_type, results in segmented.items():
         print(f"  {model}: {100*wins/total if total else 0:.0f}%")
 ```
 
-This reveals **model strengths/weaknesses**:
+A hypothetical display of task-level descriptive rates:
 
 ```
 CODING TASKS:
@@ -118,41 +125,16 @@ WRITING TASKS:
 
 ## Interpreting Results
 
-### Win Rate Interpretation
+### Descriptive win rates and uncertainty
 
-| Win Rate | Meaning |
-|----------|---------|
-| **> 70%** | Clear winner; dominant performance |
-| **55-70%** | Consistent advantage |
-| **45-55%** | Comparable performance; slight edge |
-| **30-45%** | Consistent disadvantage |
-| **< 30%** | Clear loser; poor performance |
+A win rate describes the matched samples under one scoring setup. There are no
+universal cutoffs for "dominant" or "equivalent" performance. Report wins,
+losses, ties, matched counts, and exclusions before interpreting an advantage.
 
-### Confidence Levels
-
-With n matches, confidence in win rate grows:
-
-```
-n=5:   ±40% CI (very uncertain)
-n=10:  ±30% CI
-n=30:  ±18% CI (reliable)
-n=100: ±10% CI (very reliable)
-```
-
-Always report match count with win rates.
-
-### Tied Models
-
-If two models show similar win rates:
-
-```
-Model A: 50.2% (51/101)
-Model B: 49.8% (50/101)
-
-Practically equivalent; differences could be noise
-```
-
-The differences are within statistical noise. Treat as tied unless confidence intervals clearly separate.
+For example, 51 wins and 50 losses correspond to 50.5% and 49.5%. That observed
+difference alone does not establish either a reliable advantage or practical
+equivalence. Select an uncertainty method appropriate to the prompts and
+sampling design, and define a meaningful effect size in advance.
 
 ## What Pairwise Rankings Do Not Prove
 
@@ -160,8 +142,8 @@ Keep these limits in mind when reading rankings:
 
 - A pairwise winner on this evaluation set is not automatically a better model
   in general. The ranking is local to the shared prompts, rubrics, and judge.
-- A model with a narrow win rate edge is not meaningfully ahead if the match
-  count is small or the confidence intervals overlap.
+- A narrow observed edge needs uncertainty analysis. Overlapping confidence
+  intervals alone do not establish equality or rule out a difference.
 - Pairwise preference does not replace absolute quality diagnostics. A model can
   "win" more matchups while both models still fail the underlying benchmark at
   unacceptable rates.
@@ -196,15 +178,15 @@ rankings = ranker.rank("task_focus", min_matches=1)
 
 ### 3. Ignoring Ties
 
-```python
-# Ties are meaningful!
-# If 30% of cases are identical, models are more similar than win % suggests
+```text
+Model A: 40 wins, 10 ties, 50 matches
+Model B: 40 losses, 10 ties, 50 matches
 
-Model A: 40 wins, 10 ties, 50 total
-Model B: 40 losses, 10 ties, 50 total
-
-A and B are not directly comparable; tie rate is high
+A earns 45 preference points; B earns 5.
 ```
+
+These models are comparable on the shared samples. Report ties explicitly: a
+tie means equal recorded scores, which can also arise from coarse scoring.
 
 ### 4. Cross-Suite Comparison
 
@@ -214,52 +196,41 @@ Truthfulness scores (0-1): low score = better
 Sycophancy scores (0-1):   low score = better
 
 Can we compare model A's task-focus score (0.3) to its sycophancy score (0.8)?
-→ Only if measured on same scale and detector
+→ These measure different behaviors; their numeric ranges do not make them equivalent
 ```
 
-## Advanced: Normalization
+## Comparing across rubrics
 
-For comparing across suites with different score ranges:
-
-```python
-# Option 1: Z-score within each suite
-def normalize_within_suite(scores_by_suite):
-    normalized = {}
-    for suite, scores in scores_by_suite.items():
-        mean = sum(scores) / len(scores)
-        std = (sum((s - mean) ** 2 for s in scores) / len(scores)) ** 0.5
-        normalized[suite] = [(s - mean) / std for s in scores]
-    return normalized
-
-# Option 2: Rank-based (0-1)
-def rank_normalize(scores):
-    sorted_scores = sorted(scores)
-    rank_map = {s: i / len(scores) for i, s in enumerate(sorted_scores)}
-    return [rank_map[s] for s in scores]
-```
-
-**Caveat:** Normalization assumes score ranges are comparable. Better to evaluate on the same scale.
+Rescaling scores does not make different rubric targets interchangeable.
+Positive affine scaling preserves within-rubric ordering, so it does not change
+these pairwise winners. If combining dimensions, define and justify the score
+direction, weights, and missing-data policy before examining rankings. Report
+the component results so trade-offs remain visible.
 
 ## Statistical Rigor
 
 ### Binomial Test (Is the difference significant?)
 
 ```python
-from scipy.stats import binom_test
+from scipy.stats import binomtest
 
 # Model A: 60 wins, 40 losses (60% win rate)
 # Is this significantly better than 50% baseline?
 
-p_value = binom_test(60, 100, 0.5)
+p_value = binomtest(60, 100, 0.5).pvalue
 if p_value < 0.05:
     print("Significant advantage (p < 0.05)")
 else:
     print("Not statistically significant")
 ```
 
+The example assumes independent binary win/loss observations and no ties.
+Repeated samples sharing prompts need an analysis that accounts for that
+structure. Do not pass half-tie preference points as binomial successes.
+
 ### Confidence Intervals
 
-Use Wilson intervals for win rate bounds:
+For independent binary wins with no ties, Wilson intervals give win-rate bounds:
 
 ```python
 from compass.judges.reliability import wilson_interval
@@ -271,7 +242,8 @@ low, high = wilson_interval(hits, total)
 print(f"Win rate: 60% [CI: {low:.1%}, {high:.1%}]")
 ```
 
-Overlapping CIs mean the models are probably equivalent.
+Interval overlap does not demonstrate equivalence. Equivalence requires a
+predefined tolerance and an analysis suited to the sampling design.
 
 ## Testing
 

@@ -6,7 +6,11 @@ How to write rubrics that judges can reliably use to evaluate text.
 
 ### 1. Clear Scoring Scale
 
-The judge needs to understand what each score means.
+The judge needs to understand what each score means. The example below uses
+higher scores for better performance. Compass's built-in `truthfulness` and
+`clarity` rubrics use the opposite direction: higher scores mean more problems.
+Document the direction and transform it before using the lower-is-better
+`PairwiseRanker` with a positive-quality rubric.
 
 **Good:**
 ```
@@ -177,19 +181,23 @@ requires domain expertise or advanced education."
 Before running at scale, test on 10-20 examples.
 
 ```python
-from compass import Rubric, JudgeConfig, LLMJudge
+from compass import AnthropicClient, Rubric, JudgeConfig, LLMJudge
 
 my_rubric = Rubric(
     name="test_rubric",
+    category="custom",
+    created_at="2026-05-21T00:00:00Z",
     version="1.0",
     text="Your rubric text here...",
 )
 
-config = JudgeConfig(rubric=my_rubric, judge_model="claude-opus-4-7")
+judge_model = "claude-opus-4-7"
+config = JudgeConfig(rubric=my_rubric, judge_model=judge_model)
+client = AnthropicClient(model=judge_model)
 judge = LLMJudge(config, client)
 
 # Test on samples
-samples = ["text1", "text2", ...]
+samples = ["text1", "text2"]
 for text in samples:
     result = judge.evaluate(text)
     print(f"{text[:50]}: {result.score:.2f}, {result.rationale}")
@@ -216,10 +224,13 @@ Find texts that get surprising scores and investigate.
 
 ```python
 for text, result in zip(texts, results):
-    if result.score == 0.5:  # Middle scores = uncertainty
-        print(f"Ambiguous: {text}")
+    if 0.4 <= result.score <= 0.6:  # Inspect cases near a 0.5 threshold
+        print(f"Near threshold: {text}")
         print(f"Rationale: {result.rationale}")
 ```
+
+A middle score describes the rubric target, not necessarily uncertainty.
+Inspect the rationale and compare with human labels before diagnosing ambiguity.
 
 ## Versioning Your Rubric
 
@@ -228,27 +239,33 @@ When you change a rubric, create a new version.
 ```python
 # Original
 CLARITY_V1 = Rubric(
-    name="clarity_v1",
+    name="clarity",
+    category="communication",
+    created_at="2026-05-21T00:00:00Z",
     version="1.0",
     text="Evaluate explanation clarity...",
 )
 
 # Updated (e.g., clarified wording)
 CLARITY_V2 = Rubric(
-    name="clarity_v2",
+    name="clarity",
+    category="communication",
+    created_at="2026-05-22T00:00:00Z",
     version="1.1",
     text="Evaluate explanation clarity... (NEW: includes examples)",
 )
 ```
 
-This ensures:
-- Old results using v1 stay valid
-- New evaluations using v2 are distinct
-- No accidental mixing of results from different rubric versions
+The version and rubric text contribute to the rubric hash and judge cache
+identity. Preserve the original definition alongside old results, and keep
+versions separate in analysis. Versioning does not retroactively validate old
+judgments or prevent every downstream script from combining incompatible rows.
 
 ## Examples of Well-Designed Rubrics
 
-### Truthfulness
+### Truthfulness (custom positive-quality scale)
+
+This example is not `RubricLibrary.truthfulness`, which scores violations.
 
 ```
 Score 1.0 when:
@@ -320,14 +337,19 @@ Good:
 
 ### Judge disagrees with itself
 
-Run the same text through multiple times. If scores vary:
+Use independent, uncached calls on fixed examples when checking repeatability.
+Repeated `LLMJudge.evaluate` calls normally reuse the saved judgment; pass a
+fresh `EvaluationCache` directory per replicate to avoid measuring cache reuse.
+If uncached scores vary:
 - Rubric might be ambiguous
 - Try making the criteria more specific
 - Add more examples to the rubric
 
 ### Judge always scores 0.5
 
-This means the rubric is confusing or too subjective. Make it more concrete:
+A concentration at 0.5 can reflect the examples, rubric anchors, or judge
+behavior. Inspect labeled cases before changing the rubric. More concrete
+anchors can help when the criteria are vague:
 
 ```
 Bad: Score how good this is.
@@ -336,6 +358,8 @@ Good: Count the number of typos. Score 1.0 if zero typos, 0.0 if more than 5.
 
 ### Results don't match intuition
 
-Check if your rubric is measuring what you think it is. The judge is following your rubric, not your intuition.
+Check whether the rubric measures the intended behavior and whether the judge
+applies it correctly. Compare with independently labeled examples; the judge
+can misread even a clear rubric.
 
 Re-read your rubric from scratch and ask: "What would I score based only on this text?"

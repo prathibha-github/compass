@@ -52,7 +52,7 @@ compass/
 - The cache key combines the judge configuration hash, a hash of response/context/provider settings, and prompt/scoring versions. See `docs/reproducibility.md` for the fields.
 - `hit` is always recomputed from `score >= hit_threshold`. The judge's own `hit` field is ignored.
 - Client pricing uses exact model names with prefix-based fallback. Update the pricing table when adding new models.
-- GPT-5 and o4 models require `temperature=1.0` — enforce this in the client, not the caller.
+- Shared runner factories configure temperature overrides for GPT-5 and o4 model prefixes. Direct client construction requires an explicit `required_temperature` policy; see `docs/CLIENT_ADAPTERS.md`.
 - OpenAI and Anthropic clients retry transient provider failures. Retry and usage policies differ by adapter; check `docs/CLIENT_ADAPTERS.md` and `compass/clients/policy_audit.py`.
 
 ## Commit style

@@ -1,80 +1,77 @@
 # Blog Post: Compass - Evaluating Subjective Model Behavior
 
+This is an unpublished outline. Use the linked experiment notes for the evidence behind any results included in a finished post.
+
 ## Outline
 
 ### Hook (Paragraph 1)
 
-Why do Claude models suggest rest and breaks? Why do some models hedge more than others? How do you know which judge model to trust? These aren't yes/no questions—they're spectrum questions that require subjective evaluation.
+Why do Claude models suggest rest and breaks? Why do some models hedge more than others? How do you know which judge model to trust? These questions need clear definitions and examples checked by people.
 
-Most evaluation frameworks measure benchmarks (MMLU, HellaSwag). Compass measures character traits (sycophancy, clarity, honesty). It's how we understand what training produces.
+Compass lets me turn a behavioral question into a repeatable experiment, with saved responses and scoring rules I can inspect. Prompt experiments show how behavior changes with visible inputs; they do not identify a training mechanism.
 
 ### Problem Statement (Paragraph 2)
 
 Evaluating subjective model behavior is hard because:
 - You need consistent rubrics that don't change month to month
 - You need to compare judges fairly (is this judge reliable?)
-- You need reproducible results (same text should always score the same)
+- You need to preserve original responses and judgments so they can be compared later
 - You need to understand costs (API calls add up fast)
 - You need to version everything (future you won't understand what you measured)
 
-Existing tools aren't built for this. They're built for benchmarks. We built compass for character.
+Compass provides the reusable library; Compass Experiments runs the studies and reports their results.
 
 ### Solution Overview (Paragraph 3)
 
 Compass is a standalone evaluation framework for subjective model behavior. Core principles:
 
-1. **Immutable, versioned rubrics** — Your rubric in 2024 is identical to your rubric in 2026. Results are comparable across time.
+1. **Versioned rubrics**: preserve the scoring definition used in each run. Comparable definitions are necessary but do not guarantee comparable judge behavior.
 
-2. **Deterministic caching** — Run the same evaluation 1,000 times for a cost of 1 API call. Same input always produces same output.
+2. **Caching**: reuse a saved judgment when the evaluation inputs match. A fresh model call can produce a different judgment.
 
-3. **Multi-model comparison** — Compare judges across models. See where they agree and where they disagree.
+3. **Multi-model comparison**: Compare judges across models. See where they agree and where they disagree.
 
-4. **Reproducibility first** — Every result includes rubric hash, model name, seed. You can reproduce exact results months later.
+4. **Audit records**: keep rubric hashes, model IDs, requested and effective settings, full inputs, and code revisions. The requested seed is not sent by built-in clients.
 
 ### Technical Deep Dive (Paragraph 4-5)
 
 Walk through architecture:
 - Rubrics are immutable dataclasses with deterministic hashing
-- Caching key is (rubric_hash, text_hash, judge_model)
+- Cache coordinates combine configuration, text/context/provider settings, and prompt/scoring versions; see [reproducibility.md](docs/reproducibility.md)
 - Judges can be any LLM (Claude, GPT, etc.)
 - Results include metadata for auditing
 
 Example:
 
 ```python
-from compass import RubricLibrary, JudgeConfig, LLMJudge
+from compass import AnthropicClient, RubricLibrary, JudgeConfig, LLMJudge
 
-config = JudgeConfig(
-    rubric=RubricLibrary.sycophancy,
-    judge_model="claude-opus-4-7",
-)
-judge = LLMJudge(config, client, cache)
+# Requires the Anthropic extra and a provider key; cache misses make paid calls.
+model = "claude-haiku-4-5-20251001"
+config = JudgeConfig(rubric=RubricLibrary.sycophancy, judge_model=model)
+judge = LLMJudge(config, AnthropicClient(model=model))
 result = judge.evaluate("response text")
 ```
 
 ### Use Cases (Paragraph 6)
 
-1. **Model comparison** — Is Claude more sycophantic than GPT? (Answer: We tested it. See the results.)
+1. **Model comparison**: Compare models on a defined prompt set with a fixed rubric and a validated judge.
 
-2. **Training evaluation** — Did our RLHF improve helpfulness without increasing sycophancy?
+2. **Training evaluation**: A researcher with controlled before/after training checkpoints could use the same measurement infrastructure; the rest-suggestion pilot does not provide that evidence.
 
-3. **Judge selection** — Which model is best at detecting therapy-speak? (Depends on your rubric, but we can test it.)
+3. **Judge selection**: Which model is best at detecting therapy-speak? (Depends on your rubric, but we can test it.)
 
-4. **Benchmarking** — Track trends over time as models improve.
+4. **Benchmarking**: Track trends over time as models improve.
 
 ### Results / Findings (Paragraph 7)
 
-Show results from your rest-suggestion investigation:
-- Claude models have built-in wellbeing prioritization
-- System prompts can modulate it but don't override it
-- The behavior is learned, not hardcoded
-- Different judge models see it differently
+Use the [historical pilot findings](https://github.com/prathibha-github/helm-eval-lex-quirks/blob/main/CAI_FINDINGS.md): rest-related phrase matches persisted in some saved outputs under the tested suppression prompt. The pilot used heuristic detectors; current suites also include a prompt-aware LLM judge. Human-label validation is still needed before interpreting either as a reliable measure of unsolicited advice.
+
+The matched fatigue prompts and task-only condition now in the suites are definitions for follow-up experiments. They do not establish a cause for the historical pattern.
 
 ### Why This Matters (Paragraph 8)
 
-This is the first step toward understanding Constitutional AI. When we ask "why does Claude suggest rest," we're really asking "what did training teach the model to value?" Compass lets us measure that empirically.
-
-As AI systems become more complex, our evaluation tools need to match. We can't rely on benchmarks alone. We need to understand character.
+The useful outcome is being able to investigate an unexpected behavior without rebuilding the evaluation infrastructure. The next experiment can compare prompt wording, conditions, and model versions while keeping the scoring question explicit.
 
 ### Call to Action (Paragraph 9)
 
@@ -84,20 +81,13 @@ Compass is open source. Try it:
 - Compare judges and see what you learn
 - Contribute rubrics, examples, or improvements
 
-GitHub: [link]
-Docs: [link]
-PyPI: [link]
+[Repository](https://github.com/prathibha-github/compass) and [documentation](README.md).
 
 ---
 
-## Key Statistics to Include
+## Evidence to check before publishing
 
-- 89 tests, 85%+ coverage
-- 5 pre-defined rubrics covering constitutional traits
-- 5 working examples
-- Multi-model comparison built-in
-- Deterministic caching for 100x cost reduction on re-runs
-- Complete reproducibility: rubric hash + judge model + seed
+Use test counts from the current CI run and cite any reported experimental rates to their saved artifacts. Do not claim a coverage percentage, measured cost reduction, or human agreement result without the corresponding evidence.
 
 ## Tone
 
@@ -110,10 +100,10 @@ PyPI: [link]
 ## Social Media Snippets
 
 **LinkedIn:**
-"Just released Compass, an evaluation framework for subjective model behavior. Why do models suggest breaks? When do they hedge? Which judge is most reliable? These aren't benchmark questions—they require character evaluation. Open source, reproducible, ready to use."
+"Just released Compass, an evaluation framework for subjective model behavior. Why do models suggest breaks? When do they hedge? Which judge is most reliable? The framework saves responses and judgments so I can compare models, prompts, and scoring rules. Human validation remains part of each study."
 
 **Twitter:**
-"Compass: Measure what really matters—not benchmarks, but character. Evaluate sycophancy, clarity, honesty. Compare judges. Perfect reproducibility. https://github.com/..."
+"Compass: Define a behavioral test suite, save the responses, and compare models and judges. https://github.com/prathibha-github/compass"
 
 **HN Submission Title:**
 "Compass: Open-source framework for evaluating subjective model behavior"

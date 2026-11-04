@@ -1,5 +1,7 @@
 # Release Checklist for 0.1.0
 
+Archived 0.1.0 release checklist. Its counts, version checks, and release steps describe that release; use [CONTRIBUTING.md](CONTRIBUTING.md) for current development checks.
+
 ## Code Quality
 
 - [x] All tests pass (177 tests)
