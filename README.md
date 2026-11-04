@@ -17,7 +17,7 @@ truthfulness, task focus, and clarity. It provides:
 - Reusable `TicSuite` definitions with heuristic and LLM-judge detectors
 - Separate generation and scoring, resumable checkpoints, and benchmark quality checks
 
-[Compass Experiments](https://github.com/prathibha-github/helm-eval-lex-quirks)
+[Compass Experiments](https://github.com/prathibha-github/compass-experiments)
 uses this library for experiment orchestration, scenario loading, and reports.
 Compass owns the shared evaluation primitives and does not import the harness.
 

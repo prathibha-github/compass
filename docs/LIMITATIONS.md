@@ -25,7 +25,7 @@ establish its accuracy. Two judges can also share errors that agreement alone
 wouldn't catch.
 
 The [comparison helper](../compass/judges/calibration.py) and the harness's
-[local labeling page](https://github.com/prathibha-github/helm-eval-lex-quirks/blob/main/CALIBRATION.md#label-responses-in-a-browser)
+[local labeling page](https://github.com/prathibha-github/compass-experiments/blob/main/CALIBRATION.md#label-responses-in-a-browser)
 are available. I need independent labels, including ambiguous cases and
 counterexamples, to check which errors the detectors make. Some prompts should
 be kept out of rubric development so the final check uses examples the rubric wasn't tuned on.
@@ -84,7 +84,7 @@ I want to use human labels to check the measurement, then test explanations for
 the behavior. That means saving responses, checking whether they contain actual
 rest recommendations, and comparing prompts that differ in a specific way,
 such as whether the user mentions fatigue. The
-[experiment notes](https://github.com/prathibha-github/helm-eval-lex-quirks/blob/main/RESEARCH_LIMITATIONS.md)
+[experiment notes](https://github.com/prathibha-github/compass-experiments/blob/main/RESEARCH_LIMITATIONS.md)
 describe that work in more detail.
 
 Before using a judge on adversarial text, I need to test whether instructions
